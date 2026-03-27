@@ -1,0 +1,527 @@
+@use '../../styles/variables/colors' as colors;
+@use '../../styles/variables/layout' as layout;
+
+.reserva-calendario {
+  min-height: 100vh;
+  padding: layout.$space-3 layout.$space-2;
+
+  &--container {
+    max-width: layout.$max-content-width;
+    margin: 0 auto;
+    background: colors.$color-surface;
+    border: 1px solid colors.$color-border;
+    border-radius: layout.$radius-lg;
+    padding: layout.$space-3;
+    box-shadow: layout.$shadow-card;
+
+    // ── Header ───────────────────────────────────────────
+
+    &__hero {
+      margin-bottom: layout.$space-3;
+    }
+
+    &__title {
+      margin: 0;
+      font-size: 1.5rem;
+      color: colors.$color-text;
+    }
+
+    &__description {
+      margin: layout.$space-1 0 0;
+      color: colors.$color-text-soft;
+    }
+
+    // ── Step progress indicator ───────────────────────────
+
+    &__steps {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: layout.$space-3;
+      padding-bottom: layout.$space-3;
+      border-bottom: 1px solid colors.$color-border;
+    }
+
+    &__step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.35rem;
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: default;
+      flex-shrink: 0;
+
+      &:not(:disabled) {
+        cursor: pointer;
+
+        &:hover .reserva-calendario--container__step-bubble {
+          background: rgba(201, 123, 99, 0.12);
+        }
+      }
+
+      &--done {
+        .reserva-calendario--container__step-bubble {
+          background: colors.$color-primary;
+          border-color: colors.$color-primary;
+          color: #fff;
+        }
+
+        .reserva-calendario--container__step-label {
+          color: colors.$color-primary-dark;
+          font-weight: 600;
+        }
+      }
+
+      &--active {
+        .reserva-calendario--container__step-bubble {
+          background: colors.$color-primary;
+          border-color: colors.$color-primary;
+          color: #fff;
+          box-shadow: 0 0 0 3px rgba(201, 123, 99, 0.22);
+        }
+
+        .reserva-calendario--container__step-label {
+          color: colors.$color-primary-dark;
+          font-weight: 700;
+        }
+      }
+
+      &--future {
+        opacity: 0.38;
+      }
+    }
+
+    &__step-bubble {
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      border: 2px solid colors.$color-border;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.8rem;
+      color: colors.$color-text-soft;
+      background: colors.$color-surface;
+      transition:
+        background 0.2s ease,
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+    }
+
+    &__step-label {
+      font-size: 0.72rem;
+      color: colors.$color-text-soft;
+      font-weight: 500;
+      transition: color 0.2s ease;
+      white-space: nowrap;
+    }
+
+    &__step-line {
+      flex: 1;
+      height: 2px;
+      background: colors.$color-border;
+      margin-top: 1rem; // centers line to the 2rem bubble
+      min-width: layout.$space-1;
+    }
+
+    // ── Selection chips summary ───────────────────────────
+
+    &__chips {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-bottom: layout.$space-3;
+      padding: 0.65rem layout.$space-2;
+      background: colors.$color-background;
+      border-radius: layout.$radius-md;
+      border: 1px solid colors.$color-border;
+    }
+
+    &__chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.3rem 0.65rem;
+      border-radius: 999px;
+      border: 1px solid colors.$color-primary;
+      background: rgba(201, 123, 99, 0.09);
+      color: colors.$color-primary-dark;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s ease;
+      text-transform: capitalize;
+
+      &:hover {
+        background: rgba(201, 123, 99, 0.18);
+      }
+
+      &--time {
+        cursor: default;
+        border-color: colors.$color-success;
+        background: rgba(93, 156, 107, 0.1);
+        color: colors.$color-success;
+
+        &:hover {
+          background: rgba(93, 156, 107, 0.1);
+        }
+      }
+    }
+
+    &__chip-x {
+      font-size: 0.65rem;
+      opacity: 0.65;
+    }
+
+    &__chip-sep {
+      color: colors.$color-text-soft;
+      font-size: 1rem;
+      line-height: 1;
+      opacity: 0.55;
+    }
+
+    // ── Step content wrapper ──────────────────────────────
+
+    &__step-content {
+      animation: reserva-step-in 0.2s ease;
+    }
+
+    &__subtitle {
+      margin: 0 0 layout.$space-2;
+      color: colors.$color-text;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    // ── Type buttons (step 1) ─────────────────────────────
+
+    &__types {
+      display: grid;
+      gap: layout.$space-1;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    &__type-button {
+      min-height: 4rem;
+      border-radius: layout.$radius-md;
+      border: 1px solid colors.$color-border;
+      background: colors.$color-surface;
+      color: colors.$color-text;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.25rem;
+      padding: layout.$space-2 layout.$space-1;
+      transition:
+        border-color 0.2s ease,
+        background 0.2s ease,
+        transform 0.15s ease,
+        box-shadow 0.15s ease;
+
+      &:hover {
+        border-color: colors.$color-primary;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(201, 123, 99, 0.16);
+      }
+
+      &--selected {
+        border-color: colors.$color-primary;
+        background: rgba(201, 123, 99, 0.14);
+        box-shadow: 0 0 0 1px colors.$color-primary;
+      }
+    }
+
+    &__type-name {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: colors.$color-text;
+    }
+
+    &__type-meta {
+      font-size: 0.75rem;
+      color: colors.$color-text-soft;
+      font-weight: 500;
+    }
+
+    // ── Calendar (step 2) ─────────────────────────────────
+
+    &__legend {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      margin-bottom: layout.$space-1;
+      padding: 0.3rem 0.55rem;
+      border-radius: 999px;
+      border: 1px solid colors.$color-border;
+      background: colors.$color-surface;
+    }
+
+    &__legend-dot {
+      width: 0.58rem;
+      height: 0.58rem;
+      border-radius: 999px;
+      background: colors.$color-error;
+      box-shadow: 0 0 0 2px rgba(184, 92, 92, 0.22);
+    }
+
+    &__legend-text {
+      font-size: 0.75rem;
+      color: colors.$color-text-soft;
+      font-weight: 600;
+    }
+
+    &__calendar {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: layout.$space-1;
+    }
+
+    &__day {
+      min-height: 5.1rem;
+      padding: layout.$space-1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: layout.$radius-md;
+      border: 1px solid colors.$color-border;
+      background: colors.$color-surface;
+      color: colors.$color-text;
+      font-weight: 600;
+      cursor: pointer;
+      transition:
+        border-color 0.2s ease,
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+
+      &--selected {
+        border-color: colors.$color-primary;
+        background: rgba(201, 123, 99, 0.14);
+      }
+
+      &--disabled {
+        background:
+          repeating-linear-gradient(
+            135deg,
+            rgba(184, 92, 92, 0.08) 0,
+            rgba(184, 92, 92, 0.08) 6px,
+            rgba(255, 255, 255, 0) 6px,
+            rgba(255, 255, 255, 0) 12px
+          ),
+          colors.$color-disabled-bg;
+        border-color: colors.$color-error;
+        box-shadow: inset 0 0 0 1px rgba(184, 92, 92, 0.25);
+        color: colors.$color-disabled-text;
+        cursor: not-allowed;
+        opacity: 0.75;
+
+        .reserva-calendario--container__day-name,
+        .reserva-calendario--container__day-number,
+        .reserva-calendario--container__day-month {
+          color: colors.$color-disabled-text;
+          text-decoration: line-through;
+        }
+
+        &.reserva-calendario--container__day--selected {
+          border-color: colors.$color-error;
+          box-shadow:
+            inset 0 0 0 1px rgba(184, 92, 92, 0.4),
+            0 0 0 2px rgba(184, 92, 92, 0.25);
+        }
+      }
+    }
+
+    &__day-name {
+      text-transform: capitalize;
+      font-size: 0.75rem;
+      color: colors.$color-text-soft;
+    }
+
+    &__day-number {
+      font-size: 1rem;
+      color: colors.$color-text;
+      font-weight: 700;
+    }
+
+    &__day-month {
+      text-transform: capitalize;
+      font-size: 0.75rem;
+      color: colors.$color-text-soft;
+    }
+
+    &__day-status {
+      margin-top: 0.2rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 999px;
+      font-size: 0.63rem;
+      line-height: 1.2;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      font-weight: 800;
+      color: #fff;
+      background: colors.$color-error;
+    }
+
+    // ── Time slots (step 3) ───────────────────────────────
+
+    &__times {
+      display: grid;
+      gap: layout.$space-1;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    &__time-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    &__time {
+      min-height: 2.8rem;
+      border-radius: layout.$radius-md;
+      border: 1px solid colors.$color-border;
+      background: colors.$color-surface;
+      color: colors.$color-text;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 0 layout.$space-1;
+      font-size: 0.85rem;
+      transition:
+        border-color 0.2s ease,
+        background 0.2s ease;
+
+      &--selected {
+        border-color: colors.$color-primary;
+        background: rgba(201, 123, 99, 0.14);
+      }
+
+      &--disabled {
+        background: colors.$color-disabled-bg;
+        color: colors.$color-disabled-text;
+        border-color: colors.$color-border;
+        cursor: not-allowed;
+        text-decoration: line-through;
+      }
+    }
+
+    &__time-status {
+      margin: 0;
+      text-align: center;
+      font-size: 0.72rem;
+      color: colors.$color-disabled-text;
+      font-weight: 600;
+    }
+
+    // ── Navigation (back + continue) ─────────────────────
+
+    &__nav {
+      margin-top: layout.$space-3;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: layout.$space-2;
+    }
+
+    &__back {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      min-height: 2.6rem;
+      padding: 0 layout.$space-2;
+      border-radius: 999px;
+      border: 1px solid colors.$color-border;
+      background: colors.$color-surface;
+      color: colors.$color-primary-dark;
+      font-size: 0.88rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s ease;
+
+      &:hover {
+        background: rgba(201, 123, 99, 0.07);
+        border-color: rgba(201, 123, 99, 0.45);
+        transform: translateY(-1px);
+      }
+    }
+
+    &__continue {
+      flex: 1;
+      max-width: 16rem;
+      min-height: 3rem;
+      border: none;
+      border-radius: 999px;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+
+      &:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      &--primary {
+        background: linear-gradient(90deg, colors.$color-primary 0%, colors.$color-secondary 100%);
+        box-shadow: 0 8px 20px rgba(183, 107, 84, 0.28);
+
+        &:hover:not(:disabled) {
+          transform: translateY(-2px);
+          box-shadow: 0 14px 28px rgba(183, 107, 84, 0.44);
+          filter: brightness(1.06);
+        }
+      }
+    }
+
+    // ── Misc ──────────────────────────────────────────────
+
+    &__hint {
+      margin: layout.$space-2 0 0;
+      color: colors.$color-text-soft;
+      font-size: 0.9rem;
+    }
+  }
+
+  @keyframes reserva-step-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @media (min-width: layout.$breakpoint-tablet) {
+    padding: layout.$space-5 layout.$space-3;
+
+    &--container {
+      padding: layout.$space-4;
+
+      &__types {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      &__times {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      &__calendar {
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+      }
+
+      &__continue {
+        flex: none;
+        width: auto;
+        min-width: 14rem;
+      }
+    }
+  }
+}

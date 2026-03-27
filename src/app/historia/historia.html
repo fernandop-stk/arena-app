@@ -1,0 +1,7 @@
+<section class="historia">
+  <div #revealEl class="historia--container" [class.historia--container--visible]="isVisible()">
+    <h1 class="historia--container__title">{{ title }}</h1>
+    <p class="historia--container__text">{{ text }}</p>
+    <a class="historia--container__back" routerLink="/">Volver al inicio</a>
+  </div>
+</section>

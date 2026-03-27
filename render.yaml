@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: arena-app
+    env: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm run serve:ssr:arena-app
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DATABASE_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false

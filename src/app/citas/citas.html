@@ -1,0 +1,39 @@
+<section class="citas">
+  <div class="citas--container">
+    <header class="citas--container__hero">
+      <p class="citas--container__eyebrow">{{ salonName }}</p>
+      <h1 class="citas--container__title">{{ headline }}</h1>
+      <p class="citas--container__description">{{ description }}</p>
+    </header>
+
+    <ul class="citas--container__list">
+      @for (appointment of appointmentTypes; track appointment.id) {
+        <li
+          class="citas--container__card"
+          [class.citas--container__card--selected]="selectedAppointmentTypeId() === appointment.id"
+          (click)="selectedAppointmentTypeId.set(appointment.id)"
+        >
+          <h2 class="citas--container__card-title">{{ appointment.nombre }}</h2>
+          <p class="citas--container__card-time">
+            Duración: {{ citasService.formatDuration(appointment.duracionMinutos) }}
+          </p>
+          <p class="citas--container__card-description">{{ appointment.descripcion }}</p>
+        </li>
+      }
+    </ul>
+
+    <div class="citas--container__actions">
+      <button
+        type="button"
+        class="citas--container__button citas--container__button--primary"
+        (click)="citasService.goToReservationCalendar(selectedAppointmentTypeId())"
+      >
+        {{ buttonLabel }}
+      </button>
+
+      <a class="citas--container__button citas--container__button--secondary" routerLink="/"
+        >Volver al inicio</a
+      >
+    </div>
+  </div>
+</section>

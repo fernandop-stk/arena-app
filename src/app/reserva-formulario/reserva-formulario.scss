@@ -1,0 +1,180 @@
+@use '../../styles/variables/colors' as colors;
+@use '../../styles/variables/layout' as layout;
+
+.reserva-formulario {
+  min-height: 100vh;
+  padding: layout.$space-3 layout.$space-2;
+
+  &--container {
+    max-width: 34rem;
+    margin: 0 auto;
+    background: colors.$color-surface;
+    border: 1px solid colors.$color-border;
+    border-radius: layout.$radius-lg;
+    padding: layout.$space-3;
+    box-shadow: layout.$shadow-card;
+
+    &__hero {
+      margin-bottom: layout.$space-3;
+    }
+
+    &__title {
+      margin: 0;
+      color: colors.$color-text;
+      font-size: 1.5rem;
+    }
+
+    &__description,
+    &__summary {
+      margin: layout.$space-1 0 0;
+      color: colors.$color-text-soft;
+      font-size: 0.95rem;
+    }
+
+    &__form {
+      display: flex;
+      flex-direction: column;
+      gap: layout.$space-1;
+    }
+
+    &__label {
+      margin-top: layout.$space-1;
+      color: colors.$color-text;
+      font-weight: 600;
+      font-size: 0.92rem;
+    }
+
+    &__input {
+      min-height: 2.8rem;
+      border: 1px solid colors.$color-border;
+      border-radius: layout.$radius-sm;
+      padding: 0 layout.$space-1;
+      font-size: 1rem;
+    }
+
+    &__error {
+      margin: 0;
+      color: colors.$color-error;
+      font-size: 0.82rem;
+    }
+
+    &__button {
+      margin-top: layout.$space-2;
+      min-height: 3rem;
+      border: none;
+      border-radius: 999px;
+      color: #fff;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        filter 0.2s ease;
+
+      &--primary {
+        background: linear-gradient(90deg, colors.$color-primary 0%, colors.$color-secondary 100%);
+        box-shadow: 0 8px 20px rgba(183, 107, 84, 0.28);
+
+        &:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 14px 28px rgba(183, 107, 84, 0.44);
+          filter: brightness(1.06);
+        }
+      }
+    }
+
+    &__submit-error {
+      margin-top: layout.$space-2;
+      color: colors.$color-error;
+      font-weight: 600;
+      font-size: 0.92rem;
+    }
+
+    &__success-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 70;
+      background: rgba(52, 37, 29, 0.5);
+      backdrop-filter: blur(3px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: layout.$space-2;
+    }
+
+    &__success-modal {
+      width: min(30rem, 100%);
+      background: colors.$color-surface;
+      border: 1px solid colors.$color-border;
+      border-radius: layout.$radius-lg;
+      box-shadow: 0 16px 34px rgba(71, 49, 36, 0.24);
+      padding: layout.$space-3;
+      display: flex;
+      flex-direction: column;
+      gap: layout.$space-1;
+      animation: reserva-success-in 0.22s ease;
+    }
+
+    &__success-kicker {
+      margin: 0;
+      color: colors.$color-primary;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.74rem;
+    }
+
+    &__success-title {
+      margin: 0;
+      color: colors.$color-primary-dark;
+      font-size: 1.22rem;
+      line-height: 1.3;
+    }
+
+    &__success-summary {
+      margin-top: 0.2rem;
+      border: 1px solid colors.$color-border;
+      border-radius: layout.$radius-md;
+      background: rgba(201, 123, 99, 0.08);
+      padding: layout.$space-2;
+
+      p {
+        margin: 0;
+        color: colors.$color-text;
+        font-size: 0.92rem;
+        line-height: 1.5;
+
+        + p {
+          margin-top: 0.35rem;
+        }
+      }
+    }
+
+    &__success-note {
+      margin: 0;
+      color: colors.$color-text-soft;
+      font-size: 0.9rem;
+    }
+  }
+
+  @keyframes reserva-success-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @media (min-width: layout.$breakpoint-tablet) {
+    padding: layout.$space-5 layout.$space-3;
+
+    &--container {
+      padding: layout.$space-4;
+    }
+  }
+}

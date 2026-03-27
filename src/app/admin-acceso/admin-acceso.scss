@@ -1,0 +1,199 @@
+@use '../../styles/variables/colors' as colors;
+@use '../../styles/variables/layout' as layout;
+
+.admin-acceso {
+  min-height: 100vh;
+  padding: layout.$space-3 layout.$space-2;
+
+  &--container {
+    max-width: 32rem;
+    margin: 0 auto;
+    background: colors.$color-surface;
+    border: 1px solid colors.$color-border;
+    border-radius: layout.$radius-lg;
+    box-shadow: layout.$shadow-card;
+    padding: layout.$space-3;
+
+    &__title {
+      margin: 0;
+      color: colors.$color-text;
+      font-size: 1.5rem;
+    }
+
+    &__description {
+      margin: layout.$space-1 0 layout.$space-2;
+      color: colors.$color-text-soft;
+      line-height: 1.5;
+    }
+
+    &__form {
+      display: flex;
+      flex-direction: column;
+      gap: layout.$space-1;
+    }
+
+    &__tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.4rem;
+      margin-bottom: layout.$space-2;
+    }
+
+    &__tab {
+      min-height: 2.5rem;
+      border: 1px solid colors.$color-border;
+      background: #fff;
+      border-radius: layout.$radius-sm;
+      color: colors.$color-text-soft;
+      font-weight: 700;
+      cursor: pointer;
+
+      &--active {
+        border-color: colors.$color-primary;
+        color: colors.$color-primary-dark;
+        background: rgba(201, 123, 99, 0.1);
+      }
+    }
+
+    &__label {
+      color: colors.$color-text;
+      font-weight: 600;
+      font-size: 0.92rem;
+    }
+
+    &__input {
+      min-height: 2.8rem;
+      border: 1px solid colors.$color-border;
+      border-radius: layout.$radius-sm;
+      padding: 0 layout.$space-1;
+      font-size: 1rem;
+
+      &--with-toggle {
+        padding-right: 5.8rem;
+      }
+    }
+
+    &__input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    &__input-toggle {
+      position: absolute;
+      right: 0.5rem;
+      border: none;
+      background: transparent;
+      color: colors.$color-primary-dark;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 0.2rem 0.4rem;
+      border-radius: layout.$radius-sm;
+
+      &:hover {
+        background: rgba(201, 123, 99, 0.12);
+      }
+    }
+
+    &__button {
+      margin-top: layout.$space-1;
+      min-height: 3rem;
+      border: none;
+      border-radius: 999px;
+      color: #fff;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+
+      &--primary {
+        background: linear-gradient(90deg, colors.$color-primary 0%, colors.$color-secondary 100%);
+      }
+    }
+
+    &__message,
+    &__error {
+      margin: layout.$space-2 0 0;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    &__message {
+      color: colors.$color-primary-dark;
+    }
+
+    &__password-strength {
+      margin-top: 0.2rem;
+    }
+
+    &__password-strength-bar {
+      width: 100%;
+      height: 0.45rem;
+      border-radius: 999px;
+      background: rgba(122, 103, 93, 0.2);
+      overflow: hidden;
+    }
+
+    &__password-strength-fill {
+      display: block;
+      height: 100%;
+      width: 0;
+      transition: width 0.25s ease;
+
+      &--low {
+        background: #d14646;
+      }
+
+      &--medium {
+        background: #d9a441;
+      }
+
+      &--high {
+        background: #2f9b57;
+      }
+    }
+
+    &__password-strength-text {
+      margin: 0.35rem 0 0;
+      font-size: 0.82rem;
+      color: colors.$color-text-soft;
+      font-weight: 600;
+    }
+
+    &__password-rules {
+      margin: 0.45rem 0 0;
+      padding-left: 1rem;
+      display: grid;
+      gap: 0.2rem;
+
+      li {
+        font-size: 0.8rem;
+        color: colors.$color-text-soft;
+      }
+    }
+
+    &__password-rule--ok {
+      color: #2f9b57 !important;
+      font-weight: 700;
+    }
+
+    &__error {
+      color: colors.$color-error;
+    }
+
+    &__back {
+      display: inline-block;
+      margin-top: layout.$space-2;
+      color: colors.$color-primary-dark;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    &__hint {
+      margin: layout.$space-2 0 0;
+      color: colors.$color-text-soft;
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+  }
+}

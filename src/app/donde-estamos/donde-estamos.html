@@ -1,0 +1,30 @@
+<section class="donde-estamos">
+  <div class="donde-estamos--container">
+    <header
+      #revealEl
+      class="donde-estamos--container__hero"
+      data-key="hero"
+      [class.donde-estamos--container__hero--visible]="isVisible('hero')"
+    >
+      <h1 class="donde-estamos--container__title">{{ title }}</h1>
+      <p class="donde-estamos--container__address">{{ address }}</p>
+      <p class="donde-estamos--container__phone">{{ phone }}</p>
+      <a class="donde-estamos--container__back" routerLink="/">Volver al inicio</a>
+    </header>
+
+    <div
+      #revealEl
+      class="donde-estamos--container__map-wrap"
+      data-key="map"
+      [style.--stagger]="1"
+      [class.donde-estamos--container__map-wrap--visible]="isVisible('map')"
+    >
+      <iframe
+        class="donde-estamos--container__map"
+        [src]="mapUrl"
+        title="Mapa de ubicación"
+        loading="lazy"
+      ></iframe>
+    </div>
+  </div>
+</section>

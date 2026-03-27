@@ -1,0 +1,475 @@
+<section class="admin-panel">
+  <div class="admin-panel--container">
+    @if (isChecking()) {
+      <p class="admin-panel--container__hint">Comprobando acceso...</p>
+    } @else {
+      <header class="admin-panel--container__hero">
+        <h1 class="admin-panel--container__title">Panel de administración</h1>
+        <p class="admin-panel--container__description">
+          Acceso activo como {{ ownerEmail() || 'propietaria' }}
+        </p>
+      </header>
+
+      <div class="admin-panel--container__tabs">
+        <button
+          type="button"
+          class="admin-panel--container__tab"
+          [class.admin-panel--container__tab--active]="activeTab() === 'listado'"
+          (click)="setActiveTab('listado')"
+        >
+          Listado de reservas
+        </button>
+        <button
+          type="button"
+          class="admin-panel--container__tab"
+          [class.admin-panel--container__tab--active]="activeTab() === 'gestion'"
+          (click)="setActiveTab('gestion')"
+        >
+          Gestión de reservas
+        </button>
+        <button
+          type="button"
+          class="admin-panel--container__tab"
+          [class.admin-panel--container__tab--active]="activeTab() === 'bloqueos'"
+          (click)="setActiveTab('bloqueos')"
+        >
+          Bloquear horas
+        </button>
+      </div>
+
+      @if (activeTab() === 'listado') {
+        <h2 class="admin-panel--container__subtitle">Listado de reservas</h2>
+        <p class="admin-panel--container__hint">
+          Vista informativa de todas las reservas recibidas.
+        </p>
+
+        @if (listError()) {
+          <p class="admin-panel--container__error">{{ listError() }}</p>
+        }
+
+        @if (isLoadingReservations()) {
+          <p class="admin-panel--container__hint">Cargando reservas...</p>
+        } @else if (reservations().length === 0) {
+          <p class="admin-panel--container__hint">No hay reservas registradas.</p>
+        } @else {
+          <div class="admin-panel--container__list">
+            @for (reservation of reservations(); track reservation.id) {
+              <article class="admin-panel--container__reservation">
+                <div class="admin-panel--container__reservation-head">
+                  <h3 class="admin-panel--container__reservation-title">
+                    {{ reservation.appointmentTypeName }}
+                  </h3>
+                  <span
+                    class="admin-panel--container__status"
+                    [class.admin-panel--container__status--accepted]="
+                      reservation.adminStatus === 'accepted'
+                    "
+                    [class.admin-panel--container__status--rejected]="
+                      reservation.adminStatus === 'rejected'
+                    "
+                  >
+                    {{ getStatusLabel(reservation.adminStatus) }}
+                  </span>
+                </div>
+
+                <p class="admin-panel--container__reservation-text">
+                  {{ reservation.customerName }} · {{ reservation.customerPhone }} ·
+                  {{ reservation.customerEmail }}
+                </p>
+                <p class="admin-panel--container__reservation-text">
+                  {{ formatDate(reservation.dateIso) }} · {{ reservation.startTime }} -
+                  {{ reservation.endTime }} · {{ formatDuration(reservation.durationMinutes) }}
+                </p>
+                <p class="admin-panel--container__reservation-text">
+                  Señal: {{ reservation.paymentReceived ? 'Recibida' : 'Pendiente' }}
+                </p>
+              </article>
+            }
+          </div>
+        }
+      }
+
+      @if (activeTab() === 'gestion') {
+        <h2 class="admin-panel--container__subtitle">Gestión de reservas</h2>
+        <p class="admin-panel--container__hint">
+          Pendientes por revisar: {{ getPendingReservationsCount() }}
+        </p>
+
+        @if (listError()) {
+          <p class="admin-panel--container__error">{{ listError() }}</p>
+        }
+
+        @if (actionError()) {
+          <p class="admin-panel--container__error">{{ actionError() }}</p>
+        }
+
+        @if (isLoadingReservations()) {
+          <p class="admin-panel--container__hint">Cargando reservas...</p>
+        } @else if (reservations().length === 0) {
+          <p class="admin-panel--container__hint">No hay reservas registradas.</p>
+        } @else {
+          <div class="admin-panel--container__list">
+            @for (reservation of reservations(); track reservation.id) {
+              <article class="admin-panel--container__reservation">
+                <div class="admin-panel--container__reservation-head">
+                  <h3 class="admin-panel--container__reservation-title">
+                    {{ reservation.appointmentTypeName }}
+                  </h3>
+                  <span
+                    class="admin-panel--container__status"
+                    [class.admin-panel--container__status--accepted]="
+                      reservation.adminStatus === 'accepted'
+                    "
+                    [class.admin-panel--container__status--rejected]="
+                      reservation.adminStatus === 'rejected'
+                    "
+                  >
+                    {{ getStatusLabel(reservation.adminStatus) }}
+                  </span>
+                </div>
+
+                <p class="admin-panel--container__reservation-text">
+                  {{ reservation.customerName }} · {{ reservation.customerPhone }} ·
+                  {{ reservation.customerEmail }}
+                </p>
+                <p class="admin-panel--container__reservation-text">
+                  {{ formatDate(reservation.dateIso) }} · {{ reservation.startTime }} -
+                  {{ reservation.endTime }} · {{ formatDuration(reservation.durationMinutes) }}
+                </p>
+
+                <div class="admin-panel--container__reservation-actions">
+                  <button
+                    type="button"
+                    class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                    [disabled]="isActionLoading(reservation.id)"
+                    (click)="markPaymentReceived(reservation.id, !reservation.paymentReceived)"
+                  >
+                    @if (reservation.paymentReceived) {
+                      Pago recibido ✓
+                    } @else {
+                      Marcar pago recibido
+                    }
+                  </button>
+
+                  <button
+                    type="button"
+                    class="admin-panel--container__action-button admin-panel--container__action-button--accept"
+                    [disabled]="
+                      isActionLoading(reservation.id) ||
+                      !reservation.paymentReceived ||
+                      reservation.adminStatus === 'accepted'
+                    "
+                    (click)="setReservationStatus(reservation.id, 'accepted')"
+                  >
+                    Aceptar
+                  </button>
+
+                  <button
+                    type="button"
+                    class="admin-panel--container__action-button admin-panel--container__action-button--reject"
+                    [disabled]="
+                      isActionLoading(reservation.id) ||
+                      !reservation.paymentReceived ||
+                      reservation.adminStatus === 'rejected'
+                    "
+                    (click)="setReservationStatus(reservation.id, 'rejected')"
+                  >
+                    Rechazar
+                  </button>
+                </div>
+              </article>
+            }
+          </div>
+        }
+      }
+
+      @if (activeTab() === 'bloqueos') {
+        <h2 class="admin-panel--container__subtitle">Bloquear horas o días</h2>
+        <p class="admin-panel--container__hint">
+          Define días completos o tramos de 30 minutos para bloquear disponibilidad.
+        </p>
+
+        <div class="admin-panel--container__calendar-card">
+          <div class="admin-panel--container__calendar-head">
+            <h3 class="admin-panel--container__calendar-title">Calendario de bloqueos</h3>
+            <div class="admin-panel--container__month-nav" aria-label="Navegación de mes">
+              <button
+                type="button"
+                class="admin-panel--container__month-nav-button"
+                (click)="goToPreviousMonth()"
+                aria-label="Mes anterior"
+              >
+                <svg
+                  class="admin-panel--container__month-nav-icon"
+                  viewBox="0 0 20 20"
+                  aria-hidden="true"
+                >
+                  <path d="M12.5 4.5 7 10l5.5 5.5" />
+                </svg>
+              </button>
+              <span class="admin-panel--container__month-nav-label">{{
+                getCalendarMonthLabel()
+              }}</span>
+              <button
+                type="button"
+                class="admin-panel--container__month-nav-button"
+                (click)="goToNextMonth()"
+                aria-label="Mes siguiente"
+              >
+                <svg
+                  class="admin-panel--container__month-nav-icon"
+                  viewBox="0 0 20 20"
+                  aria-hidden="true"
+                >
+                  <path d="M7.5 4.5 13 10l-5.5 5.5" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <p class="admin-panel--container__calendar-subtitle">
+            Selecciona una fecha en el calendario para bloquear disponibilidad.
+          </p>
+
+          <div class="admin-panel--container__calendar-weekdays">
+            @for (dayName of ['L', 'M', 'X', 'J', 'V', 'S', 'D']; track dayName) {
+              <span>{{ dayName }}</span>
+            }
+          </div>
+
+          <div class="admin-panel--container__calendar-grid">
+            @for (day of getCalendarDays(); track day.dateIso) {
+              <button
+                type="button"
+                class="admin-panel--container__calendar-day"
+                [class.admin-panel--container__calendar-day--outside]="!day.isCurrentMonth"
+                [class.admin-panel--container__calendar-day--today]="day.isToday"
+                [class.admin-panel--container__calendar-day--selected]="isCalendarDaySelected(day)"
+                [class.admin-panel--container__calendar-day--full]="day.isFullBlocked"
+                [class.admin-panel--container__calendar-day--partial]="day.hasPartialBlocked"
+                [disabled]="day.isPast || !day.isCurrentMonth"
+                (click)="selectCalendarDay(day)"
+              >
+                <span class="admin-panel--container__calendar-day-number">{{ day.dayNumber }}</span>
+                <span class="admin-panel--container__calendar-day-meta">
+                  @if (day.reservationCount > 0) {
+                    {{ day.reservationCount }} res.
+                  } @else if (day.isFullBlocked) {
+                    Día bloqueado
+                  } @else if (day.hasPartialBlocked) {
+                    Parcial
+                  } @else {
+                    Libre
+                  }
+                </span>
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="admin-panel--container__block-form">
+          <div class="admin-panel--container__label">
+            Fecha
+            <div class="admin-panel--container__selected-date">
+              @if (blockDateIso()) {
+                <strong>{{ formatDate(blockDateIso()) }}</strong>
+                <span>{{ blockDateIso() }}</span>
+              } @else {
+                <strong>Sin fecha seleccionada</strong>
+                <span>Pulsa un día del calendario</span>
+              }
+            </div>
+          </div>
+
+          <div class="admin-panel--container__label">
+            Tipo de bloqueo
+            <div
+              class="admin-panel--container__block-mode"
+              role="radiogroup"
+              aria-label="Tipo de bloqueo"
+            >
+              <button
+                type="button"
+                class="admin-panel--container__block-mode-option"
+                [class.admin-panel--container__block-mode-option--active]="isFullDayBlock()"
+                [attr.aria-pressed]="isFullDayBlock()"
+                (click)="selectFullDayMode()"
+              >
+                Bloquear día completo (09:00 - 20:00)
+              </button>
+
+              <button
+                type="button"
+                class="admin-panel--container__block-mode-option"
+                [class.admin-panel--container__block-mode-option--active]="!isFullDayBlock()"
+                [attr.aria-pressed]="!isFullDayBlock()"
+                (click)="selectHourlyMode()"
+              >
+                Bloquear por horas
+              </button>
+            </div>
+          </div>
+
+          @if (!isFullDayBlock()) {
+            <div class="admin-panel--container__time-range">
+              <label class="admin-panel--container__label">
+                Desde
+                <div class="admin-panel--container__time-select-wrap">
+                  <select
+                    class="admin-panel--container__input admin-panel--container__time-select"
+                    [value]="blockStartTime()"
+                    (change)="onBlockStartTimeInput($event)"
+                  >
+                    @for (time of blockStartOptions; track time) {
+                      <option [value]="time">{{ time }}</option>
+                    }
+                  </select>
+                </div>
+              </label>
+              <label class="admin-panel--container__label">
+                Hasta
+                <div class="admin-panel--container__time-select-wrap">
+                  <select
+                    class="admin-panel--container__input admin-panel--container__time-select"
+                    [value]="blockEndTime()"
+                    (change)="onBlockEndTimeInput($event)"
+                  >
+                    @for (time of blockEndOptions; track time) {
+                      <option [value]="time">{{ time }}</option>
+                    }
+                  </select>
+                </div>
+              </label>
+            </div>
+          }
+
+          <label class="admin-panel--container__label">
+            Motivo (opcional)
+            <input
+              class="admin-panel--container__input"
+              type="text"
+              maxlength="120"
+              placeholder="Vacaciones, descanso, evento..."
+              [value]="blockReason()"
+              (input)="onBlockReasonInput($event)"
+            />
+          </label>
+
+          <button
+            type="button"
+            class="admin-panel--container__button admin-panel--container__button--primary"
+            [disabled]="blockActionLoading()"
+            (click)="createBlockedPeriod()"
+          >
+            Guardar bloqueo
+          </button>
+        </div>
+
+        @if (blockError()) {
+          <p class="admin-panel--container__error">{{ blockError() }}</p>
+        }
+
+        @if (blockMessage()) {
+          <p class="admin-panel--container__success">{{ blockMessage() }}</p>
+        }
+
+        @if (showDayReservationsModal()) {
+          <div class="admin-panel--container__modal-backdrop" (click)="closeDayReservationsModal()">
+            <div class="admin-panel--container__modal" (click)="$event.stopPropagation()">
+              <div class="admin-panel--container__modal-head">
+                <div>
+                  <h3 class="admin-panel--container__modal-title">Reservas del día</h3>
+                  <p class="admin-panel--container__modal-subtitle">
+                    {{ formatDate(dayReservationsDateIso()) }}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  class="admin-panel--container__modal-close"
+                  (click)="closeDayReservationsModal()"
+                  aria-label="Cerrar"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div class="admin-panel--container__modal-list">
+                @for (reservation of dayReservations(); track reservation.id) {
+                  <article class="admin-panel--container__modal-item">
+                    <div class="admin-panel--container__modal-item-header">
+                      <p class="admin-panel--container__modal-item-title">
+                        {{ reservation.customerName }} · {{ reservation.appointmentTypeName }}
+                      </p>
+                      <span
+                        class="admin-panel--container__modal-status admin-panel--container__modal-status--{{
+                          reservation.adminStatus
+                        }}"
+                      >
+                        {{ getStatusLabel(reservation.adminStatus) }}
+                      </span>
+                    </div>
+                    <p class="admin-panel--container__modal-item-text">
+                      {{ reservation.startTime }} - {{ reservation.endTime }} ·
+                      {{ formatDuration(reservation.durationMinutes) }}
+                    </p>
+                  </article>
+                }
+              </div>
+            </div>
+          </div>
+        }
+
+        @if (isLoadingBlockedPeriods()) {
+          <p class="admin-panel--container__hint">Cargando bloqueos...</p>
+        } @else if (blockedPeriods().length === 0) {
+          <p class="admin-panel--container__hint">No hay bloqueos activos.</p>
+        } @else {
+          <div class="admin-panel--container__list">
+            @for (blockedPeriod of blockedPeriods(); track blockedPeriod.id) {
+              <article
+                class="admin-panel--container__reservation admin-panel--container__reservation--blocked"
+              >
+                <div class="admin-panel--container__reservation-head">
+                  <h3 class="admin-panel--container__reservation-title">
+                    {{ formatDate(blockedPeriod.dateIso) }} ·
+                    {{ formatTimeRange(blockedPeriod.startTime, blockedPeriod.endTime) }}
+                  </h3>
+                </div>
+                <p class="admin-panel--container__reservation-text">
+                  Motivo: {{ blockedPeriod.reason || 'Bloqueo manual' }}
+                </p>
+
+                <div class="admin-panel--container__reservation-actions">
+                  <button
+                    type="button"
+                    class="admin-panel--container__action-button admin-panel--container__action-button--reject"
+                    [disabled]="blockActionLoading()"
+                    (click)="deleteBlockedPeriod(blockedPeriod.id)"
+                  >
+                    Quitar bloqueo
+                  </button>
+                </div>
+              </article>
+            }
+          </div>
+        }
+      }
+
+      <div class="admin-panel--container__actions">
+        <button
+          type="button"
+          class="admin-panel--container__button admin-panel--container__button--secondary"
+          (click)="logout()"
+        >
+          Cerrar sesión admin
+        </button>
+        <a
+          class="admin-panel--container__button admin-panel--container__button--primary"
+          routerLink="/"
+        >
+          Volver al inicio
+        </a>
+      </div>
+    }
+  </div>
+</section>

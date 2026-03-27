@@ -1,0 +1,63 @@
+<section class="tratamientos">
+  <div class="tratamientos--container">
+    <header class="tratamientos--container__hero">
+      <h1 class="tratamientos--container__title">{{ title }}</h1>
+      <p class="tratamientos--container__description">{{ description }}</p>
+      <a class="tratamientos--container__back" routerLink="/">Volver al inicio</a>
+    </header>
+
+    <div class="tratamientos--container__list">
+      @for (item of tratamientos; track item.id; let i = $index) {
+        <article
+          #cardEl
+          class="tratamientos--container__card"
+          [attr.data-id]="item.id"
+          [style.--stagger]="i"
+          [class.tratamientos--container__card--visible]="isCardVisible(item.id)"
+          role="button"
+          tabindex="0"
+          (click)="openTreatment(item)"
+          (keydown.enter)="openTreatment(item)"
+          (keydown.space)="openTreatment(item); $event.preventDefault()"
+        >
+          <img class="tratamientos--container__image" [src]="item.imagen" [alt]="item.nombre" />
+          <div class="tratamientos--container__content">
+            <h2 class="tratamientos--container__card-title">{{ item.nombre }}</h2>
+          </div>
+        </article>
+      }
+    </div>
+
+    @if (selectedTratamiento(); as item) {
+      <div class="tratamientos--container__modal-overlay" (click)="closeTreatment()">
+        <section
+          class="tratamientos--container__modal"
+          role="dialog"
+          aria-modal="true"
+          [attr.aria-label]="'Detalle de ' + item.nombre"
+          (click)="$event.stopPropagation()"
+        >
+          <h3 class="tratamientos--container__modal-title">{{ item.nombre }}</h3>
+          <p class="tratamientos--container__modal-text">{{ item.descripcion }}</p>
+          <p class="tratamientos--container__modal-price">{{ item.precio }}</p>
+          <div class="tratamientos--container__modal-actions">
+            <button
+              type="button"
+              class="tratamientos--container__modal-reserve"
+              (click)="reserveTreatment(item)"
+            >
+              Reservar
+            </button>
+            <button
+              type="button"
+              class="tratamientos--container__modal-close"
+              (click)="closeTreatment()"
+            >
+              Cerrar
+            </button>
+          </div>
+        </section>
+      </div>
+    }
+  </div>
+</section>

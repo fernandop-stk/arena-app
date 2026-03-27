@@ -29,9 +29,7 @@
                 "input": "public"
               }
             ],
-            "styles": [
-              "src/styles.scss"
-            ],
+            "styles": ["src/styles.scss"],
             "server": "src/main.server.ts",
             "outputMode": "server",
             "ssr": {
@@ -69,7 +67,8 @@
               "buildTarget": "arena-app:build:production"
             },
             "development": {
-              "buildTarget": "arena-app:build:development"
+              "buildTarget": "arena-app:build:development",
+              "proxyConfig": "proxy.conf.json"
             }
           },
           "defaultConfiguration": "development"

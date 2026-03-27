@@ -1,0 +1,45 @@
+@if (showIntro()) {
+  <section class="inicio--intro-screen" [attr.aria-label]="title">
+    <h1 class="inicio--intro-title" [attr.aria-label]="title">
+      @for (char of titleChars; track $index) {
+        <span class="inicio--intro-char" [style.--char-index]="$index">
+          @if (char === ' ') {
+            &nbsp;
+          } @else {
+            {{ char }}
+          }
+        </span>
+      }
+    </h1>
+  </section>
+}
+
+@if (showContent()) {
+  <section class="inicio">
+    <div class="inicio--container">
+      <header class="inicio--container__hero">
+        <h1 class="inicio--container__title inicio--container__title--static">{{ title }}</h1>
+        <p class="inicio--container__subtitle">{{ subtitle }}</p>
+      </header>
+
+      <div class="inicio--container__grid">
+        @for (option of options; track option.id; let idx = $index) {
+          <a class="inicio--container__card" [routerLink]="option.ruta" [style.--card-index]="idx">
+            <div class="inicio--container__card-head">
+              <span class="inicio--container__card-icon" aria-hidden="true">{{
+                option.icono
+              }}</span>
+              <span class="inicio--container__card-tag">{{ option.etiqueta }}</span>
+            </div>
+            <h2 class="inicio--container__card-title">{{ option.titulo }}</h2>
+            <p class="inicio--container__card-description">{{ option.descripcion }}</p>
+            <span class="inicio--container__card-cta">
+              Ver más
+              <span aria-hidden="true">→</span>
+            </span>
+          </a>
+        }
+      </div>
+    </div>
+  </section>
+}

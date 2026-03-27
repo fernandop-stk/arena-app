@@ -1,0 +1,269 @@
+@use '../../styles/variables/colors' as colors;
+@use '../../styles/variables/layout' as layout;
+
+.tratamientos {
+  min-height: 100vh;
+  padding: layout.$space-3 layout.$space-2;
+
+  &--container {
+    max-width: layout.$max-content-width;
+    margin: 0 auto;
+    background: colors.$color-surface;
+    border: 1px solid colors.$color-border;
+    border-radius: layout.$radius-lg;
+    box-shadow: layout.$shadow-card;
+    padding: layout.$space-3;
+
+    &__hero {
+      margin-bottom: layout.$space-3;
+    }
+
+    &__title {
+      margin: 0;
+      color: colors.$color-text;
+      font-size: 1.7rem;
+    }
+
+    &__description {
+      margin: layout.$space-1 0;
+      color: colors.$color-text-soft;
+    }
+
+    &__back {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 2.15rem;
+      padding: 0 0.8rem;
+      border-radius: 999px;
+      border: 1px solid colors.$color-border;
+      background: colors.$color-surface;
+      color: colors.$color-primary-dark;
+      font-size: 0.84rem;
+      font-weight: 700;
+      text-decoration: none;
+      transition:
+        background 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.2s ease;
+
+      &:hover {
+        background: rgba(201, 123, 99, 0.07);
+        border-color: rgba(201, 123, 99, 0.45);
+        transform: translateY(-1px);
+      }
+    }
+
+    &__list {
+      display: grid;
+      gap: layout.$space-2;
+    }
+
+    &__card {
+      overflow: hidden;
+      border: 1px solid colors.$color-border;
+      border-radius: layout.$radius-md;
+      background:
+        linear-gradient(rgba(36, 28, 23, 0.22), rgba(36, 28, 23, 0.58)),
+        url('/assets/branding/fondo.png') center / cover no-repeat;
+      min-height: 14rem;
+      position: relative;
+      transform: none;
+      opacity: 1;
+      transition:
+        transform 0.24s ease,
+        box-shadow 0.24s ease;
+      cursor: pointer;
+
+      &--visible {
+        animation: tratamientos-card-in 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        animation-delay: calc(var(--stagger, 0) * 90ms);
+      }
+
+      &:hover {
+        transform: translateY(-5px) scale(1.01);
+        box-shadow: 0 12px 26px rgba(121, 92, 69, 0.2);
+      }
+
+      &:hover .tratamientos--container__image {
+        transform: scale(1.05);
+      }
+    }
+
+    &__image {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      opacity: 0.5;
+      transition: transform 0.45s ease;
+    }
+
+    &__content {
+      position: relative;
+      z-index: 1;
+      min-height: 14rem;
+      padding: layout.$space-2;
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      text-align: center;
+    }
+
+    &__card-title {
+      margin: auto;
+      color: #fff;
+      font-size: 1.35rem;
+      line-height: 1.2;
+      font-weight: 800;
+      text-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+    }
+
+    &__modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      background: rgba(39, 27, 21, 0.54);
+      backdrop-filter: blur(3px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: layout.$space-2;
+    }
+
+    &__modal {
+      width: min(34rem, 100%);
+      background: colors.$color-surface;
+      border: 1px solid colors.$color-border;
+      border-radius: layout.$radius-lg;
+      box-shadow: layout.$shadow-card;
+      padding: layout.$space-3;
+      animation: tratamientos-modal-in 0.2s ease;
+    }
+
+    &__modal-title {
+      margin: 0;
+      color: colors.$color-primary-dark;
+      font-size: 1.35rem;
+    }
+
+    &__modal-text {
+      margin: layout.$space-2 0;
+      color: colors.$color-text-soft;
+      line-height: 1.6;
+      font-size: 0.95rem;
+    }
+
+    &__modal-price {
+      margin: 0;
+      color: colors.$color-text;
+      font-weight: 800;
+      font-size: 1rem;
+    }
+
+    &__modal-actions {
+      margin-top: layout.$space-2;
+      display: flex;
+      gap: layout.$space-1;
+      flex-wrap: wrap;
+    }
+
+    &__modal-reserve {
+      min-height: 2.5rem;
+      border-radius: 999px;
+      border: none;
+      padding: 0 1rem;
+      background: linear-gradient(90deg, colors.$color-primary 0%, colors.$color-secondary 100%);
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 18px rgba(183, 107, 84, 0.2);
+      transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        filter 0.2s ease;
+
+      &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 14px 28px rgba(183, 107, 84, 0.42);
+        filter: brightness(1.06);
+      }
+    }
+
+    &__modal-close {
+      min-height: 2.5rem;
+      border-radius: 999px;
+      border: 1px solid colors.$color-border;
+      padding: 0 1rem;
+      background: colors.$color-surface;
+      color: colors.$color-primary-dark;
+      font-weight: 700;
+      cursor: pointer;
+      transition:
+        background 0.2s ease,
+        border-color 0.2s ease;
+
+      &:hover {
+        background: rgba(201, 123, 99, 0.07);
+        border-color: rgba(201, 123, 99, 0.45);
+      }
+    }
+  }
+
+  @media (min-width: layout.$breakpoint-tablet) {
+    padding: layout.$space-5 layout.$space-3;
+
+    &--container {
+      padding: layout.$space-4;
+
+      &__list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+  }
+
+  @keyframes tratamientos-card-in {
+    from {
+      opacity: 0;
+      transform: translateY(14px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes tratamientos-modal-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &--container {
+      &__card {
+        animation: none;
+        transform: none;
+
+        &--visible {
+          animation: none;
+        }
+      }
+
+      &__image {
+        transition: none;
+      }
+
+      &__modal {
+        animation: none;
+      }
+    }
+  }
+}

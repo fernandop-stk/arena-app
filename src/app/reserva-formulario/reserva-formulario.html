@@ -1,0 +1,105 @@
+<section class="reserva-formulario">
+  <div class="reserva-formulario--container">
+    <header class="reserva-formulario--container__hero">
+      <h1 class="reserva-formulario--container__title">{{ title }}</h1>
+      <p class="reserva-formulario--container__description">{{ description }}</p>
+      <p class="reserva-formulario--container__summary">
+        {{ appointmentTypeName }} · {{ reservationSelection?.dateIso }} ·
+        {{ reservationSelection?.time }}
+      </p>
+    </header>
+
+    <form
+      class="reserva-formulario--container__form"
+      [formGroup]="form"
+      (ngSubmit)="submitReservation()"
+    >
+      <label class="reserva-formulario--container__label" for="nombre">Nombre</label>
+      <input
+        id="nombre"
+        type="text"
+        class="reserva-formulario--container__input"
+        formControlName="nombre"
+      />
+      @if (isFieldInvalid('nombre')) {
+        <p class="reserva-formulario--container__error">Introduce un nombre válido.</p>
+      }
+
+      <label class="reserva-formulario--container__label" for="telefono">Teléfono</label>
+      <input
+        id="telefono"
+        type="tel"
+        class="reserva-formulario--container__input"
+        formControlName="telefono"
+      />
+      @if (isFieldInvalid('telefono')) {
+        <p class="reserva-formulario--container__error">Introduce un teléfono válido.</p>
+      }
+
+      <label class="reserva-formulario--container__label" for="email">Email</label>
+      <input
+        id="email"
+        type="email"
+        class="reserva-formulario--container__input"
+        formControlName="email"
+      />
+      @if (isFieldInvalid('email')) {
+        <p class="reserva-formulario--container__error">Introduce un email válido.</p>
+      }
+
+      <button
+        type="submit"
+        class="reserva-formulario--container__button reserva-formulario--container__button--primary"
+        [disabled]="isSubmitting()"
+      >
+        {{ isSubmitting() ? 'Enviando...' : submitLabel }}
+      </button>
+    </form>
+
+    @if (errorMessage()) {
+      <p class="reserva-formulario--container__submit-error">{{ errorMessage() }}</p>
+    }
+  </div>
+
+  @if (successMessage()) {
+    <div class="reserva-formulario--container__success-overlay" (click)="closeSuccessModal()">
+      <section
+        class="reserva-formulario--container__success-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Reserva confirmada"
+        (click)="$event.stopPropagation()"
+      >
+        <p class="reserva-formulario--container__success-kicker">Reserva confirmada</p>
+        <h2 class="reserva-formulario--container__success-title">{{ successMessage() }}</h2>
+
+        <div class="reserva-formulario--container__success-summary">
+          <p>
+            <strong>Servicio:</strong>
+            {{ appointmentTypeName }}
+          </p>
+          <p>
+            <strong>Día:</strong>
+            {{ getSummaryDateLabel() }}
+          </p>
+          <p>
+            <strong>Hora:</strong>
+            {{ reservationSelection?.time }}
+          </p>
+        </div>
+
+        <p class="reserva-formulario--container__success-note">
+          Te hemos enviado la confirmación por email.
+        </p>
+
+        <button
+          type="button"
+          class="reserva-formulario--container__button reserva-formulario--container__button--primary"
+          (click)="closeSuccessModal()"
+        >
+          Volver al inicio
+        </button>
+      </section>
+    </div>
+  }
+</section>

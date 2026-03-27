@@ -1,1 +1,18 @@
-/* You can add global styles to this file, and also import other style files */
+@use './styles/variables/colors' as colors;
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif;
+  color: colors.$color-text;
+  background-color: colors.$color-background;
+}

@@ -1,0 +1,126 @@
+@use '../../styles/variables/colors' as colors;
+@use '../../styles/variables/layout' as layout;
+
+.donde-estamos {
+  min-height: 100vh;
+  padding: layout.$space-3 layout.$space-2;
+
+  &--container {
+    max-width: layout.$max-content-width;
+    margin: 0 auto;
+    background: colors.$color-surface;
+    border: 1px solid colors.$color-border;
+    border-radius: layout.$radius-lg;
+    box-shadow: layout.$shadow-card;
+    padding: layout.$space-3;
+
+    &__hero {
+      margin-bottom: layout.$space-2;
+      opacity: 0;
+      transform: translateY(14px) scale(0.99);
+
+      &--visible {
+        animation: donde-estamos-in 0.62s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+      }
+    }
+
+    &__title {
+      margin: 0;
+      color: colors.$color-text;
+      font-size: 1.7rem;
+    }
+
+    &__address,
+    &__phone {
+      margin: layout.$space-1 0 0;
+      color: colors.$color-text-soft;
+      font-size: 0.95rem;
+    }
+
+    &__back {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: layout.$space-1;
+      min-height: 2.15rem;
+      padding: 0 0.8rem;
+      border-radius: 999px;
+      border: 1px solid colors.$color-border;
+      background: colors.$color-surface;
+      text-decoration: none;
+      color: colors.$color-primary-dark;
+      font-size: 0.84rem;
+      font-weight: 700;
+      transition:
+        background 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.2s ease;
+
+      &:hover {
+        background: rgba(201, 123, 99, 0.07);
+        border-color: rgba(201, 123, 99, 0.45);
+        transform: translateY(-1px);
+      }
+    }
+
+    &__map-wrap {
+      border: 1px solid colors.$color-border;
+      border-radius: layout.$radius-md;
+      overflow: hidden;
+      opacity: 0;
+      transform: translateY(14px) scale(0.99);
+
+      &--visible {
+        animation: donde-estamos-in 0.62s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        animation-delay: calc(var(--stagger, 0) * 90ms);
+      }
+    }
+
+    &__map {
+      width: 100%;
+      min-height: 20rem;
+      border: none;
+      display: block;
+    }
+  }
+
+  @media (min-width: layout.$breakpoint-tablet) {
+    padding: layout.$space-5 layout.$space-3;
+
+    &--container {
+      padding: layout.$space-4;
+
+      &__map {
+        min-height: 28rem;
+      }
+    }
+  }
+
+  @keyframes donde-estamos-in {
+    from {
+      opacity: 0;
+      transform: translateY(14px) scale(0.99);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &--container {
+      &__hero,
+      &__map-wrap {
+        animation: none;
+        opacity: 1;
+        transform: none;
+      }
+
+      &__hero--visible,
+      &__map-wrap--visible {
+        animation: none;
+      }
+    }
+  }
+}
