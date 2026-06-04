@@ -4,13 +4,29 @@ This project was generated using [Angular CLI](https://github.com/angular/angula
 
 ## Development server
 
-To start a local development server, run:
+Para desarrollo local dentro de [arena-app/package.json](package.json), usa:
+
+```bash
+npm run dev:all
+```
+
+Esto hace tres cosas a la vez:
+
+- libera los puertos `4000` y `4200` si se quedaron procesos colgados,
+- recompila el SSR en modo watch,
+- levanta frontend en `http://localhost:4200/` y backend SSR/API en `http://localhost:4000/`.
+
+Si quieres limpiar procesos manualmente antes de relanzar, usa:
+
+```bash
+npm run dev:stop
+```
+
+Si solo necesitas el frontend, también puedes seguir usando:
 
 ```bash
 ng serve
 ```
-
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
 
 ## Code scaffolding
 

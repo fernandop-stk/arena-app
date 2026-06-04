@@ -9,11 +9,13 @@ export interface ReservationEmailPayload {
   customerName: string;
   customerPhone: string;
   appointmentTypeName: string;
+  requiresReservationSignal?: boolean;
   dateIso: string;
   time: string;
   durationMinutes: number;
   establishmentAddress: string;
   establishmentPhone: string;
+  observaciones?: string;
 }
 
 @Injectable({
@@ -27,7 +29,10 @@ export class ReservaFormularioService {
   }
 
   getEstablishmentPhone(): string {
-    return '618787878';
+    return '919521611';
+  }
+  getEstablishmentPhoneMobile(): string {
+    return '614716238';
   }
 
   getTitle(): string {
@@ -47,6 +52,7 @@ export class ReservaFormularioService {
       nombre: ['', [Validators.required, Validators.minLength(2)]],
       telefono: ['', [Validators.required, Validators.pattern(/^[0-9+\s-]{9,15}$/)]],
       email: ['', [Validators.required, Validators.email]],
+      observaciones: [''],
     });
   }
 
@@ -70,17 +76,21 @@ export class ReservaFormularioService {
     appointmentTypeName: string,
     durationMinutes: number,
     reservationSelection: ReservationSelection,
+    observaciones?: string,
+    requiresReservationSignal?: boolean,
   ): ReservationEmailPayload {
     return {
       customerEmail,
       customerName,
       customerPhone,
       appointmentTypeName,
+      requiresReservationSignal,
       dateIso: reservationSelection.dateIso,
       time: reservationSelection.time,
       durationMinutes,
       establishmentAddress: this.getEstablishmentAddress(),
       establishmentPhone: this.getEstablishmentPhone(),
+      observaciones: observaciones ?? '',
     };
   }
 

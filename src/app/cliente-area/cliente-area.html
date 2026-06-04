@@ -1,0 +1,113 @@
+<section class="cliente-area">
+  <div class="cliente-area__container">
+    <header class="cliente-area__header">
+      <h1>Área de cliente</h1>
+      <p>Accede para consultar tu historial de packs.</p>
+    </header>
+
+    @if (isLoading()) {
+      <div class="cliente-area__card cliente-area__state">
+        <p>Cargando información...</p>
+      </div>
+    } @else if (!session()) {
+      <div class="cliente-area__card">
+        <h2>Inicia sesión</h2>
+        <form [formGroup]="loginForm" (ngSubmit)="handleLogin()" class="cliente-area__form">
+          <label>
+            Email o nombre
+            <input type="text" formControlName="identity" placeholder="tu@email.com o Irene" />
+          </label>
+
+          <label>
+            Contraseña
+            <input type="password" formControlName="password" placeholder="Tu contraseña" />
+          </label>
+
+          @if (errorMessage()) {
+            <p class="cliente-area__error">{{ errorMessage() }}</p>
+          }
+
+          <button type="submit" [disabled]="isSubmitting()">Entrar</button>
+        </form>
+
+        <div class="cliente-area__links">
+          <a routerLink="/cliente/registro">Crear una cuenta nueva</a>
+          <a routerLink="/cliente/recuperar">He olvidado mi contraseña</a>
+        </div>
+      </div>
+    } @else {
+      <div class="cliente-area__summary cliente-area__card">
+        <div>
+          <h2>{{ session()?.fullName }}</h2>
+          <p>{{ session()?.email }}</p>
+          <p>{{ session()?.phone }}</p>
+        </div>
+        <button type="button" class="cliente-area__logout" (click)="logout()">Cerrar sesión</button>
+      </div>
+
+      <div class="cliente-area__card">
+        <h2>Historial de packs</h2>
+
+        @if (!hasTreatments()) {
+          <p class="cliente-area__empty">Todavía no tienes packs registrados.</p>
+        } @else {
+          <div class="cliente-area__list">
+            @for (treatment of treatments(); track treatment.id) {
+              <article class="cliente-area__item">
+                <div class="cliente-area__item-head">
+                  <h3>{{ treatment.name }}</h3>
+                  <span>{{ treatment.createdAtIso | date: 'dd/MM/yyyy HH:mm' }}</span>
+                </div>
+
+                @if (treatment.note) {
+                  <p>{{ treatment.note }}</p>
+                }
+
+                <small>Registrado por {{ treatment.createdByEmail }}</small>
+              </article>
+            }
+          </div>
+        }
+      </div>
+
+      <div class="cliente-area__card">
+        <h2>Alertas activas</h2>
+
+        @if (isLoadingAlerts()) {
+          <p class="cliente-area__empty">Cargando alertas...</p>
+        } @else if (!hasAlerts()) {
+          <p class="cliente-area__empty">
+            No tienes alertas activas. Crea una cuando encuentres un hueco ocupado.
+          </p>
+        } @else {
+          <div class="cliente-area__alerts-list">
+            @for (alert of alerts(); track alert.id) {
+              <article class="cliente-area__alert-item">
+                <div class="cliente-area__alert-head">
+                  <h3>{{ alert.appointmentTypeName }}</h3>
+                  <span class="cliente-area__alert-date">
+                    {{ alert.dateIso | date: 'dd/MM/yyyy' }} a las {{ alert.startTime }}
+                  </span>
+                </div>
+
+                <p class="cliente-area__alert-text">
+                  Recibirás un email cuando se libere este hueco.
+                </p>
+
+                <button
+                  type="button"
+                  class="cliente-area__alert-delete"
+                  [disabled]="isDeletingAlert() === alert.id"
+                  (click)="deleteAlert(alert.id)"
+                  title="Eliminar esta alerta"
+                >
+                  {{ isDeletingAlert() === alert.id ? 'Eliminando...' : '✕ Eliminar' }}
+                </button>
+              </article>
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+</section>

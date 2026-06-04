@@ -1,0 +1,28 @@
+<div class="admin-panel--container__employee-filters">
+  <label class="admin-panel--container__label">
+    Buscar por usuario o email
+    <input
+      class="admin-panel--container__input"
+      type="text"
+      placeholder="Escribe un usuario o email"
+      [value]="search"
+      (input)="searchInput.emit($event)"
+    />
+  </label>
+
+  <label class="admin-panel--container__label">
+    Filtrar por rol
+    <div class="admin-panel--container__time-select-wrap">
+      <select
+        class="admin-panel--container__input admin-panel--container__time-select"
+        [value]="roleFilter"
+        (change)="roleFilterChange.emit($event)"
+      >
+        <option value="all">Todos</option>
+        <option value="superadmin">Super admin</option>
+        <option value="admin">Admin</option>
+        <option value="client">Empleado</option>
+      </select>
+    </div>
+  </label>
+</div>

@@ -7,6 +7,14 @@
         {{ appointmentTypeName }} · {{ reservationSelection?.dateIso }} ·
         {{ reservationSelection?.time }}
       </p>
+      @if (requiresReservationSignal) {
+        <p
+          class="reserva-formulario--container__summary reserva-formulario--container__summary--warning"
+        >
+          Este servicio requiere señal y la franja quedará ocupada provisionalmente durante
+          {{ provisionalHoldHours }} horas.
+        </p>
+      }
     </header>
 
     <form
@@ -47,6 +55,18 @@
         <p class="reserva-formulario--container__error">Introduce un email válido.</p>
       }
 
+      <label class="reserva-formulario--container__label" for="observaciones"
+        >Observaciones
+        <span class="reserva-formulario--container__label--optional">(opcional)</span></label
+      >
+      <textarea
+        id="observaciones"
+        class="reserva-formulario--container__input reserva-formulario--container__textarea"
+        formControlName="observaciones"
+        rows="3"
+        placeholder="Alergias, preferencias, aclaraciones..."
+      ></textarea>
+
       <button
         type="submit"
         class="reserva-formulario--container__button reserva-formulario--container__button--primary"
@@ -59,7 +79,93 @@
     @if (errorMessage()) {
       <p class="reserva-formulario--container__submit-error">{{ errorMessage() }}</p>
     }
+
+    <section class="reserva-formulario--container__client-cta" aria-label="Área cliente">
+      <div class="reserva-formulario--container__client-cta-actions">
+        <a class="reserva-formulario--container__client-cta-button" routerLink="/cliente/area">
+          Ver mi historial
+        </a>
+        @if (!isClientAuthenticated()) {
+          <a
+            class="reserva-formulario--container__client-cta-button reserva-formulario--container__client-cta-button--ghost"
+            routerLink="/cliente/registro"
+          >
+            Crear cuenta
+          </a>
+        }
+      </div>
+    </section>
   </div>
+
+  @if (showTreatmentPhoneWarning()) {
+    <div class="reserva-formulario--container__warning-overlay" (click)="dismissTreatmentWarning()">
+      <section
+        class="reserva-formulario--container__warning-modal"
+        role="alertdialog"
+        aria-modal="true"
+        aria-label="Servicio recomendado por tel\u00e9fono"
+        (click)="$event.stopPropagation()"
+      >
+        <span class="reserva-formulario--container__warning-icon" aria-hidden="true">✂️</span>
+        <p class="reserva-formulario--container__warning-kicker">
+          Servicio con tratamiento de color
+        </p>
+        <h2 class="reserva-formulario--container__warning-title">Este servicio requiere señal</h2>
+        <p class="reserva-formulario--container__warning-text">
+          Los servicios de Pack Ilumina y Pack Full Color requieren reserva previa con señal. La
+          franja se marcará como ocupada de forma provisional durante 48 horas si no se confirma.
+        </p>
+        <a
+          class="reserva-formulario--container__button reserva-formulario--container__button--primary reserva-formulario--container__warning-call"
+          href="tel:+34{{ establishmentPhone }}"
+        >
+          📞 Llamar ahora &mdash; {{ establishmentPhone }}
+        </a>
+        <button
+          type="button"
+          class="reserva-formulario--container__warning-skip"
+          (click)="dismissTreatmentWarning()"
+        >
+          Continuar con la reserva online
+        </button>
+      </section>
+    </div>
+  }
+
+  @if (showUrgentWarning()) {
+    <div class="reserva-formulario--container__warning-overlay" (click)="dismissUrgentWarning()">
+      <section
+        class="reserva-formulario--container__warning-modal"
+        role="alertdialog"
+        aria-modal="true"
+        aria-label="Reserva con menos de 24 horas"
+        (click)="$event.stopPropagation()"
+      >
+        <span class="reserva-formulario--container__warning-icon" aria-hidden="true">⚠️</span>
+        <p class="reserva-formulario--container__warning-kicker">Reserva urgente</p>
+        <h2 class="reserva-formulario--container__warning-title">
+          Esta cita es en menos de 24&nbsp;horas
+        </h2>
+        <p class="reserva-formulario--container__warning-text">
+          Para garantizar disponibilidad en reservas con menos de 24 horas de antelación,
+          <strong>llámanos antes de continuar</strong>.
+        </p>
+        <a
+          class="reserva-formulario--container__button reserva-formulario--container__button--primary reserva-formulario--container__warning-call"
+          href="tel:+34{{ establishmentPhone }}"
+        >
+          📞 Llamar ahora &mdash; {{ establishmentPhone }}
+        </a>
+        <button
+          type="button"
+          class="reserva-formulario--container__warning-skip"
+          (click)="dismissUrgentWarning()"
+        >
+          Continuar de todas formas
+        </button>
+      </section>
+    </div>
+  }
 
   @if (successMessage()) {
     <div class="reserva-formulario--container__success-overlay" (click)="closeSuccessModal()">

@@ -1,207 +1,201 @@
 <section class="admin-acceso">
-  <div class="admin-acceso--container">
-    <h1 class="admin-acceso--container__title">Acceso de usuarios</h1>
-    <p class="admin-acceso--container__description">
-      Regístrate o inicia sesión con usuario/email y contraseña.
-    </p>
-
-    <div class="admin-acceso--container__tabs">
-      <button
-        type="button"
-        class="admin-acceso--container__tab"
-        [class.admin-acceso--container__tab--active]="!isRegisterMode()"
-        (click)="setMode(false)"
-      >
-        Iniciar sesión
-      </button>
-      <button
-        type="button"
-        class="admin-acceso--container__tab"
-        [class.admin-acceso--container__tab--active]="isRegisterMode()"
-        (click)="setMode(true)"
-      >
-        Darse de alta
-      </button>
-    </div>
-
-    @if (!isRegisterMode()) {
-      <form
-        class="admin-acceso--container__form"
-        [formGroup]="loginForm"
-        (ngSubmit)="submitLogin()"
-      >
-        <label class="admin-acceso--container__label" for="identity">Usuario o email</label>
-        <input
-          id="identity"
-          class="admin-acceso--container__input"
-          type="text"
-          formControlName="identity"
-          placeholder="usuario o email"
-        />
-
-        <label class="admin-acceso--container__label" for="login-password">Contraseña</label>
-        <div class="admin-acceso--container__input-wrap">
-          <input
-            id="login-password"
-            class="admin-acceso--container__input admin-acceso--container__input--with-toggle"
-            [type]="showLoginPassword() ? 'text' : 'password'"
-            formControlName="password"
-            placeholder="••••••••"
-          />
+  @if (showAccessModal()) {
+    <div class="admin-acceso--container__modal-backdrop" (click)="closeAccessModal()">
+      <div class="admin-acceso--container__modal" (click)="$event.stopPropagation()">
+        <div class="admin-acceso--container__modal-head">
+          <h2 class="admin-acceso--container__modal-title">
+            {{ requiresRoleIdentification() ? 'Identificación de gestión' : 'Acceso de usuarios' }}
+          </h2>
           <button
             type="button"
-            class="admin-acceso--container__input-toggle"
-            (click)="toggleLoginPasswordVisibility()"
-            [attr.aria-label]="showLoginPassword() ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+            class="admin-acceso--container__modal-close"
+            (click)="closeAccessModal()"
+            aria-label="Cerrar"
           >
-            {{ showLoginPassword() ? 'Ocultar' : 'Mostrar' }}
+            ×
           </button>
         </div>
 
-        <button
-          type="submit"
-          class="admin-acceso--container__button admin-acceso--container__button--primary"
-          [disabled]="isSubmitting()"
-        >
-          {{ isSubmitting() ? 'Entrando...' : 'Entrar' }}
-        </button>
-      </form>
-    } @else {
-      <form
-        class="admin-acceso--container__form"
-        [formGroup]="registerForm"
-        (ngSubmit)="submitRegister()"
-      >
-        <label class="admin-acceso--container__label" for="register-username">Usuario</label>
-        <input
-          id="register-username"
-          class="admin-acceso--container__input"
-          type="text"
-          formControlName="username"
-          placeholder="tu usuario"
-        />
-
-        <label class="admin-acceso--container__label" for="register-email">Email</label>
-        <input
-          id="register-email"
-          class="admin-acceso--container__input"
-          type="email"
-          formControlName="email"
-          placeholder="tu-email@dominio.com"
-        />
-
-        <label class="admin-acceso--container__label" for="register-password">Contraseña</label>
-        <div class="admin-acceso--container__input-wrap">
-          <input
-            id="register-password"
-            class="admin-acceso--container__input admin-acceso--container__input--with-toggle"
-            [type]="showRegisterPassword() ? 'text' : 'password'"
-            formControlName="password"
-            placeholder="mínimo 8 caracteres"
-          />
-          <button
-            type="button"
-            class="admin-acceso--container__input-toggle"
-            (click)="toggleRegisterPasswordVisibility()"
-            [attr.aria-label]="showRegisterPassword() ? 'Ocultar contraseña' : 'Mostrar contraseña'"
-          >
-            {{ showRegisterPassword() ? 'Ocultar' : 'Mostrar' }}
-          </button>
-        </div>
-
-        <div class="admin-acceso--container__password-strength">
-          <div class="admin-acceso--container__password-strength-bar">
-            <span
-              class="admin-acceso--container__password-strength-fill"
-              [style.width.%]="getPasswordStrengthLevel() * 25"
-              [class.admin-acceso--container__password-strength-fill--low]="
-                getPasswordStrengthLevel() <= 1
-              "
-              [class.admin-acceso--container__password-strength-fill--medium]="
-                getPasswordStrengthLevel() === 2 || getPasswordStrengthLevel() === 3
-              "
-              [class.admin-acceso--container__password-strength-fill--high]="
-                getPasswordStrengthLevel() === 4
-              "
-            ></span>
+        @if (!requiresRoleIdentification()) {
+          <div class="admin-acceso--container__tabs">
+            <button
+              type="button"
+              class="admin-acceso--container__tab"
+              [class.admin-acceso--container__tab--active]="isAccessModalTab('login')"
+              (click)="setAccessModalTab('login')"
+            >
+              Iniciar sesión
+            </button>
+            <button
+              type="button"
+              class="admin-acceso--container__tab"
+              [class.admin-acceso--container__tab--active]="isAccessModalTab('register-client')"
+              (click)="setAccessModalTab('register-client')"
+            >
+              Regístrate
+            </button>
           </div>
-          <p class="admin-acceso--container__password-strength-text">
-            {{ getPasswordStrengthLabel() }}
-          </p>
-
-          <ul class="admin-acceso--container__password-rules">
-            <li [class.admin-acceso--container__password-rule--ok]="passwordRuleOk('length')">
-              Mínimo 8 caracteres
-            </li>
-            <li [class.admin-acceso--container__password-rule--ok]="passwordRuleOk('uppercase')">
-              Al menos una mayúscula
-            </li>
-            <li [class.admin-acceso--container__password-rule--ok]="passwordRuleOk('special')">
-              Al menos un carácter especial
-            </li>
-          </ul>
-        </div>
-
-        <label class="admin-acceso--container__label" for="register-confirm-password"
-          >Repetir contraseña</label
-        >
-        <div class="admin-acceso--container__input-wrap">
-          <input
-            id="register-confirm-password"
-            class="admin-acceso--container__input admin-acceso--container__input--with-toggle"
-            [type]="showConfirmPassword() ? 'text' : 'password'"
-            formControlName="confirmPassword"
-            placeholder="repite tu contraseña"
-          />
-          <button
-            type="button"
-            class="admin-acceso--container__input-toggle"
-            (click)="toggleConfirmPasswordVisibility()"
-            [attr.aria-label]="
-              showConfirmPassword() ? 'Ocultar contraseña repetida' : 'Mostrar contraseña repetida'
-            "
-          >
-            {{ showConfirmPassword() ? 'Ocultar' : 'Mostrar' }}
-          </button>
-        </div>
-
-        @if (hasRegisterControlError('password', 'missingUppercase')) {
-          <p class="admin-acceso--container__error">La contraseña debe incluir una mayúscula.</p>
         }
 
-        @if (hasRegisterControlError('password', 'missingSpecialChar')) {
-          <p class="admin-acceso--container__error">
-            La contraseña debe incluir un carácter especial.
-          </p>
+        @if (requiresRoleIdentification()) {
+          @if (!selectedRoleUser()) {
+            <div class="admin-acceso--container__identify">
+              <p class="admin-acceso--container__identify-copy">
+                Elige quién eres para entrar en gestión y continúa con la contraseña de ese usuario.
+              </p>
+
+              @if (isRoleSelectionLoading()) {
+                <p class="admin-acceso--container__message">Cargando usuarios de gestión...</p>
+              } @else {
+                <div class="admin-acceso--container__identify-list">
+                  @for (user of roleIdentificationUsers(); track user.email) {
+                    <button
+                      type="button"
+                      class="admin-acceso--container__identify-user"
+                      (click)="selectRoleIdentificationUser(user)"
+                    >
+                      <strong>{{ user.username }}</strong>
+                      <span>{{ user.email }}</span>
+                      <small>{{
+                        user.role === 'superadmin' ? 'Admin principal' : 'Empleado'
+                      }}</small>
+                    </button>
+                  }
+                </div>
+              }
+            </div>
+          } @else {
+            <form
+              class="admin-acceso--container__form"
+              [formGroup]="roleUserPasswordForm"
+              (ngSubmit)="confirmRoleIdentification()"
+            >
+              <p class="admin-acceso--container__identify-copy">
+                Usuario seleccionado:
+                <strong>{{ selectedRoleUser()?.username }}</strong>
+                <span>({{ selectedRoleUser()?.email }})</span>
+              </p>
+
+              <label class="admin-acceso--container__label" for="role-user-password">
+                Contraseña de este usuario
+              </label>
+              <div class="admin-acceso--container__input-wrap">
+                <input
+                  id="role-user-password"
+                  class="admin-acceso--container__input admin-acceso--container__input--with-toggle"
+                  [type]="showRoleUserPassword() ? 'text' : 'password'"
+                  formControlName="password"
+                  placeholder="••••••••"
+                  autocomplete="new-password"
+                />
+                <button
+                  type="button"
+                  class="admin-acceso--container__input-toggle"
+                  (click)="toggleRoleUserPasswordVisibility()"
+                  [attr.aria-label]="
+                    showRoleUserPassword() ? 'Ocultar contraseña' : 'Mostrar contraseña'
+                  "
+                >
+                  {{ showRoleUserPassword() ? 'Ocultar' : 'Mostrar' }}
+                </button>
+              </div>
+
+              <div class="admin-acceso--container__identify-actions">
+                <button
+                  type="button"
+                  class="admin-acceso--container__button admin-acceso--container__button--ghost"
+                  (click)="backToRoleSelection()"
+                  [disabled]="isSubmitting()"
+                >
+                  Cambiar usuario
+                </button>
+                <button
+                  type="submit"
+                  class="admin-acceso--container__button admin-acceso--container__button--primary"
+                  [disabled]="isSubmitting()"
+                >
+                  {{ isSubmitting() ? 'Validando...' : 'Entrar en gestión' }}
+                </button>
+              </div>
+            </form>
+          }
+        } @else {
+          @if (isAccessModalTab('login')) {
+            <form
+              class="admin-acceso--container__form"
+              [formGroup]="loginForm"
+              (ngSubmit)="submitLogin()"
+            >
+              <label class="admin-acceso--container__label" for="identity">Usuario o email</label>
+              <input
+                id="identity"
+                class="admin-acceso--container__input"
+                type="text"
+                formControlName="identity"
+                placeholder="usuario o email"
+                autocomplete="off"
+              />
+
+              <label class="admin-acceso--container__label" for="login-password">Contraseña</label>
+              <div class="admin-acceso--container__input-wrap">
+                <input
+                  id="login-password"
+                  class="admin-acceso--container__input admin-acceso--container__input--with-toggle"
+                  [type]="showLoginPassword() ? 'text' : 'password'"
+                  formControlName="password"
+                  placeholder="••••••••"
+                  autocomplete="new-password"
+                />
+                <button
+                  type="button"
+                  class="admin-acceso--container__input-toggle"
+                  (click)="toggleLoginPasswordVisibility()"
+                  [attr.aria-label]="
+                    showLoginPassword() ? 'Ocultar contraseña' : 'Mostrar contraseña'
+                  "
+                >
+                  {{ showLoginPassword() ? 'Ocultar' : 'Mostrar' }}
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                class="admin-acceso--container__button admin-acceso--container__button--primary"
+                [disabled]="isSubmitting()"
+              >
+                {{ isSubmitting() ? 'Entrando...' : 'Entrar' }}
+              </button>
+            </form>
+          } @else {
+            <div class="admin-acceso--container__client-links">
+              <a class="admin-acceso--container__client-link" routerLink="/cliente/registro">
+                Soy cliente nuevo
+                <span>Crear mi cuenta</span>
+              </a>
+              <a class="admin-acceso--container__client-link" routerLink="/cliente/area">
+                Ya tengo cuenta
+                <span>Ver mi historial</span>
+              </a>
+              <a class="admin-acceso--container__client-link" routerLink="/cliente/recuperar">
+                Olvidé mi contraseña
+                <span>Recuperar acceso</span>
+              </a>
+            </div>
+          }
         }
 
-        @if (hasPasswordMismatch()) {
-          <p class="admin-acceso--container__error">Las contraseñas no coinciden.</p>
+        @if (message()) {
+          <p class="admin-acceso--container__message">{{ message() }}</p>
         }
 
-        <button
-          type="submit"
-          class="admin-acceso--container__button admin-acceso--container__button--primary"
-          [disabled]="isSubmitting() || registerForm.invalid"
-        >
-          {{ isSubmitting() ? 'Creando cuenta...' : 'Crear cuenta' }}
-        </button>
-      </form>
-    }
+        @if (errorMessage()) {
+          <p class="admin-acceso--container__error">{{ errorMessage() }}</p>
+        }
 
-    @if (message()) {
-      <p class="admin-acceso--container__message">{{ message() }}</p>
-    }
-
-    @if (errorMessage()) {
-      <p class="admin-acceso--container__error">{{ errorMessage() }}</p>
-    }
-
-    <p class="admin-acceso--container__hint">
-      El acceso por enlace enviado por correo para administración se mantiene en backend, pero queda
-      desactivado temporalmente en esta interfaz.
-    </p>
-
-    <a class="admin-acceso--container__back" routerLink="/">Volver al inicio</a>
-  </div>
+        @if (roleIdentificationError()) {
+          <p class="admin-acceso--container__error">{{ roleIdentificationError() }}</p>
+        }
+      </div>
+    </div>
+  }
 </section>

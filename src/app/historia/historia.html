@@ -1,7 +1,153 @@
 <section class="historia">
   <div #revealEl class="historia--container" [class.historia--container--visible]="isVisible()">
-    <h1 class="historia--container__title">{{ title }}</h1>
-    <p class="historia--container__text">{{ text }}</p>
-    <a class="historia--container__back" routerLink="/">Volver al inicio</a>
+    <div class="historia--container__copy">
+      <p class="historia--container__eyebrow">Arena Hair Studio</p>
+      <h1 class="historia--container__title">{{ title }}</h1>
+      <p class="historia--container__intro">{{ intro }}</p>
+      <blockquote class="historia--container__quote">
+        Una peluquería que va más allá del cambio de imagen para convertirse en un ritual de
+        bienestar, estilo y cuidado.
+      </blockquote>
+
+      <div class="historia--container__stories" aria-label="Recorrido por Arena Hair Studio">
+        @for (story of stories; track story.imageSrc; let index = $index) {
+          <button
+            type="button"
+            class="historia--container__story"
+            [class.historia--container__story--active]="activeIndex() === index"
+            (click)="selectStory(index)"
+            (mouseenter)="selectStory(index)"
+            (focus)="selectStory(index)"
+          >
+            <span class="historia--container__story-index"
+              >{{ index + 1 < 10 ? '0' : '' }}{{ index + 1 }}</span
+            >
+            <span class="historia--container__story-content">
+              <span class="historia--container__story-title">{{ story.title }}</span>
+              <span class="historia--container__story-text">{{ story.text }}</span>
+            </span>
+          </button>
+        }
+      </div>
+
+      <div class="historia--container__actions">
+        <div class="historia--container__controls" aria-label="Controles de la galería">
+          <button type="button" class="historia--container__control" (click)="showPreviousStory()">
+            ←
+          </button>
+          <button type="button" class="historia--container__control" (click)="showNextStory()">
+            →
+          </button>
+        </div>
+
+        <a class="historia--container__back" routerLink="/">Volver al inicio</a>
+      </div>
+    </div>
+
+    <div class="historia--container__media">
+      <div class="historia--container__stage">
+        @for (story of [activeStory()]; track story.imageSrc) {
+          <button
+            type="button"
+            class="historia--container__stage-button"
+            (click)="openCarousel(activeIndex())"
+            aria-label="Abrir carrusel de imágenes"
+          >
+            <img class="historia--container__image" [src]="story.imageSrc" [alt]="story.imageAlt" />
+          </button>
+
+          <div class="historia--container__overlay">
+            <p class="historia--container__counter">
+              {{ activeIndex() + 1 < 10 ? '0' : '' }}{{ activeIndex() + 1 }} /
+              {{ stories.length < 10 ? '0' : '' }}{{ stories.length }}
+            </p>
+            <p class="historia--container__badge">{{ story.badge }}</p>
+            <h2 class="historia--container__stage-title">{{ story.title }}</h2>
+            <p class="historia--container__caption">{{ story.caption }}</p>
+          </div>
+        }
+      </div>
+
+      <div class="historia--container__thumbnails" aria-label="Imágenes del salón">
+        @for (story of stories; track story.imageSrc; let index = $index) {
+          <button
+            type="button"
+            class="historia--container__thumbnail"
+            [class.historia--container__thumbnail--active]="activeIndex() === index"
+            (click)="openCarousel(index)"
+            (mouseenter)="selectStory(index)"
+            (focus)="selectStory(index)"
+          >
+            <img [src]="story.imageSrc" [alt]="story.imageAlt" />
+          </button>
+        }
+      </div>
+    </div>
   </div>
+
+  @if (isCarouselOpen()) {
+    <div class="historia-lightbox" role="dialog" aria-modal="true" aria-label="Galería de imágenes">
+      <button
+        type="button"
+        class="historia-lightbox__backdrop"
+        aria-label="Cerrar galería"
+        (click)="closeCarousel()"
+      ></button>
+
+      <div class="historia-lightbox__dialog">
+        <button
+          type="button"
+          class="historia-lightbox__close"
+          aria-label="Cerrar galería"
+          (click)="closeCarousel()"
+        >
+          ×
+        </button>
+
+        <button
+          type="button"
+          class="historia-lightbox__nav historia-lightbox__nav--prev"
+          aria-label="Imagen anterior"
+          (click)="showPreviousCarouselImage()"
+        >
+          ←
+        </button>
+
+        <div class="historia-lightbox__stage">
+          @for (story of [carouselStory()]; track story.imageSrc) {
+            <img class="historia-lightbox__image" [src]="story.imageSrc" [alt]="story.imageAlt" />
+            <div class="historia-lightbox__meta">
+              <p class="historia-lightbox__counter">
+                {{ carouselIndex() + 1 < 10 ? '0' : '' }}{{ carouselIndex() + 1 }} /
+                {{ stories.length < 10 ? '0' : '' }}{{ stories.length }}
+              </p>
+              <p class="historia-lightbox__title">{{ story.title }}</p>
+            </div>
+          }
+        </div>
+
+        <button
+          type="button"
+          class="historia-lightbox__nav historia-lightbox__nav--next"
+          aria-label="Imagen siguiente"
+          (click)="showNextCarouselImage()"
+        >
+          →
+        </button>
+
+        <div class="historia-lightbox__thumbs">
+          @for (story of stories; track story.imageSrc; let index = $index) {
+            <button
+              type="button"
+              class="historia-lightbox__thumb"
+              [class.historia-lightbox__thumb--active]="carouselIndex() === index"
+              (click)="selectCarouselImage(index)"
+            >
+              <img [src]="story.imageSrc" [alt]="story.imageAlt" />
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+  }
 </section>

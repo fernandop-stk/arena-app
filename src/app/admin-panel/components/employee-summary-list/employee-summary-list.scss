@@ -1,0 +1,55 @@
+@use '../../../../styles/variables/colors' as colors;
+@use '../../../../styles/variables/layout' as layout;
+
+.employee-summary-list {
+  &__hint {
+    margin: 0;
+    color: colors.$color-text-soft;
+    font-weight: 600;
+  }
+
+  &__list {
+    margin-top: layout.$space-2;
+    display: grid;
+    gap: layout.$space-2;
+  }
+
+  &__row {
+    border: 1px solid colors.$color-border;
+    border-radius: layout.$radius-md;
+    background: rgba(138, 157, 194, 0.1);
+    padding: layout.$space-2;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+
+  &__name {
+    margin: 0;
+    color: colors.$color-primary-dark;
+    font-weight: 700;
+    flex: 1;
+  }
+
+  &__chip {
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.73rem;
+    font-weight: 800;
+    color: #4e5b7d;
+    background: rgba(138, 157, 194, 0.2);
+  }
+
+  &__btn {
+    min-height: 2.1rem;
+    border-radius: 999px;
+    border: 1px solid rgba(138, 157, 194, 0.35);
+    background: rgba(138, 157, 194, 0.14);
+    color: colors.$color-primary-dark;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 0 0.9rem;
+    cursor: pointer;
+  }
+}

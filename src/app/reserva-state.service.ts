@@ -4,6 +4,7 @@ export interface ReservationSelection {
   appointmentTypeId: number;
   dateIso: string;
   time: string;
+  durationMinutes: number;
 }
 
 @Injectable({

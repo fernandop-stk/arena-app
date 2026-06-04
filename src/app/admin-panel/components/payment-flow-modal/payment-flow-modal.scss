@@ -1,0 +1,142 @@
+@use '../../../../styles/variables/colors' as colors;
+@use '../../../../styles/variables/layout' as layout;
+
+.payment-flow {
+  &__backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(39, 24, 16, 0.4);
+    backdrop-filter: blur(2px);
+    display: grid;
+    place-items: center;
+    z-index: 45;
+    padding: 1rem;
+  }
+
+  &__card {
+    width: min(36rem, 100%);
+    border: 1px solid colors.$color-border;
+    border-radius: layout.$radius-md;
+    background: #fff;
+    box-shadow: 0 16px 36px rgba(57, 39, 28, 0.2);
+    padding: 1rem;
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  &__title {
+    margin: 0;
+    color: colors.$color-primary-dark;
+    font-size: 1rem;
+  }
+
+  &__error p {
+    margin: 0;
+    color: colors.$color-error;
+    font-weight: 700;
+  }
+
+  &__hint {
+    margin: 0;
+    color: colors.$color-text-soft;
+    font-weight: 600;
+  }
+
+  &__list {
+    display: grid;
+    gap: 0.5rem;
+    max-height: 45vh;
+    overflow: auto;
+    padding-right: 0.15rem;
+  }
+
+  &__row {
+    width: 100%;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid rgba(201, 123, 99, 0.3);
+    border-radius: layout.$radius-sm;
+    background: rgba(201, 123, 99, 0.05);
+    cursor: pointer;
+
+    &:hover {
+      background: rgba(201, 123, 99, 0.1);
+    }
+  }
+
+  &__name {
+    font-weight: 700;
+    color: colors.$color-primary-dark;
+  }
+
+  &__price {
+    color: colors.$color-text-soft;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: right;
+  }
+
+  &__price-line {
+    margin: 0;
+    color: colors.$color-text-soft;
+    font-size: 0.95rem;
+  }
+
+  &__field {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0;
+    color: colors.$color-text-soft;
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  &__input {
+    min-height: 2.35rem;
+    border: 1px solid colors.$color-border;
+    border-radius: layout.$radius-sm;
+    padding: 0 0.65rem;
+    font-size: 0.9rem;
+    color: colors.$color-text;
+    background: #fff;
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  &__btn {
+    min-height: 2.35rem;
+    border-radius: 999px;
+    padding: 0 0.9rem;
+    border: 1px solid colors.$color-border;
+    background: #fff;
+    color: colors.$color-primary-dark;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+
+    &:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    &--secondary {
+      background: rgba(201, 123, 99, 0.1);
+      border-color: rgba(201, 123, 99, 0.35);
+    }
+
+    &--primary {
+      background: colors.$color-primary;
+      border: none;
+      color: #fff;
+    }
+  }
+}

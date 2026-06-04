@@ -1,0 +1,26 @@
+<div class="employee-management-tabs">
+  <button
+    type="button"
+    class="employee-management-tabs__btn"
+    [class.employee-management-tabs__btn--active]="activeTab === 'crear'"
+    (click)="setTab('crear')"
+  >
+    Crear empleado
+  </button>
+  <button
+    type="button"
+    class="employee-management-tabs__btn"
+    [class.employee-management-tabs__btn--active]="activeTab === 'listado'"
+    (click)="setTab('listado')"
+  >
+    Listado resumido
+  </button>
+  <button
+    type="button"
+    class="employee-management-tabs__btn"
+    [class.employee-management-tabs__btn--active]="activeTab === 'buscar'"
+    (click)="setTab('buscar')"
+  >
+    Buscar empleado
+  </button>
+</div>

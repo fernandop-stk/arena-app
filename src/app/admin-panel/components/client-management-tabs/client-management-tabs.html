@@ -1,0 +1,26 @@
+<div class="client-management-tabs">
+  <button
+    type="button"
+    class="client-management-tabs__btn"
+    [class.client-management-tabs__btn--active]="activeTab === 'crear'"
+    (click)="setTab('crear')"
+  >
+    Crear cliente
+  </button>
+  <button
+    type="button"
+    class="client-management-tabs__btn"
+    [class.client-management-tabs__btn--active]="activeTab === 'listado'"
+    (click)="setTab('listado')"
+  >
+    Listado resumido
+  </button>
+  <button
+    type="button"
+    class="client-management-tabs__btn"
+    [class.client-management-tabs__btn--active]="activeTab === 'buscar'"
+    (click)="setTab('buscar')"
+  >
+    Buscar cliente
+  </button>
+</div>

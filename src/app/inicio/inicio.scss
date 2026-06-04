@@ -1,5 +1,6 @@
 @use '../../styles/variables/colors' as colors;
 @use '../../styles/variables/layout' as layout;
+@use '../../styles/variables/typography' as typography;
 
 .inicio {
   min-height: 100vh;
@@ -16,7 +17,8 @@
   &--intro-title {
     margin: 0;
     font-size: clamp(3.2rem, 11vw, 6.8rem);
-    font-weight: 900;
+    font-family: typography.$font-display;
+    font-weight: 700;
     letter-spacing: -0.04em;
     display: flex;
     flex-wrap: wrap;
@@ -30,7 +32,7 @@
   &--intro-char {
     --char-index: 0;
     display: inline-block;
-    color: colors.$color-primary-dark;
+    color: colors.$color-primary;
     opacity: 0;
     filter: blur(9px);
     transform: translateY(1rem) rotateX(-65deg) scale(0.92);
@@ -76,7 +78,8 @@
       margin: 0;
       color: colors.$color-text;
       font-size: clamp(2rem, 5vw, 2.8rem);
-      font-weight: 800;
+      font-family: typography.$font-heading;
+      font-weight: 600;
       letter-spacing: -0.02em;
     }
 
@@ -91,6 +94,99 @@
       font-size: clamp(1.05rem, 2.6vw, 1.6rem);
       line-height: 1.4;
       font-weight: 600;
+    }
+
+    &__client-cta {
+      margin-top: layout.$space-3;
+      width: min(100%, 52rem);
+      display: grid;
+      gap: layout.$space-2;
+      padding: layout.$space-2;
+      border-radius: layout.$radius-lg;
+      border: 1px solid rgba(201, 123, 99, 0.18);
+      background: linear-gradient(145deg, rgba(255, 250, 247, 0.98), rgba(249, 236, 229, 0.9));
+      box-shadow: 0 16px 34px rgba(121, 92, 69, 0.08);
+      text-align: left;
+    }
+
+    &__client-cta-copy {
+      display: grid;
+      gap: 0.45rem;
+    }
+
+    &__client-cta-tag {
+      width: fit-content;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: colors.$color-primary-dark;
+      border: 1px solid rgba(201, 123, 99, 0.35);
+      background: rgba(201, 123, 99, 0.08);
+      border-radius: 999px;
+      padding: 0.26rem 0.65rem;
+    }
+
+    &__client-cta-title {
+      margin: 0;
+      color: colors.$color-primary-dark;
+      font-family: typography.$font-heading;
+      font-size: clamp(1.2rem, 2.4vw, 1.6rem);
+      line-height: 1.2;
+    }
+
+    &__client-cta-text {
+      margin: 0;
+      color: colors.$color-text-soft;
+      line-height: 1.5;
+      font-weight: 500;
+    }
+
+    &__client-cta-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    &__client-cta-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 2.9rem;
+      padding: 0.75rem 1.25rem;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 800;
+      color: #fff;
+      background: colors.$color-primary;
+      box-shadow: 0 10px 20px rgba(121, 92, 69, 0.15);
+      transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        opacity 0.2s ease;
+
+      &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 14px 24px rgba(121, 92, 69, 0.18);
+      }
+
+      &--ghost {
+        color: colors.$color-primary-dark;
+        background: rgba(255, 255, 255, 0.88);
+        border: 1px solid colors.$color-primary-dark;
+        box-shadow: none;
+      }
+    }
+
+    &__client-cta-link {
+      color: colors.$color-primary-dark;
+      font-weight: 700;
+      text-decoration: none;
+
+      &:hover {
+        text-decoration: underline;
+      }
     }
 
     &__grid {
@@ -179,6 +275,7 @@
     &__card-title {
       margin: 0;
       color: colors.$color-primary-dark;
+      font-family: typography.$font-heading;
       font-size: 1.28rem;
       line-height: 1.25;
     }
@@ -222,8 +319,8 @@
     }
     50% {
       text-shadow:
-        0 0 12px rgba(201, 123, 99, 0.45),
-        0 0 22px rgba(217, 164, 65, 0.25);
+        0 0 12px rgba(128, 104, 85, 0.38),
+        0 0 22px rgba(195, 182, 163, 0.24);
     }
   }
 
@@ -281,6 +378,15 @@
 
       &__grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      &__client-cta {
+        grid-template-columns: minmax(0, 1.4fr) auto;
+        align-items: center;
+      }
+
+      &__client-cta-actions {
+        justify-content: flex-end;
       }
     }
   }

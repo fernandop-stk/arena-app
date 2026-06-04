@@ -1,0 +1,36 @@
+@use '../../../../styles/variables/colors' as colors;
+
+.employee-management-tabs {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+
+  &__btn {
+    min-height: 2.2rem;
+    border-radius: 999px;
+    border: 1px solid colors.$color-border;
+    background: colors.$color-surface;
+    color: colors.$color-primary-dark;
+    padding: 0 0.85rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+      background 0.2s ease,
+      border-color 0.2s ease,
+      box-shadow 0.2s ease;
+
+    &:hover:not(.employee-management-tabs__btn--active) {
+      border-color: rgba(201, 123, 99, 0.5);
+      background: rgba(201, 123, 99, 0.08);
+    }
+
+    &--active {
+      background: colors.$color-primary;
+      border: none;
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(201, 123, 99, 0.25);
+    }
+  }
+}

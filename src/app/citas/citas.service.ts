@@ -6,6 +6,8 @@ export interface AppointmentType {
   nombre: string;
   duracionMinutos: number;
   descripcion: string;
+  requiresReservationSignal?: boolean;
+  provisionalHoldHours?: number;
 }
 
 @Injectable({
@@ -23,7 +25,7 @@ export class CitasService {
   }
 
   getDescription(): string {
-    return 'Elige el servicio, revisa la duración y reserva cuando quieras.';
+    return 'Elige tu pack y reserva cuando quieras.';
   }
 
   getPrimaryButtonLabel(): string {
@@ -34,39 +36,74 @@ export class CitasService {
     return [
       {
         id: 1,
-        nombre: 'Corte',
-        duracionMinutos: 30,
-        descripcion: 'Corte personalizado adaptado a tu estilo.',
+        nombre: 'Pack Corte',
+        duracionMinutos: 60,
+        descripcion: 'Asesoría personalizada + spa capilar + corte.',
       },
       {
         id: 2,
-        nombre: 'Corte y peinado',
-        duracionMinutos: 45,
-        descripcion: 'Corte profesional con peinado y acabado final.',
+        nombre: 'Pack Peinado',
+        duracionMinutos: 60,
+        descripcion: 'Asesoría personalizada + spa capilar + peinado.',
       },
       {
         id: 3,
-        nombre: 'Tinte',
-        duracionMinutos: 60,
-        descripcion: 'Aplicación de color completo con secado incluido.',
+        nombre: 'Pack Corte y Peinado',
+        duracionMinutos: 90,
+        descripcion: 'Asesoría + spa capilar + corte + peinado.',
       },
       {
         id: 4,
-        nombre: 'Mechas',
+        nombre: 'Pack Color',
         duracionMinutos: 120,
-        descripcion: 'Técnica de iluminación parcial con matiz final.',
+        descripcion: 'Asesoría + técnica de color raíz + spa capilar + corte + peinado.',
       },
       {
         id: 5,
-        nombre: 'Extensiones',
-        duracionMinutos: 240,
-        descripcion: 'Colocación de extensiones naturales o sintéticas.',
+        nombre: 'Pack Color Plus',
+        duracionMinutos: 150,
+        descripcion: 'Asesoría + color con matiz o global + spa capilar + corte + peinado.',
       },
       {
         id: 6,
-        nombre: 'Balayage',
-        duracionMinutos: 300,
-        descripcion: 'Técnica de iluminación manual degradada y personalizada.',
+        nombre: 'Pack Ilumina',
+        duracionMinutos: 210,
+        descripcion: 'Asesoría + puntos de luz con matiz + spa capilar + corte + peinado.',
+        requiresReservationSignal: true,
+        provisionalHoldHours: 48,
+      },
+      {
+        id: 7,
+        nombre: 'Pack Full Color',
+        duracionMinutos: 330,
+        descripcion:
+          'Asesoría + iluminación a medida + spa capilar + tratamiento reparador + corte + peinado.',
+        requiresReservationSignal: true,
+        provisionalHoldHours: 48,
+      },
+      {
+        id: 8,
+        nombre: 'Pack Invitada · Opción 1',
+        duracionMinutos: 60,
+        descripcion: 'Asesoría + spa capilar + peinado suelto.',
+      },
+      {
+        id: 9,
+        nombre: 'Pack Invitada · Opción 2',
+        duracionMinutos: 90,
+        descripcion: 'Asesoría + spa capilar + semirecogido, coleta o trenza.',
+      },
+      {
+        id: 10,
+        nombre: 'Pack Invitada · Opción 3',
+        duracionMinutos: 120,
+        descripcion: 'Asesoría + spa capilar + recogido.',
+      },
+      {
+        id: 11,
+        nombre: 'Pack Novia',
+        duracionMinutos: 180,
+        descripcion: 'Asesoría + prueba + día de la boda.',
       },
     ];
   }
@@ -113,5 +150,19 @@ export class CitasService {
         tipo: appointmentTypeId,
       },
     });
+  }
+
+  requiresReservationSignal(appointmentTypeId: number): boolean {
+    return this.getAppointmentTypes().some(
+      (appointmentType) =>
+        appointmentType.id === appointmentTypeId && appointmentType.requiresReservationSignal,
+    );
+  }
+
+  getProvisionalHoldHours(appointmentTypeId: number): number {
+    return (
+      this.getAppointmentTypes().find((appointmentType) => appointmentType.id === appointmentTypeId)
+        ?.provisionalHoldHours ?? 0
+    );
   }
 }

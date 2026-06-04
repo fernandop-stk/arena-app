@@ -1,0 +1,179 @@
+<section class="recuperar">
+  <div class="recuperar--container">
+    @if (currentStep() === 'solicitud') {
+      <header class="recuperar--header">
+        <h1 class="recuperar--title">Recuperar contraseña</h1>
+        <p class="recuperar--subtitle">Introduce tu email para recibir un enlace de recuperación</p>
+      </header>
+
+      <form [formGroup]="solicitudForm" (ngSubmit)="handleSolicitud()" class="recuperar--form">
+        <label class="recuperar--label">
+          Email
+          <input
+            class="recuperar--input"
+            type="email"
+            formControlName="email"
+            placeholder="tu@email.com"
+            [disabled]="isSubmitting()"
+          />
+          @if (solicitudForm.get('email')?.invalid && solicitudForm.get('email')?.touched) {
+            <span class="recuperar--error">
+              @if (solicitudForm.get('email')?.hasError('required')) {
+                El email es obligatorio.
+              } @else if (solicitudForm.get('email')?.hasError('email')) {
+                Introduce un email válido.
+              }
+            </span>
+          }
+        </label>
+
+        @if (errorMessage()) {
+          <div class="recuperar--alert recuperar--alert--error">
+            {{ errorMessage() }}
+          </div>
+        }
+
+        @if (message()) {
+          <div class="recuperar--alert recuperar--alert--success">
+            {{ message() }}
+          </div>
+        }
+
+        <button
+          type="submit"
+          class="recuperar--button"
+          [disabled]="solicitudForm.invalid || isSubmitting()"
+        >
+          @if (isSubmitting()) {
+            Enviando...
+          } @else {
+            Enviar enlace de recuperación
+          }
+        </button>
+
+        <p class="recuperar--link-group">
+          ¿Recuerdas tu contraseña?
+          <a [routerLink]="['/acceso']" class="recuperar--link"> Inicia sesión aquí </a>
+        </p>
+      </form>
+    } @else if (currentStep() === 'resetear') {
+      <header class="recuperar--header">
+        <h1 class="recuperar--title">Establecer nueva contraseña</h1>
+        <p class="recuperar--subtitle">Crea una nueva contraseña para tu cuenta</p>
+      </header>
+
+      <form [formGroup]="resetForm" (ngSubmit)="handleReset()" class="recuperar--form">
+        <label class="recuperar--label">
+          Nueva contraseña
+          <div class="recuperar--password-input">
+            <input
+              class="recuperar--input"
+              [type]="showPassword() ? 'text' : 'password'"
+              formControlName="password"
+              placeholder="Mínimo 8 caracteres con mayúscula y símbolo"
+              [disabled]="isSubmitting()"
+            />
+            <button
+              type="button"
+              class="recuperar--password-toggle"
+              (click)="togglePasswordVisibility()"
+              [disabled]="isSubmitting()"
+              aria-label="Mostrar/ocultar contraseña"
+            >
+              {{ showPassword() ? 'Ocultar' : 'Mostrar' }}
+            </button>
+          </div>
+          @if (resetForm.get('password')?.touched) {
+            <div class="recuperar--password-strength">
+              <span class="recuperar--strength-label">
+                {{ getPasswordStrengthLabel() }}
+              </span>
+              <div class="recuperar--strength-bar">
+                <div
+                  class="recuperar--strength-fill"
+                  [class.recuperar--strength-fill--low]="getPasswordStrengthLevel() <= 1"
+                  [class.recuperar--strength-fill--medium]="
+                    getPasswordStrengthLevel() === 2 || getPasswordStrengthLevel() === 3
+                  "
+                  [class.recuperar--strength-fill--high]="getPasswordStrengthLevel() >= 4"
+                  [style.width.%]="getPasswordStrengthLevel() * 25"
+                ></div>
+              </div>
+            </div>
+
+            <ul class="recuperar--password-rules">
+              <li [class.recuperar--rule-ok]="passwordRuleOk('length')">Mínimo 8 caracteres</li>
+              <li [class.recuperar--rule-ok]="passwordRuleOk('uppercase')">Una mayúscula</li>
+              <li [class.recuperar--rule-ok]="passwordRuleOk('special')">Un símbolo especial</li>
+            </ul>
+          }
+          @if (resetForm.get('password')?.invalid && resetForm.get('password')?.touched) {
+            <span class="recuperar--error">
+              @if (resetForm.get('password')?.hasError('required')) {
+                La contraseña es obligatoria.
+              } @else if (resetForm.get('password')?.hasError('minlength')) {
+                La contraseña debe tener al menos 8 caracteres.
+              } @else if (resetForm.get('password')?.hasError('passwordComplexity')) {
+                La contraseña debe incluir una mayúscula y un símbolo especial.
+              }
+            </span>
+          }
+        </label>
+
+        <label class="recuperar--label">
+          Repetir contraseña
+          <div class="recuperar--password-input">
+            <input
+              class="recuperar--input"
+              [type]="showConfirmPassword() ? 'text' : 'password'"
+              formControlName="confirmPassword"
+              placeholder="Repite tu contraseña"
+              [disabled]="isSubmitting()"
+            />
+            <button
+              type="button"
+              class="recuperar--password-toggle"
+              (click)="toggleConfirmPasswordVisibility()"
+              [disabled]="isSubmitting()"
+              aria-label="Mostrar/ocultar contraseña"
+            >
+              {{ showConfirmPassword() ? 'Ocultar' : 'Mostrar' }}
+            </button>
+          </div>
+          @if (hasPasswordMismatch()) {
+            <span class="recuperar--error"> Las contraseñas no coinciden. </span>
+          }
+        </label>
+
+        @if (errorMessage()) {
+          <div class="recuperar--alert recuperar--alert--error">
+            {{ errorMessage() }}
+          </div>
+        }
+
+        @if (message()) {
+          <div class="recuperar--alert recuperar--alert--success">
+            {{ message() }}
+          </div>
+        }
+
+        <button
+          type="submit"
+          class="recuperar--button"
+          [disabled]="resetForm.invalid || isSubmitting()"
+        >
+          @if (isSubmitting()) {
+            Actualizando...
+          } @else {
+            Establecer nueva contraseña
+          }
+        </button>
+
+        <p class="recuperar--link-group">
+          Volver a
+          <a [routerLink]="['/acceso']" class="recuperar--link"> iniciar sesión </a>
+        </p>
+      </form>
+    }
+  </div>
+</section>

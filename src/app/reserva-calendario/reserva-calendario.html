@@ -82,6 +82,12 @@
 
         @if (currentStep() > 2 && selectedDateIso()) {
           <span class="reserva-calendario--container__chip-sep" aria-hidden="true">›</span>
+          <span
+            class="reserva-calendario--container__chip reserva-calendario--container__chip--duration"
+          >
+            {{ getSelectedDurationLabel() }}
+          </span>
+          <span class="reserva-calendario--container__chip-sep" aria-hidden="true">›</span>
           <button
             type="button"
             class="reserva-calendario--container__chip"
@@ -119,12 +125,49 @@
               (click)="onTypeChange(type.id)"
             >
               <span class="reserva-calendario--container__type-name">{{ type.nombre }}</span>
-              <span class="reserva-calendario--container__type-meta"
-                >{{ type.duracionMinutos }} min</span
-              >
             </button>
           }
         </div>
+
+        <label class="reserva-calendario--container__duration" for="durationMinutes">
+          <span class="reserva-calendario--container__duration-label">Duración estimada</span>
+          <div class="reserva-calendario--container__duration-select-wrap">
+            <select
+              id="durationMinutes"
+              class="reserva-calendario--container__duration-select"
+              [value]="getDurationSelectValue()"
+              (change)="onDurationChange($event)"
+            >
+              <option value="default">{{ getDefaultDurationLabel() }}</option>
+              <option value="custom">Personalizado</option>
+              @for (duration of durationOptions; track duration) {
+                <option [value]="duration">{{ getDurationOptionLabel(duration) }}</option>
+              }
+            </select>
+            <span class="reserva-calendario--container__duration-caret" aria-hidden="true">⌄</span>
+          </div>
+          @if (isCustomDurationSelected()) {
+            <label
+              class="reserva-calendario--container__custom-duration"
+              for="customDurationInputStep1"
+            >
+              <span>Minutos personalizados</span>
+              <input
+                id="customDurationInputStep1"
+                type="number"
+                min="15"
+                max="360"
+                inputmode="numeric"
+                [value]="customDurationInput()"
+                (input)="onCustomDurationInput($event)"
+                placeholder="Ej: 46 o 78"
+              />
+            </label>
+          }
+          <small class="reserva-calendario--container__duration-help">
+            Por defecto se usa la duración del pack, pero puedes ajustarla manualmente.
+          </small>
+        </label>
       </div>
     }
 
@@ -174,6 +217,48 @@
       <div class="reserva-calendario--container__step-content">
         <h2 class="reserva-calendario--container__subtitle">Elige la hora</h2>
 
+        <div
+          class="reserva-calendario--container__duration-inline"
+          role="group"
+          aria-label="Duración de la cita"
+        >
+          <span class="reserva-calendario--container__duration-inline-label">Duración</span>
+          <div class="reserva-calendario--container__duration-select-wrap">
+            <select
+              id="durationMinutesStep3"
+              class="reserva-calendario--container__duration-select reserva-calendario--container__duration-select--inline"
+              [value]="getDurationSelectValue()"
+              (change)="onDurationChange($event)"
+            >
+              <option value="default">{{ getDefaultDurationLabel() }}</option>
+              <option value="custom">Personalizado</option>
+              @for (duration of durationOptions; track duration) {
+                <option [value]="duration">{{ getDurationOptionLabel(duration) }}</option>
+              }
+            </select>
+            <span class="reserva-calendario--container__duration-caret" aria-hidden="true">⌄</span>
+          </div>
+        </div>
+
+        @if (isCustomDurationSelected()) {
+          <label
+            class="reserva-calendario--container__custom-duration reserva-calendario--container__custom-duration--inline"
+            for="customDurationInputStep3"
+          >
+            <span>Minutos personalizados</span>
+            <input
+              id="customDurationInputStep3"
+              type="number"
+              min="15"
+              max="360"
+              inputmode="numeric"
+              [value]="customDurationInput()"
+              (input)="onCustomDurationInput($event)"
+              placeholder="Ej: 46 o 78"
+            />
+          </label>
+        }
+
         @if (isLoadingSlots()) {
           <p class="reserva-calendario--container__hint">Cargando horarios disponibles...</p>
         } @else if (slotsError()) {
@@ -183,6 +268,12 @@
             No hay horas disponibles para ese día y servicio.
           </p>
         } @else {
+          @if (alertError()) {
+            <div class="reserva-calendario--container__alert-error">
+              <p>{{ alertError() }}</p>
+            </div>
+          }
+
           <div class="reserva-calendario--container__times">
             @for (slot of timeSlots(); track slot.time) {
               <div class="reserva-calendario--container__time-item">
@@ -202,6 +293,21 @@
                   <p class="reserva-calendario--container__time-status">
                     {{ slot.past ? 'No disponible' : 'Ocupada' }}
                   </p>
+                  @if (!slot.past) {
+                    <button
+                      type="button"
+                      class="reserva-calendario--container__alert-btn"
+                      [disabled]="isCreatingAlert()"
+                      (click)="createAlert(slot.time)"
+                      title="Recibirás una notificación por email si se libera esta hora"
+                    >
+                      {{
+                        isCreatingAlert() && alertSlotTime() === slot.time
+                          ? '⏳ Creando...'
+                          : '🔔 Crear alerta'
+                      }}
+                    </button>
+                  }
                 }
               </div>
             }
@@ -223,5 +329,29 @@
         </div>
       </div>
     }
+
+    <section class="reserva-calendario--container__client-cta" aria-label="Área cliente">
+      <div>
+        <p class="reserva-calendario--container__client-cta-kicker">Área cliente</p>
+        <h2 class="reserva-calendario--container__client-cta-title">
+          Guarda el control de tus packs
+        </h2>
+        <p class="reserva-calendario--container__client-cta-text">
+          Después de reservar, podrás entrar en tu área de cliente para consultar tu historial.
+        </p>
+      </div>
+
+      <div class="reserva-calendario--container__client-cta-actions">
+        <a class="reserva-calendario--container__client-cta-button" routerLink="/cliente/area">
+          Ver mi historial
+        </a>
+        <a
+          class="reserva-calendario--container__client-cta-button reserva-calendario--container__client-cta-button--ghost"
+          routerLink="/cliente/registro"
+        >
+          Crear cuenta
+        </a>
+      </div>
+    </section>
   </div>
 </section>

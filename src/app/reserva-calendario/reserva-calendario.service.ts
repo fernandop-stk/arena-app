@@ -92,6 +92,17 @@ export class ReservaCalendarioService {
     return Boolean(selectedDateIso && selectedTime);
   }
 
+  createAlert(data: {
+    dateIso: string;
+    startTime: string;
+    endTime: string;
+    appointmentTypeName: string;
+  }): Observable<{ ok: boolean; alert: any }> {
+    return this.http.post<{ ok: boolean; alert: any }>('/api/cliente/alertas', data, {
+      withCredentials: true,
+    });
+  }
+
   private toIsoDate(date: Date): string {
     const year = date.getFullYear();
     const month = `${date.getMonth() + 1}`.padStart(2, '0');

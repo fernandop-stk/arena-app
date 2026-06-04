@@ -1,0 +1,26 @@
+<div class="payment-method-selector">
+  <button
+    type="button"
+    class="payment-method-selector__btn"
+    [class.payment-method-selector__btn--active]="selectedMethod === 'efectivo'"
+    (click)="select('efectivo')"
+  >
+    💵 Efectivo
+  </button>
+  <button
+    type="button"
+    class="payment-method-selector__btn"
+    [class.payment-method-selector__btn--active]="selectedMethod === 'tarjeta'"
+    (click)="select('tarjeta')"
+  >
+    💳 Tarjeta
+  </button>
+  <button
+    type="button"
+    class="payment-method-selector__btn"
+    [class.payment-method-selector__btn--active]="selectedMethod === 'bizum'"
+    (click)="select('bizum')"
+  >
+    📱 Bizum
+  </button>
+</div>

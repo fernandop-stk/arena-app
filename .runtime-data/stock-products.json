@@ -1,0 +1,152 @@
+[
+  {
+    "id": "stock-1780557287150-7lshtwqf",
+    "productName": "E2E Producto 286269",
+    "brand": "Arena Test",
+    "color": "Test",
+    "quantity": 3,
+    "price": 12.5,
+    "createdAtIso": "2026-06-04T07:14:47.150Z",
+    "createdByEmail": "ferperezsanchez@gmail.com"
+  },
+  {
+    "id": "stock-1780557076495-klq8wsnb",
+    "productName": "E2E Producto 076337",
+    "brand": "Arena Test",
+    "color": "Test",
+    "quantity": 3,
+    "price": 12.5,
+    "createdAtIso": "2026-06-04T07:11:16.495Z",
+    "createdByEmail": "ferperezsanchez@gmail.com"
+  },
+  {
+    "id": "stock-1780556977934-kak56df8",
+    "productName": "E2E Producto 977071",
+    "brand": "Arena Test",
+    "color": "Test",
+    "quantity": 3,
+    "price": 12.5,
+    "createdAtIso": "2026-06-04T07:09:37.934Z",
+    "createdByEmail": "ferperezsanchez@gmail.com"
+  },
+  {
+    "id": "stock-1780556762995-w625f01j",
+    "productName": "E2E Producto 762119",
+    "brand": "Arena Test",
+    "color": "Test",
+    "quantity": 3,
+    "price": 12.5,
+    "createdAtIso": "2026-06-04T07:06:02.995Z",
+    "createdByEmail": "ferperezsanchez@gmail.com"
+  },
+  {
+    "id": "stock-1780556633912-gr4vfqs2",
+    "productName": "E2E Producto 633035",
+    "brand": "Arena Test",
+    "color": "Test",
+    "quantity": 3,
+    "price": 12.5,
+    "createdAtIso": "2026-06-04T07:03:53.912Z",
+    "createdByEmail": "ferperezsanchez@gmail.com"
+  },
+  {
+    "id": "stock-1780556516372-bgzyvb1l",
+    "productName": "E2E Producto 515535",
+    "brand": "Arena Test",
+    "color": "Test",
+    "quantity": 3,
+    "price": 12.5,
+    "createdAtIso": "2026-06-04T07:01:56.372Z",
+    "createdByEmail": "ferperezsanchez@gmail.com"
+  },
+  {
+    "id": "stock-1780555987006-jwtcyo91",
+    "productName": "E2E Producto 986875",
+    "brand": "Arena Test",
+    "color": "Test",
+    "quantity": 3,
+    "price": 12.5,
+    "createdAtIso": "2026-06-04T06:53:07.006Z",
+    "createdByEmail": "ferperezsanchez@gmail.com"
+  },
+  {
+    "id": "stock-1780554684279-xoyreiyo",
+    "productName": "E2E Producto 683413",
+    "brand": "Arena Test",
+    "color": "Test",
+    "quantity": 3,
+    "price": 12.5,
+    "createdAtIso": "2026-06-04T06:31:24.279Z",
+    "createdByEmail": "ferperezsanchez@gmail.com"
+  },
+  {
+    "id": "stock-1780554523449-lz9m3d1a",
+    "productName": "E2E Producto 522553",
+    "brand": "Arena Test",
+    "color": "Test",
+    "quantity": 3,
+    "price": 12.5,
+    "createdAtIso": "2026-06-04T06:28:43.449Z",
+    "createdByEmail": "ferperezsanchez@gmail.com"
+  },
+  {
+    "id": "stock-1780554326675-11z2q4rj",
+    "productName": "E2E Producto 325793",
+    "brand": "Arena Test",
+    "color": "Test",
+    "quantity": 3,
+    "price": 12.5,
+    "createdAtIso": "2026-06-04T06:25:26.675Z",
+    "createdByEmail": "ferperezsanchez@gmail.com"
+  },
+  {
+    "id": "stock-1780554265768-du3citkv",
+    "productName": "E2E Producto 264933",
+    "brand": "Arena Test",
+    "color": "Test",
+    "quantity": 3,
+    "price": 12.5,
+    "createdAtIso": "2026-06-04T06:24:25.768Z",
+    "createdByEmail": "ferperezsanchez@gmail.com"
+  },
+  {
+    "id": "stock-1780554150046-dll0xjz5",
+    "productName": "E2E Producto 149142",
+    "brand": "Arena Test",
+    "color": "Test",
+    "quantity": 3,
+    "price": 12.5,
+    "createdAtIso": "2026-06-04T06:22:30.046Z",
+    "createdByEmail": "ferperezsanchez@gmail.com"
+  },
+  {
+    "id": "stock-1780554025473-7mtx6zs8",
+    "productName": "E2E Producto 024617",
+    "brand": "Arena Test",
+    "color": "Test",
+    "quantity": 3,
+    "price": 12.5,
+    "createdAtIso": "2026-06-04T06:20:25.473Z",
+    "createdByEmail": "ferperezsanchez@gmail.com"
+  },
+  {
+    "id": "stock-1780553874264-igrh5cgr",
+    "productName": "E2E Producto 873377",
+    "brand": "Arena Test",
+    "color": "Test",
+    "quantity": 3,
+    "price": 12.5,
+    "createdAtIso": "2026-06-04T06:17:54.264Z",
+    "createdByEmail": "ferperezsanchez@gmail.com"
+  },
+  {
+    "id": "stock-1777275172659-rfmaec3d",
+    "productName": "tinte",
+    "brand": "marca 1",
+    "color": "rubio",
+    "quantity": 12,
+    "price": 12,
+    "createdAtIso": "2026-04-27T07:32:52.659Z",
+    "createdByEmail": "ferperezsanchez@gmail.com"
+  }
+]

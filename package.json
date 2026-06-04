@@ -5,10 +5,18 @@
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build",
+    "build:min": "ng build --configuration production --optimization=true --source-map=false",
+    "build:min:ssr": "npm run build:min && node dist/arena-app/server/server.mjs",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report",
     "serve:ssr:arena-app": "node dist/arena-app/server/server.mjs",
-    "dev:all": "concurrently -k -n BUILD,SSR,WEB -c yellow,magenta,cyan \"ng build --watch --configuration development\" \"wait-on dist/arena-app/server/server.mjs && node --watch dist/arena-app/server/server.mjs\" \"ng serve\""
+    "dev:stop": "node scripts/dev-stop.cjs",
+    "dev:web": "ng serve --port 4200 --host 0.0.0.0",
+    "dev:ssr:watch": "node scripts/dev-ssr-watch.cjs",
+    "dev:all": "npm run dev:stop && concurrently -k -n BUILD,SSR,WEB -c yellow,magenta,cyan \"ng build --watch --configuration development\" \"npm run dev:ssr:watch\" \"npm run dev:web\""
   },
   "prettier": {
     "printWidth": 100,
@@ -44,6 +52,7 @@
     "@angular/build": "^21.1.2",
     "@angular/cli": "^21.1.2",
     "@angular/compiler-cli": "^21.1.0",
+    "@playwright/test": "^1.60.0",
     "@types/express": "^5.0.1",
     "@types/node": "^20.17.19",
     "@types/pg": "^8.18.0",

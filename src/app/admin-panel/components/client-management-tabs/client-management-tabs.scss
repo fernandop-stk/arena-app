@@ -1,0 +1,26 @@
+@use '../../../../styles/variables/colors' as colors;
+
+.client-management-tabs {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+
+  &__btn {
+    min-height: 2.2rem;
+    border-radius: 999px;
+    border: 1px solid colors.$color-border;
+    background: colors.$color-surface;
+    color: colors.$color-primary-dark;
+    padding: 0 0.85rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+
+    &--active {
+      background: colors.$color-primary;
+      border: none;
+      color: #fff;
+    }
+  }
+}

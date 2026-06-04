@@ -1,53 +1,233 @@
 <section class="tratamientos">
-  <div class="tratamientos--container">
+  <div
+    class="tratamientos--container"
+    [class.tratamientos--container--packs]="activeSection() === 'packs'"
+    [class.tratamientos--container--tratamientos]="activeSection() === 'tratamientos'"
+  >
     <header class="tratamientos--container__hero">
       <h1 class="tratamientos--container__title">{{ title }}</h1>
       <p class="tratamientos--container__description">{{ description }}</p>
-      <a class="tratamientos--container__back" routerLink="/">Volver al inicio</a>
+
+      <div class="tratamientos--container__controls-row">
+        <div
+          class="tratamientos--container__tabs"
+          role="tablist"
+          aria-label="Secciones de packs y tratamientos"
+        >
+          <button
+            type="button"
+            role="tab"
+            class="tratamientos--container__tab"
+            [class.tratamientos--container__tab--active]="activeSection() === 'packs'"
+            [attr.aria-selected]="activeSection() === 'packs'"
+            (click)="selectSection('packs')"
+          >
+            Packs
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="tratamientos--container__tab"
+            [class.tratamientos--container__tab--active]="activeSection() === 'tratamientos'"
+            [attr.aria-selected]="activeSection() === 'tratamientos'"
+            (click)="selectSection('tratamientos')"
+          >
+            Tratamientos
+          </button>
+        </div>
+
+        <div class="tratamientos--container__back-row">
+          <a class="tratamientos--container__back" routerLink="/">Volver al inicio</a>
+        </div>
+      </div>
     </header>
 
-    <div class="tratamientos--container__list">
-      @for (item of tratamientos; track item.id; let i = $index) {
-        <article
-          #cardEl
-          class="tratamientos--container__card"
-          [attr.data-id]="item.id"
-          [style.--stagger]="i"
-          [class.tratamientos--container__card--visible]="isCardVisible(item.id)"
-          role="button"
-          tabindex="0"
-          (click)="openTreatment(item)"
-          (keydown.enter)="openTreatment(item)"
-          (keydown.space)="openTreatment(item); $event.preventDefault()"
-        >
-          <img class="tratamientos--container__image" [src]="item.imagen" [alt]="item.nombre" />
-          <div class="tratamientos--container__content">
-            <h2 class="tratamientos--container__card-title">{{ item.nombre }}</h2>
-          </div>
-        </article>
+    <p class="tratamientos--container__section-label">
+      @if (activeSection() === 'packs') {
+        Packs
       }
-    </div>
+    </p>
+
+    @if (activeSection() === 'packs') {
+      <div
+        class="tratamientos--container__notice"
+        role="note"
+        aria-label="Aviso importante de asesoría previa"
+      >
+        ⚠️ Extensiones, alisados y tratamientos antiencrespamiento requieren asesoría previa con
+        presupuesto.
+      </div>
+    }
+
+    @if (activeSection() === 'packs') {
+      <div class="tratamientos--container__list">
+        @for (item of packs; track item.id; let i = $index) {
+          <article
+            #cardEl
+            class="tratamientos--container__card"
+            [attr.data-id]="item.id"
+            [style.--stagger]="i"
+            [class.tratamientos--container__card--visible]="isCardVisible(item.id)"
+            role="button"
+            tabindex="0"
+            (click)="openTreatment(item)"
+            (keydown.enter)="openTreatment(item)"
+            (keydown.space)="openTreatment(item); $event.preventDefault()"
+          >
+            <div class="tratamientos--container__content">
+              <div class="tratamientos--container__card-copy">
+                <h2 class="tratamientos--container__card-title">{{ item.nombre }}</h2>
+              </div>
+            </div>
+          </article>
+        }
+      </div>
+    } @else {
+      <div class="tratamientos--container__groups">
+        @for (group of groupedTratamientos(); track group.title) {
+          <section class="tratamientos--container__group">
+            <h3 class="tratamientos--container__group-title">{{ group.title }}</h3>
+
+            <div class="tratamientos--container__list tratamientos--container__list--group">
+              @for (item of group.items; track item.id; let i = $index) {
+                <article
+                  #cardEl
+                  class="tratamientos--container__card"
+                  [attr.data-id]="item.id"
+                  [style.--stagger]="i"
+                  [class.tratamientos--container__card--visible]="isCardVisible(item.id)"
+                  role="button"
+                  tabindex="0"
+                  (click)="openTreatment(item)"
+                  (keydown.enter)="openTreatment(item)"
+                  (keydown.space)="openTreatment(item); $event.preventDefault()"
+                >
+                  <div class="tratamientos--container__content">
+                    <div class="tratamientos--container__card-copy">
+                      <h2 class="tratamientos--container__card-title">{{ item.nombre }}</h2>
+                    </div>
+                  </div>
+                </article>
+              }
+            </div>
+          </section>
+        }
+      </div>
+    }
 
     @if (selectedTratamiento(); as item) {
       <div class="tratamientos--container__modal-overlay" (click)="closeTreatment()">
         <section
           class="tratamientos--container__modal"
+          [class.tratamientos--container__modal--packs]="activeSection() === 'packs'"
+          [class.tratamientos--container__modal--tratamientos]="activeSection() === 'tratamientos'"
           role="dialog"
           aria-modal="true"
           [attr.aria-label]="'Detalle de ' + item.nombre"
           (click)="$event.stopPropagation()"
         >
-          <h3 class="tratamientos--container__modal-title">{{ item.nombre }}</h3>
-          <p class="tratamientos--container__modal-text">{{ item.descripcion }}</p>
-          <p class="tratamientos--container__modal-price">{{ item.precio }}</p>
-          <div class="tratamientos--container__modal-actions">
-            <button
-              type="button"
-              class="tratamientos--container__modal-reserve"
-              (click)="reserveTreatment(item)"
+          <div class="tratamientos--container__modal-title-row">
+            <span class="tratamientos--container__modal-title-icon">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="6" cy="6" r="3" />
+                <circle cx="6" cy="18" r="3" />
+                <line x1="20" y1="4" x2="8.12" y2="15.88" />
+                <line x1="14.47" y1="14.48" x2="20" y2="20" />
+                <line x1="8.12" y1="8.12" x2="12" y2="12" />
+              </svg>
+            </span>
+            <div class="tratamientos--container__modal-heading">
+              @if (item.categoria) {
+                <p class="tratamientos--container__modal-category">{{ item.categoria }}</p>
+              }
+              <h3 class="tratamientos--container__modal-title">{{ item.nombre }}</h3>
+            </div>
+          </div>
+          <ul class="tratamientos--container__modal-list">
+            @for (punto of getDescripcionItems(item.descripcion); track punto) {
+              <li class="tratamientos--container__modal-list-item">
+                <span class="tratamientos--container__modal-check" aria-hidden="true">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="3"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </span>
+                {{ punto }}
+              </li>
+            }
+          </ul>
+          <div class="tratamientos--container__modal-price-row">
+            <span class="tratamientos--container__modal-price-icon">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="17"
+                height="17"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path
+                  d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"
+                />
+                <line x1="7" y1="7" x2="7.01" y2="7" />
+              </svg>
+            </span>
+            <p class="tratamientos--container__modal-price">{{ item.precio }}</p>
+          </div>
+
+          @if (item.invitadaOptions?.length) {
+            <div
+              class="tratamientos--container__invitada-options"
+              aria-label="Opciones de Pack Invitada"
             >
-              Reservar
-            </button>
+              @for (option of item.invitadaOptions; track option.appointmentTypeId) {
+                <button
+                  type="button"
+                  class="tratamientos--container__invitada-option"
+                  (click)="reserveInvitadaOption(option)"
+                >
+                  <strong>{{ option.nombre }}</strong>
+                  <span>{{ option.descripcion }}</span>
+                  <small>{{ option.precio }} · {{ option.duracionMinutos }} min</small>
+                </button>
+              }
+            </div>
+          }
+
+          <div class="tratamientos--container__modal-actions">
+            @if (!item.invitadaOptions?.length && canReserveTreatment(item)) {
+              <button
+                type="button"
+                class="tratamientos--container__modal-reserve"
+                (click)="reserveTreatment(item)"
+              >
+                Reservar
+              </button>
+            }
             <button
               type="button"
               class="tratamientos--container__modal-close"

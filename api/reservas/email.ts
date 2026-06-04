@@ -83,6 +83,51 @@ const buildReservationEmailHtml = (data: {
   `;
 };
 
+export const buildAlertCoveredEmailHtml = (data: {
+  customerName: string;
+  appointmentTypeName: string;
+  dateIso: string;
+  startTime: string;
+}): string => {
+  const customerName = escapeHtml(data.customerName);
+  const appointmentTypeName = escapeHtml(data.appointmentTypeName);
+  const dateIso = escapeHtml(data.dateIso);
+  const startTime = escapeHtml(data.startTime);
+
+  return `
+    <div style="background:#fcf3ea;padding:24px;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;color:#3b2f2a;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;margin:0 auto;background:#fff9f4;border-radius:16px;overflow:hidden;border:1px solid #e8d8c9;">
+        <tr>
+          <td style="background:linear-gradient(135deg,#c97b63 0%,#d9a441 100%);padding:24px;">
+            <p style="margin:0 0 6px;color:#fff6ee;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Arena Studio</p>
+            <h1 style="margin:0;color:#ffffff;font-size:22px;line-height:1.25;">Hueco completado</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px;">
+            <p style="margin:0 0 14px;font-size:16px;line-height:1.45;">Hola <strong>${customerName}</strong>,</p>
+            <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#7a675d;">Lo sentimos, el hueco que solicitaste en la alerta ha sido completado por otro cliente:</p>
+
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e8d8c9;border-radius:12px;overflow:hidden;background:#fff4eb;margin-bottom:16px;">
+              <tr>
+                <td style="padding:14px 16px;border-bottom:1px solid #e8d8c9;font-size:14px;"><strong>Servicio</strong><br><span style="color:#7a675d;">${appointmentTypeName}</span></td>
+              </tr>
+              <tr>
+                <td style="padding:14px 16px;border-bottom:1px solid #e8d8c9;font-size:14px;"><strong>Fecha</strong><br><span style="color:#7a675d;">${dateIso}</span></td>
+              </tr>
+              <tr>
+                <td style="padding:14px 16px;font-size:14px;"><strong>Hora</strong><br><span style="color:#7a675d;">${startTime}</span></td>
+              </tr>
+            </table>
+
+            <p style="margin:0;font-size:14px;line-height:1.6;color:#7a675d;">Te recomendamos crear una nueva alerta para otro hueco disponible si lo deseas.</p>
+          </td>
+        </tr>
+      </table>
+    </div>
+  `;
+};
+
 export default async function handler(req: any, res: any): Promise<void> {
   if (req.method !== 'POST') {
     res.status(405).json({ ok: false, error: 'Method not allowed' });

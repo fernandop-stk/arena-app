@@ -42,6 +42,12 @@
       color: colors.$color-text;
       font-weight: 600;
       font-size: 0.92rem;
+
+      &--optional {
+        font-weight: 400;
+        color: colors.$color-text-soft;
+        font-size: 0.82rem;
+      }
     }
 
     &__input {
@@ -52,6 +58,13 @@
       font-size: 1rem;
     }
 
+    &__textarea {
+      min-height: 5rem;
+      padding: layout.$space-1;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
     &__error {
       margin: 0;
       color: colors.$color-error;
@@ -60,26 +73,36 @@
 
     &__button {
       margin-top: layout.$space-2;
-      min-height: 3rem;
+      min-height: 2.6rem;
       border: none;
       border-radius: 999px;
       color: #fff;
       font-weight: 700;
-      font-size: 1rem;
+      font-size: 0.95rem;
       cursor: pointer;
       transition:
         transform 0.2s ease,
         box-shadow 0.2s ease,
-        filter 0.2s ease;
+        filter 0.2s ease,
+        opacity 0.2s ease;
+      padding: 0 1.2rem;
+
+      &:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+      }
 
       &--primary {
-        background: linear-gradient(90deg, colors.$color-primary 0%, colors.$color-secondary 100%);
-        box-shadow: 0 8px 20px rgba(183, 107, 84, 0.28);
+        background: colors.$color-primary;
+        box-shadow: 0 4px 12px rgba(201, 123, 99, 0.25);
 
-        &:hover {
+        &:hover:not(:disabled) {
           transform: translateY(-2px);
-          box-shadow: 0 14px 28px rgba(183, 107, 84, 0.44);
-          filter: brightness(1.06);
+          box-shadow: 0 8px 20px rgba(201, 123, 99, 0.35);
+        }
+
+        &:active:not(:disabled) {
+          transform: translateY(0);
         }
       }
     }
@@ -89,6 +112,147 @@
       color: colors.$color-error;
       font-weight: 600;
       font-size: 0.92rem;
+    }
+
+    &__client-cta {
+      margin-top: layout.$space-3;
+      padding: layout.$space-2;
+      border-radius: layout.$radius-lg;
+      border: 1px solid rgba(201, 123, 99, 0.18);
+      background: linear-gradient(145deg, rgba(255, 250, 247, 0.98), rgba(249, 236, 229, 0.9));
+      display: flex;
+      justify-content: center;
+    }
+
+    &__client-cta-kicker {
+      margin: 0 0 0.35rem;
+      color: colors.$color-primary;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.72rem;
+    }
+
+    &__client-cta-title {
+      margin: 0;
+      color: colors.$color-primary-dark;
+      font-size: 1.15rem;
+      line-height: 1.25;
+    }
+
+    &__client-cta-text {
+      margin: 0.45rem 0 0;
+      color: colors.$color-text-soft;
+      line-height: 1.45;
+    }
+
+    &__client-cta-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      justify-content: center;
+    }
+
+    &__client-cta-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 2.85rem;
+      padding: 0.72rem 1.15rem;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 800;
+      color: #fff;
+      background: colors.$color-primary;
+      box-shadow: 0 8px 20px rgba(183, 107, 84, 0.24);
+
+      &--ghost {
+        color: colors.$color-primary-dark;
+        background: rgba(255, 255, 255, 0.88);
+        border: 1px solid colors.$color-primary-dark;
+        box-shadow: none;
+      }
+    }
+
+    &__warning-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 70;
+      background: rgba(52, 37, 29, 0.55);
+      backdrop-filter: blur(3px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: layout.$space-2;
+    }
+
+    &__warning-modal {
+      width: min(30rem, 100%);
+      background: #fff9f4;
+      border: 2px solid colors.$color-primary-dark;
+      border-radius: layout.$radius-lg;
+      box-shadow: 0 16px 34px rgba(71, 49, 36, 0.26);
+      padding: layout.$space-3;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: layout.$space-1;
+      animation: reserva-success-in 0.22s ease;
+    }
+
+    &__warning-icon {
+      font-size: 2rem;
+      line-height: 1;
+    }
+
+    &__warning-kicker {
+      margin: 0;
+      color: #a05c20;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-size: 0.72rem;
+    }
+
+    &__warning-title {
+      margin: 0;
+      color: colors.$color-text;
+      font-size: 1.2rem;
+      line-height: 1.3;
+    }
+
+    &__warning-text {
+      margin: 0;
+      color: colors.$color-text-soft;
+      font-size: 0.93rem;
+      line-height: 1.55;
+    }
+
+    &__warning-call {
+      width: 100%;
+      text-align: center;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    &__warning-skip {
+      align-self: center;
+      margin-top: 0.25rem;
+      background: none;
+      border: none;
+      padding: 0.3rem 0.5rem;
+      color: colors.$color-text-soft;
+      font-size: 0.85rem;
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+
+      &:hover {
+        color: colors.$color-primary-dark;
+      }
     }
 
     &__success-overlay {

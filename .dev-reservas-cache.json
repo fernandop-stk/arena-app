@@ -1,0 +1,22 @@
+[
+  {
+    "id": "2026-06-25-1020-1780294811583",
+    "dateIso": "2026-06-11",
+    "startTime": "09:00",
+    "endTime": "10:30",
+    "durationMinutes": 90,
+    "customerEmail": "mock-25-3@arena.local",
+    "customerName": "Mock Cliente 25-3",
+    "customerPhone": "600000253",
+    "appointmentTypeName": "Tinte (mock)",
+    "paymentReceived": false,
+    "adminStatus": "rejected",
+    "createdAtIso": "2026-06-01T06:20:11.583Z",
+    "expiresAtIso": null,
+    "slots": [
+      "09:00",
+      "09:30",
+      "10:00"
+    ]
+  }
+]

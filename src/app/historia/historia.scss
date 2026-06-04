@@ -1,12 +1,16 @@
-@use '../../styles/variables/colors' as colors;
+﻿@use '../../styles/variables/colors' as colors;
 @use '../../styles/variables/layout' as layout;
 
 .historia {
   min-height: 100vh;
   padding: layout.$space-3 layout.$space-2;
+  background:
+    radial-gradient(circle at top left, rgba(201, 123, 99, 0.14), transparent 28%),
+    linear-gradient(180deg, rgba(255, 249, 244, 0.92), rgba(252, 243, 234, 0.98));
 
   &--container {
-    max-width: 48rem;
+    max-width: 100%;
+    width: 100%;
     margin: 0 auto;
     background: colors.$color-surface;
     border: 1px solid colors.$color-border;
@@ -15,22 +19,155 @@
     padding: layout.$space-3;
     opacity: 0;
     transform: translateY(14px) scale(0.99);
+    display: grid;
+    gap: layout.$space-3;
+    overflow: hidden;
 
     &--visible {
       animation: historia-in 0.62s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
     }
 
+    &__copy {
+      display: flex;
+      flex-direction: column;
+      gap: layout.$space-2;
+    }
+
+    &__eyebrow {
+      margin: 0;
+      color: colors.$color-primary-dark;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
     &__title {
       margin: 0;
       color: colors.$color-text;
-      font-size: 1.7rem;
+      font-size: clamp(2rem, 4vw, 3.25rem);
+      line-height: 1;
     }
 
-    &__text {
-      margin: layout.$space-2 0;
+    &__intro {
+      margin: 0;
       color: colors.$color-text-soft;
       line-height: 1.7;
-      font-size: 0.98rem;
+      font-size: 1rem;
+      max-width: 42rem;
+    }
+
+    &__quote {
+      margin: 0;
+      padding: 1rem 1.15rem;
+      border-left: 3px solid rgba(201, 123, 99, 0.55);
+      border-radius: 0 layout.$radius-md layout.$radius-md 0;
+      background: linear-gradient(135deg, rgba(201, 123, 99, 0.08), rgba(255, 249, 244, 0.92));
+      color: colors.$color-text;
+      line-height: 1.7;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    &__stories {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    &__story {
+      width: 100%;
+      border: 1px solid rgba(201, 123, 99, 0.16);
+      border-radius: layout.$radius-md;
+      background: rgba(255, 255, 255, 0.72);
+      color: inherit;
+      padding: 0.95rem 1rem;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.9rem;
+      text-align: left;
+      cursor: pointer;
+      transition:
+        transform 0.22s ease,
+        border-color 0.22s ease,
+        box-shadow 0.22s ease,
+        background 0.22s ease;
+
+      &:hover,
+      &:focus-visible,
+      &--active {
+        transform: translateY(-2px);
+        border-color: rgba(201, 123, 99, 0.42);
+        box-shadow: 0 14px 32px rgba(83, 60, 44, 0.1);
+        background: linear-gradient(135deg, rgba(201, 123, 99, 0.09), rgba(255, 249, 244, 0.95));
+        outline: none;
+      }
+    }
+
+    &__story-index {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.35rem;
+      height: 2.35rem;
+      border-radius: 999px;
+      background: rgba(201, 123, 99, 0.12);
+      color: colors.$color-primary-dark;
+      font-size: 0.78rem;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    &__story-content {
+      display: grid;
+      gap: 0.3rem;
+    }
+
+    &__story-title {
+      color: colors.$color-text;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    &__story-text {
+      color: colors.$color-text-soft;
+      line-height: 1.65;
+      font-size: 0.95rem;
+    }
+
+    &__actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: layout.$space-2;
+      flex-wrap: wrap;
+    }
+
+    &__controls {
+      display: inline-flex;
+      gap: 0.65rem;
+    }
+
+    &__control {
+      width: 2.8rem;
+      height: 2.8rem;
+      border-radius: 999px;
+      border: 1px solid colors.$color-border;
+      background: colors.$color-surface;
+      color: colors.$color-primary-dark;
+      font-size: 1.15rem;
+      cursor: pointer;
+      transition:
+        transform 0.2s ease,
+        border-color 0.2s ease,
+        background 0.2s ease;
+
+      &:hover,
+      &:focus-visible {
+        transform: translateY(-1px);
+        border-color: rgba(201, 123, 99, 0.45);
+        background: rgba(201, 123, 99, 0.08);
+        outline: none;
+      }
     }
 
     &__back {
@@ -51,10 +188,136 @@
         border-color 0.2s ease,
         transform 0.2s ease;
 
-      &:hover {
+      &:hover,
+      &:focus-visible {
         background: rgba(201, 123, 99, 0.07);
         border-color: rgba(201, 123, 99, 0.45);
         transform: translateY(-1px);
+        outline: none;
+      }
+    }
+
+    &__media {
+      display: grid;
+      gap: 0.9rem;
+      align-content: start;
+    }
+
+    &__stage {
+      position: relative;
+      min-height: 24rem;
+      border-radius: calc(layout.$radius-lg + 0.25rem);
+      overflow: hidden;
+      background: #f3ebe3;
+      box-shadow: 0 18px 40px rgba(83, 60, 44, 0.14);
+      isolation: isolate;
+
+      &::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(59, 47, 42, 0.04), rgba(59, 47, 42, 0.62));
+        z-index: 1;
+      }
+    }
+
+    &__stage-button {
+      position: relative;
+      z-index: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      cursor: zoom-in;
+    }
+
+    &__image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      display: block;
+      animation: historia-stage-image-in 460ms cubic-bezier(0.22, 0.61, 0.36, 1);
+    }
+
+    &__overlay {
+      position: absolute;
+      inset: auto 0 0 0;
+      z-index: 2;
+      padding: 1rem;
+      color: #fffaf6;
+      display: grid;
+      gap: 0.45rem;
+      animation: historia-stage-overlay-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    &__counter {
+      margin: 0 0 0.1rem;
+      color: rgba(255, 250, 246, 0.72);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    &__badge {
+      margin: 0;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(255, 250, 246, 0.84);
+    }
+
+    &__stage-title {
+      margin: 0;
+      font-size: 1.35rem;
+      line-height: 1.1;
+    }
+
+    &__caption {
+      margin: 0;
+      color: rgba(255, 250, 246, 0.9);
+      line-height: 1.6;
+      font-size: 0.94rem;
+      max-width: 32rem;
+    }
+
+    &__thumbnails {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0.5rem;
+    }
+
+    &__thumbnail {
+      padding: 0;
+      border: 1px solid transparent;
+      border-radius: layout.$radius-md;
+      overflow: hidden;
+      background: transparent;
+      cursor: pointer;
+      aspect-ratio: 16 / 9;
+      transition:
+        transform 0.18s ease,
+        border-color 0.18s ease,
+        box-shadow 0.18s ease;
+
+      img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      &:hover,
+      &:focus-visible,
+      &--active {
+        transform: translateY(-2px);
+        border-color: rgba(201, 123, 99, 0.55);
+        box-shadow: 0 10px 22px rgba(83, 60, 44, 0.12);
+        outline: none;
       }
     }
   }
@@ -64,18 +327,66 @@
 
     &--container {
       padding: layout.$space-4;
+      grid-template-columns: minmax(0, 1.05fr) minmax(19rem, 0.95fr);
+      align-items: stretch;
+      height: min(90vh, 56rem);
+
+      &__copy {
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding-right: 0.45rem;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(201, 123, 99, 0.45) transparent;
+
+        &::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        &::-webkit-scrollbar-thumb {
+          background: rgba(201, 123, 99, 0.45);
+          border-radius: 999px;
+        }
+
+        &::-webkit-scrollbar-track {
+          background: transparent;
+        }
+      }
+
+      &__media {
+        min-height: 0;
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto;
+      }
+
+      &__stage {
+        min-height: 0;
+        height: 100%;
+      }
+
+      &__thumbnails {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+      }
+
+      &__overlay {
+        padding: 1.5rem;
+      }
+
+      &__stage-title {
+        font-size: 1.7rem;
+      }
     }
   }
 
-  @keyframes historia-in {
-    from {
-      opacity: 0;
-      transform: translateY(14px) scale(0.99);
-    }
+  @media (max-width: 38rem) {
+    &--container {
+      &__thumbnails {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
 
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
+      &__stage {
+        min-height: 20rem;
+      }
     }
   }
 
@@ -88,6 +399,208 @@
       &--visible {
         animation: none;
       }
+
+      &__story,
+      &__control,
+      &__thumbnail,
+      &__back,
+      &__image,
+      &__overlay {
+        transition: none;
+        animation: none;
+      }
     }
+  }
+}
+
+.historia-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+
+  &__backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    background: rgba(28, 22, 19, 0.72);
+    backdrop-filter: blur(4px);
+    animation: historia-lightbox-backdrop-in 240ms ease;
+  }
+
+  &__dialog {
+    position: relative;
+    z-index: 1;
+    width: min(95vw, 88rem);
+    height: min(90vh, 54rem);
+    border-radius: layout.$radius-lg;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(31, 23, 20, 0.76);
+    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.42);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    padding: 1rem;
+    animation: historia-lightbox-dialog-in 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  &__close {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    width: 2.6rem;
+    height: 2.6rem;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 999px;
+    background: rgba(34, 24, 20, 0.68);
+    color: #fff;
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  &__nav {
+    align-self: center;
+    width: 2.8rem;
+    height: 2.8rem;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 999px;
+    background: rgba(34, 24, 20, 0.68);
+    color: #fff;
+    cursor: pointer;
+    font-size: 1.2rem;
+  }
+
+  &__stage {
+    position: relative;
+    border-radius: layout.$radius-md;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.3);
+    min-height: 0;
+  }
+
+  &__image {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    animation: historia-stage-image-in 560ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+
+  &__meta {
+    position: absolute;
+    inset: auto 0 0 0;
+    padding: 0.85rem 1rem;
+    background: linear-gradient(180deg, rgba(21, 16, 13, 0), rgba(21, 16, 13, 0.82));
+    color: #fff;
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  &__counter {
+    margin: 0;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.78);
+  }
+
+  &__title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  &__thumbs {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  &__thumb {
+    border: 1px solid transparent;
+    border-radius: 0.6rem;
+    overflow: hidden;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+    aspect-ratio: 16 / 10;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    &--active {
+      border-color: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 0 0 2px rgba(201, 123, 99, 0.55);
+    }
+  }
+}
+
+@keyframes historia-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.99);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes historia-stage-image-in {
+  from {
+    opacity: 0;
+    transform: scale(1.015);
+    filter: saturate(0.94);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+    filter: saturate(1);
+  }
+}
+
+@keyframes historia-stage-overlay-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes historia-lightbox-backdrop-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes historia-lightbox-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }

@@ -1,0 +1,15 @@
+@if (cards.length === 0) {
+  <p class="client-summary-list__hint">{{ emptyMessage }}</p>
+} @else {
+  <div class="client-summary-list__list">
+    @for (card of cards; track card.id) {
+      <article class="client-summary-list__row">
+        <p class="client-summary-list__name">{{ card.fullName }}</p>
+        <span class="client-summary-list__chip">Packs: {{ card.treatments.length }}</span>
+        <button type="button" class="client-summary-list__btn" (click)="openCard.emit(card.id)">
+          Ver ficha
+        </button>
+      </article>
+    }
+  </div>
+}

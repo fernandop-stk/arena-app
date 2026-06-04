@@ -1,0 +1,104 @@
+@if (showTreatmentPicker) {
+  <div class="payment-flow__backdrop" (click)="close.emit()">
+    <div class="payment-flow__card" (click)="$event.stopPropagation()">
+      <h3 class="payment-flow__title">Selecciona tratamiento a cobrar</h3>
+      @if (paymentError) {
+        <div class="payment-flow__error">
+          <p>{{ paymentError }}</p>
+        </div>
+      }
+      <div class="payment-flow__list">
+        @if (treatments.length > 0) {
+          @for (treatment of treatments; track treatment.id) {
+            <button
+              type="button"
+              class="payment-flow__row"
+              (click)="
+                pickTreatment.emit({
+                  id: treatment.id,
+                  name: treatment.name,
+                  priceEuro: getDisplayPrice(treatment),
+                })
+              "
+            >
+              <span class="payment-flow__name">{{ treatment.name }}</span>
+              @if (treatment.priceEuro === undefined || treatment.priceEuro === null) {
+                <span class="payment-flow__price"
+                  >{{ getDisplayPrice(treatment) }}€ · pendiente</span
+                >
+              } @else {
+                <span class="payment-flow__price"
+                  >{{ treatment.priceEuro }}€ -
+                  {{ treatment.paymentMethod || 'Sin registrar' }}</span
+                >
+              }
+            </button>
+          }
+        } @else {
+          <p class="payment-flow__hint">Sin tratamientos registrados.</p>
+        }
+      </div>
+      <div class="payment-flow__actions">
+        <button
+          type="button"
+          class="payment-flow__btn payment-flow__btn--secondary"
+          (click)="close.emit()"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (showMethodPicker && selectedTreatment) {
+  <div class="payment-flow__backdrop" (click)="close.emit()">
+    <div class="payment-flow__card" (click)="$event.stopPropagation()">
+      <h3 class="payment-flow__title">Registrar pago: {{ selectedTreatment.name }}</h3>
+      <p class="payment-flow__price-line">
+        Precio sugerido: <strong>{{ selectedTreatment.priceEuro ?? 0 }}€</strong>
+      </p>
+
+      <label class="payment-flow__field">
+        Importe a cobrar (€)
+        <input
+          class="payment-flow__input"
+          type="number"
+          min="0"
+          step="0.01"
+          [value]="paymentAmount"
+          (input)="amountChange.emit($any($event.target).value)"
+        />
+      </label>
+
+      @if (paymentError) {
+        <div class="payment-flow__error">
+          <p>{{ paymentError }}</p>
+        </div>
+      }
+
+      <app-payment-method-selector
+        [selectedMethod]="selectedMethod"
+        (methodChange)="methodChange.emit($event)"
+      />
+
+      <div class="payment-flow__actions">
+        <button
+          type="button"
+          class="payment-flow__btn payment-flow__btn--secondary"
+          (click)="back.emit()"
+        >
+          Atrás
+        </button>
+        <button
+          type="button"
+          class="payment-flow__btn payment-flow__btn--primary"
+          [disabled]="paymentLoading || !selectedMethod"
+          (click)="confirm.emit()"
+        >
+          {{ paymentLoading ? '⏳ Guardando...' : '✓ Confirmar pago' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

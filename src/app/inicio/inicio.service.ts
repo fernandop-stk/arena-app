@@ -25,9 +25,9 @@ export class InicioService {
     return [
       {
         id: 1,
-        titulo: 'Tratamientos',
-        descripcion: 'Descubre todos los tratamientos disponibles en el salón.',
-        ruta: '/tratamientos',
+        titulo: 'Packs',
+        descripcion: 'Descubre todos los packs disponibles en el salón.',
+        ruta: '/packs',
         icono: '✂️',
         etiqueta: 'Servicios',
       },

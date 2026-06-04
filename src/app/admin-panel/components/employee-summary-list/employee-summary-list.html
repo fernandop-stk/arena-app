@@ -1,0 +1,21 @@
+@let visibleUsers = hideSuperadmin ? users.filter(user => user.role !== 'superadmin') : users;
+
+@if (visibleUsers.length === 0) {
+  <p class="employee-summary-list__hint">{{ emptyMessage }}</p>
+} @else {
+  <div class="employee-summary-list__list">
+    @for (user of visibleUsers; track user.email) {
+      <article class="employee-summary-list__row">
+        <p class="employee-summary-list__name">{{ user.username }}</p>
+        <span class="employee-summary-list__chip">{{ getRoleLabel(user.role) }}</span>
+        <button
+          type="button"
+          class="employee-summary-list__btn"
+          (click)="openEmployee.emit(user.email)"
+        >
+          Ver ficha
+        </button>
+      </article>
+    }
+  </div>
+}

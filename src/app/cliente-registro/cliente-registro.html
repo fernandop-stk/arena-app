@@ -1,0 +1,229 @@
+<section class="cliente-registro">
+  <div class="cliente-registro--container">
+    <header class="cliente-registro--header">
+      <h1 class="cliente-registro--title">Crear cuenta</h1>
+      <p class="cliente-registro--subtitle">
+        Regístrate para acceder a tu área de cliente y gestionar tus reservas
+      </p>
+    </header>
+
+    <form [formGroup]="registerForm" (ngSubmit)="handleSubmit()" class="cliente-registro--form">
+      <div class="cliente-registro--form-row">
+        <label class="cliente-registro--label">
+          Nombre
+          <input
+            class="cliente-registro--input"
+            type="text"
+            formControlName="nombre"
+            placeholder="Tu nombre"
+            [disabled]="isSubmitting()"
+          />
+          @if (registerForm.get('nombre')?.invalid && registerForm.get('nombre')?.touched) {
+            <span class="cliente-registro--error">
+              @if (registerForm.get('nombre')?.hasError('required')) {
+                El nombre es obligatorio.
+              } @else if (registerForm.get('nombre')?.hasError('minlength')) {
+                El nombre debe tener al menos 2 caracteres.
+              }
+            </span>
+          }
+        </label>
+
+        <label class="cliente-registro--label">
+          Apellidos
+          <input
+            class="cliente-registro--input"
+            type="text"
+            formControlName="apellidos"
+            placeholder="Tus apellidos"
+            [disabled]="isSubmitting()"
+          />
+          @if (registerForm.get('apellidos')?.invalid && registerForm.get('apellidos')?.touched) {
+            <span class="cliente-registro--error">
+              @if (registerForm.get('apellidos')?.hasError('required')) {
+                Los apellidos son obligatorios.
+              } @else if (registerForm.get('apellidos')?.hasError('minlength')) {
+                Los apellidos deben tener al menos 2 caracteres.
+              }
+            </span>
+          }
+        </label>
+      </div>
+
+      <div class="cliente-registro--form-row">
+        <label class="cliente-registro--label">
+          Número de teléfono
+          <input
+            class="cliente-registro--input"
+            type="tel"
+            formControlName="telefono"
+            placeholder="Ej. 912345678"
+            [disabled]="isSubmitting()"
+          />
+          @if (registerForm.get('telefono')?.invalid && registerForm.get('telefono')?.touched) {
+            <span class="cliente-registro--error">
+              @if (registerForm.get('telefono')?.hasError('required')) {
+                El teléfono es obligatorio.
+              } @else if (registerForm.get('telefono')?.hasError('pattern')) {
+                Introduce un número de teléfono válido (mínimo 9 dígitos).
+              }
+            </span>
+          }
+        </label>
+
+        <label class="cliente-registro--label">
+          Fecha de nacimiento
+          <input
+            class="cliente-registro--input"
+            type="date"
+            formControlName="fechaNacimiento"
+            [disabled]="isSubmitting()"
+          />
+          @if (
+            registerForm.get('fechaNacimiento')?.invalid &&
+            registerForm.get('fechaNacimiento')?.touched
+          ) {
+            <span class="cliente-registro--error"> La fecha de nacimiento es obligatoria. </span>
+          }
+        </label>
+      </div>
+
+      <div class="cliente-registro--form-row">
+        <label class="cliente-registro--label">
+          Email
+          <input
+            class="cliente-registro--input"
+            type="email"
+            formControlName="email"
+            placeholder="tu@email.com"
+            [disabled]="isSubmitting()"
+          />
+          @if (registerForm.get('email')?.invalid && registerForm.get('email')?.touched) {
+            <span class="cliente-registro--error">
+              @if (registerForm.get('email')?.hasError('required')) {
+                El email es obligatorio.
+              } @else if (registerForm.get('email')?.hasError('email')) {
+                Introduce un email válido.
+              }
+            </span>
+          }
+        </label>
+      </div>
+
+      <label class="cliente-registro--label">
+        Contraseña
+        <div class="cliente-registro--password-input">
+          <input
+            class="cliente-registro--input"
+            [type]="showPassword() ? 'text' : 'password'"
+            formControlName="password"
+            placeholder="Mínimo 8 caracteres con mayúscula y símbolo"
+            [disabled]="isSubmitting()"
+          />
+          <button
+            type="button"
+            class="cliente-registro--password-toggle"
+            (click)="togglePasswordVisibility()"
+            [disabled]="isSubmitting()"
+            aria-label="Mostrar/ocultar contraseña"
+          >
+            {{ showPassword() ? 'Ocultar' : 'Mostrar' }}
+          </button>
+        </div>
+        @if (registerForm.get('password')?.touched) {
+          <div class="cliente-registro--password-strength">
+            <span class="cliente-registro--strength-label">
+              {{ getPasswordStrengthLabel() }}
+            </span>
+            <div class="cliente-registro--strength-bar">
+              <div
+                class="cliente-registro--strength-fill"
+                [class.cliente-registro--strength-fill--low]="getPasswordStrengthLevel() <= 1"
+                [class.cliente-registro--strength-fill--medium]="
+                  getPasswordStrengthLevel() === 2 || getPasswordStrengthLevel() === 3
+                "
+                [class.cliente-registro--strength-fill--high]="getPasswordStrengthLevel() >= 4"
+                [style.width.%]="getPasswordStrengthLevel() * 25"
+              ></div>
+            </div>
+          </div>
+
+          <ul class="cliente-registro--password-rules">
+            <li [class.cliente-registro--rule-ok]="passwordRuleOk('length')">
+              Mínimo 8 caracteres
+            </li>
+            <li [class.cliente-registro--rule-ok]="passwordRuleOk('uppercase')">Una mayúscula</li>
+            <li [class.cliente-registro--rule-ok]="passwordRuleOk('special')">
+              Un símbolo especial
+            </li>
+          </ul>
+        }
+        @if (registerForm.get('password')?.invalid && registerForm.get('password')?.touched) {
+          <span class="cliente-registro--error">
+            @if (registerForm.get('password')?.hasError('required')) {
+              La contraseña es obligatoria.
+            } @else if (registerForm.get('password')?.hasError('minlength')) {
+              La contraseña debe tener al menos 8 caracteres.
+            } @else if (registerForm.get('password')?.hasError('passwordComplexity')) {
+              La contraseña debe incluir una mayúscula y un símbolo especial.
+            }
+          </span>
+        }
+      </label>
+
+      <label class="cliente-registro--label">
+        Repetir contraseña
+        <div class="cliente-registro--password-input">
+          <input
+            class="cliente-registro--input"
+            [type]="showConfirmPassword() ? 'text' : 'password'"
+            formControlName="confirmPassword"
+            placeholder="Repite tu contraseña"
+            [disabled]="isSubmitting()"
+          />
+          <button
+            type="button"
+            class="cliente-registro--password-toggle"
+            (click)="toggleConfirmPasswordVisibility()"
+            [disabled]="isSubmitting()"
+            aria-label="Mostrar/ocultar contraseña"
+          >
+            {{ showConfirmPassword() ? 'Ocultar' : 'Mostrar' }}
+          </button>
+        </div>
+        @if (hasPasswordMismatch()) {
+          <span class="cliente-registro--error"> Las contraseñas no coinciden. </span>
+        }
+      </label>
+
+      @if (errorMessage()) {
+        <div class="cliente-registro--alert cliente-registro--alert--error">
+          {{ errorMessage() }}
+        </div>
+      }
+
+      @if (message()) {
+        <div class="cliente-registro--alert cliente-registro--alert--success">
+          {{ message() }}
+        </div>
+      }
+
+      <button
+        type="submit"
+        class="cliente-registro--button"
+        [disabled]="registerForm.invalid || isSubmitting()"
+      >
+        @if (isSubmitting()) {
+          Registrando...
+        } @else {
+          Crear cuenta
+        }
+      </button>
+
+      <p class="cliente-registro--login-link">
+        ¿Ya tienes cuenta?
+        <a [routerLink]="['/acceso']" class="cliente-registro--link"> Inicia sesión aquí </a>
+      </p>
+    </form>
+  </div>
+</section>

@@ -1,0 +1,28 @@
+@use '../../../styles/variables/colors' as colors;
+@use '../../../styles/variables/layout' as layout;
+
+.payment-method-selector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+
+  &__btn {
+    min-height: 2.7rem;
+    border-radius: layout.$radius-sm;
+    border: 1px solid colors.$color-border;
+    background: #fff;
+    color: colors.$color-primary-dark;
+    font-weight: 700;
+    cursor: pointer;
+
+    &--active {
+      border-color: colors.$color-primary;
+      background: colors.$color-primary;
+      color: #fff;
+    }
+  }
+
+  @media (min-width: layout.$breakpoint-tablet) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

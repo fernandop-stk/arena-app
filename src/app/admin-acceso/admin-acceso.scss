@@ -107,8 +107,64 @@
       cursor: pointer;
 
       &--primary {
-        background: linear-gradient(90deg, colors.$color-primary 0%, colors.$color-secondary 100%);
+        background: colors.$color-primary;
       }
+
+      &--ghost {
+        background: #fff;
+        color: colors.$color-primary-dark;
+        border: 1px solid colors.$color-border;
+      }
+    }
+
+    &__modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(39, 24, 16, 0.4);
+      backdrop-filter: blur(2px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      z-index: 1200;
+    }
+
+    &__modal {
+      width: min(34rem, 100%);
+      max-height: 88vh;
+      overflow: auto;
+      border: 1px solid colors.$color-border;
+      border-radius: layout.$radius-lg;
+      background: #fff;
+      box-shadow: 0 16px 36px rgba(57, 39, 28, 0.2);
+      padding: layout.$space-2;
+      display: grid;
+      gap: layout.$space-1;
+    }
+
+    &__modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    &__modal-title {
+      margin: 0;
+      color: colors.$color-text;
+      font-size: 1.1rem;
+    }
+
+    &__modal-close {
+      width: 2rem;
+      height: 2rem;
+      border-radius: 999px;
+      border: 1px solid colors.$color-border;
+      background: #fff;
+      color: colors.$color-primary-dark;
+      font-size: 1.2rem;
+      line-height: 1;
+      cursor: pointer;
     }
 
     &__message,
@@ -120,6 +176,35 @@
 
     &__message {
       color: colors.$color-primary-dark;
+    }
+
+    &__client-links {
+      margin-top: layout.$space-2;
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    &__client-link {
+      display: grid;
+      gap: 0.15rem;
+      padding: 0.9rem 1rem;
+      border-radius: layout.$radius-md;
+      border: 1px solid rgba(201, 123, 99, 0.18);
+      background: rgba(201, 123, 99, 0.07);
+      color: colors.$color-primary-dark;
+      text-decoration: none;
+      font-weight: 700;
+
+      span {
+        font-size: 0.84rem;
+        font-weight: 600;
+        color: colors.$color-text-soft;
+      }
+
+      &:hover {
+        background: rgba(201, 123, 99, 0.12);
+        border-color: rgba(201, 123, 99, 0.28);
+      }
     }
 
     &__password-strength {
@@ -194,6 +279,77 @@
       color: colors.$color-text-soft;
       font-size: 0.82rem;
       line-height: 1.4;
+    }
+
+    &__identify {
+      display: grid;
+      gap: 0.9rem;
+    }
+
+    &__identify-copy {
+      margin: 0;
+      color: colors.$color-text-soft;
+      font-size: 0.9rem;
+      line-height: 1.5;
+
+      strong {
+        color: colors.$color-text;
+      }
+
+      span {
+        color: colors.$color-text-soft;
+      }
+    }
+
+    &__identify-list {
+      display: grid;
+      gap: 0.55rem;
+    }
+
+    &__identify-user {
+      text-align: left;
+      display: grid;
+      gap: 0.15rem;
+      width: 100%;
+      border: 1px solid rgba(201, 123, 99, 0.2);
+      border-radius: layout.$radius-md;
+      background: rgba(201, 123, 99, 0.08);
+      color: colors.$color-primary-dark;
+      padding: 0.8rem 0.9rem;
+      cursor: pointer;
+
+      strong {
+        color: colors.$color-text;
+        font-size: 0.95rem;
+      }
+
+      span {
+        font-size: 0.82rem;
+      }
+
+      small {
+        font-size: 0.75rem;
+        color: colors.$color-text-soft;
+      }
+
+      &:hover {
+        background: rgba(201, 123, 99, 0.14);
+        border-color: rgba(201, 123, 99, 0.3);
+      }
+    }
+
+    &__identify-actions {
+      display: grid;
+      gap: 0.6rem;
+      grid-template-columns: 1fr;
+
+      @media (min-width: 640px) {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .admin-acceso--container__button {
+        margin-top: 0;
+      }
     }
   }
 }

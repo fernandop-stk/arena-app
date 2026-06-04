@@ -1,0 +1,66 @@
+@if (open) {
+  <div
+    class="admin-panel--container__modal-backdrop admin-panel--container__modal-backdrop--centered"
+    (click)="close.emit()"
+  >
+    <div
+      class="admin-panel--container__modal admin-panel--container__modal--tracking-calendar"
+      (click)="$event.stopPropagation()"
+    >
+      <div class="admin-panel--container__modal-head">
+        <div>
+          <h3 class="admin-panel--container__modal-title">{{ title }}</h3>
+        </div>
+        <button
+          type="button"
+          class="admin-panel--container__modal-close"
+          (click)="close.emit()"
+          aria-label="Cerrar"
+        >
+          ×
+        </button>
+      </div>
+
+      <div class="admin-panel--container__employee-filters">
+        <label class="admin-panel--container__label">
+          Desde
+          <input
+            class="admin-panel--container__input"
+            type="date"
+            [value]="startDateIso"
+            (input)="startDateInput.emit($event)"
+          />
+        </label>
+
+        <label class="admin-panel--container__label">
+          {{ endLabel }}
+          <input
+            class="admin-panel--container__input"
+            type="date"
+            [value]="endDateIso"
+            (input)="endDateInput.emit($event)"
+          />
+        </label>
+      </div>
+
+      <div
+        class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--role-confirm"
+      >
+        <button
+          type="button"
+          class="admin-panel--container__action-button admin-panel--container__action-button--accept admin-panel--container__action-button--role-confirm"
+          (click)="confirm.emit()"
+        >
+          Guardar
+        </button>
+        <button
+          type="button"
+          class="admin-panel--container__action-button admin-panel--container__action-button--soft admin-panel--container__action-button--role-confirm"
+          (click)="close.emit()"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+}

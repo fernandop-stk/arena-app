@@ -1,0 +1,55 @@
+@if (open) {
+  <div
+    class="admin-panel--container__modal-backdrop admin-panel--container__modal-backdrop--centered"
+    (click)="cancel.emit()"
+  >
+    <div
+      class="admin-panel--container__modal admin-panel--container__modal--role-confirm"
+      (click)="$event.stopPropagation()"
+    >
+      <div class="admin-panel--container__modal-head">
+        <div>
+          <h3 class="admin-panel--container__modal-title">Confirmar cambio de rol</h3>
+        </div>
+        <button
+          type="button"
+          class="admin-panel--container__modal-close"
+          (click)="cancel.emit()"
+          aria-label="Cerrar"
+        >
+          ×
+        </button>
+      </div>
+
+      <p class="admin-panel--container__role-confirm-employee">
+        Empleado:
+        <span class="admin-panel--container__role-confirm-employee-name">{{ employeeName }}</span>
+      </p>
+
+      <p
+        class="admin-panel--container__reservation-text admin-panel--container__reservation-text--role-confirm"
+      >
+        {{ summaryText }}
+      </p>
+
+      <div
+        class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--role-confirm"
+      >
+        <button
+          type="button"
+          class="admin-panel--container__action-button admin-panel--container__action-button--accept admin-panel--container__action-button--role-confirm"
+          (click)="accept.emit()"
+        >
+          Aceptar
+        </button>
+        <button
+          type="button"
+          class="admin-panel--container__action-button admin-panel--container__action-button--soft admin-panel--container__action-button--role-confirm"
+          (click)="cancel.emit()"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+}

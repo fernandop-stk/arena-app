@@ -23,7 +23,7 @@ import { AppService } from './app.service';
           <a class="app-shell--header__brand" routerLink="/">
             <img
               class="app-shell--header__brand-logo"
-              src="assets/branding/logo.png"
+              src="assets/branding/logo-real.png"
               alt="Arena Studio"
             />
             <span class="app-shell--header__brand-text">Arena Hair Studio</span>
@@ -44,42 +44,44 @@ import { AppService } from './app.service';
 
           <div class="app-shell--header__menu" [class.app-shell--header__menu--open]="isMenuOpen()">
             <nav class="app-shell--header__nav">
-              <a
-                class="app-shell--header__link"
-                routerLink="/"
-                routerLinkActive="app-shell--header__link--active"
-                [routerLinkActiveOptions]="{ exact: true }"
-                (click)="closeMenu()"
-                >Inicio</a
-              >
-              <a
-                class="app-shell--header__link"
-                routerLink="/tratamientos"
-                routerLinkActive="app-shell--header__link--active"
-                (click)="closeMenu()"
-                >Tratamientos</a
-              >
-              <a
-                class="app-shell--header__link"
-                routerLink="/reservas"
-                routerLinkActive="app-shell--header__link--active"
-                (click)="closeMenu()"
-                >Reservas</a
-              >
-              <a
-                class="app-shell--header__link"
-                routerLink="/conocenos"
-                routerLinkActive="app-shell--header__link--active"
-                (click)="closeMenu()"
-                >Conócenos</a
-              >
-              <a
-                class="app-shell--header__link"
-                routerLink="/donde-estamos"
-                routerLinkActive="app-shell--header__link--active"
-                (click)="closeMenu()"
-                >Dónde estamos</a
-              >
+              @if (!isSuperadmin()) {
+                <a
+                  class="app-shell--header__link"
+                  routerLink="/"
+                  routerLinkActive="app-shell--header__link--active"
+                  [routerLinkActiveOptions]="{ exact: true }"
+                  (click)="closeMenu()"
+                  >Inicio</a
+                >
+                <a
+                  class="app-shell--header__link"
+                  routerLink="/packs"
+                  routerLinkActive="app-shell--header__link--active"
+                  (click)="closeMenu()"
+                  >Packs y tratamientos</a
+                >
+                <a
+                  class="app-shell--header__link"
+                  routerLink="/reservas"
+                  routerLinkActive="app-shell--header__link--active"
+                  (click)="closeMenu()"
+                  >Reservas</a
+                >
+                <a
+                  class="app-shell--header__link"
+                  routerLink="/conocenos"
+                  routerLinkActive="app-shell--header__link--active"
+                  (click)="closeMenu()"
+                  >Conócenos</a
+                >
+                <a
+                  class="app-shell--header__link"
+                  routerLink="/donde-estamos"
+                  routerLinkActive="app-shell--header__link--active"
+                  (click)="closeMenu()"
+                  >Dónde estamos</a
+                >
+              }
 
               @if (isAdmin()) {
                 <a
@@ -94,31 +96,81 @@ import { AppService } from './app.service';
               @if (!isAuthenticated()) {
                 <a
                   class="app-shell--header__link"
-                  routerLink="/registro"
-                  routerLinkActive="app-shell--header__link--active"
-                  (click)="closeMenu()"
-                  >Darse de alta</a
-                >
-                <a
-                  class="app-shell--header__link"
                   routerLink="/acceso"
                   routerLinkActive="app-shell--header__link--active"
                   (click)="closeMenu()"
                   >Iniciar sesión</a
                 >
               } @else {
+                @if (isClientAuthenticated()) {
+                  <a
+                    class="app-shell--header__link"
+                    routerLink="/cliente/area"
+                    routerLinkActive="app-shell--header__link--active"
+                    (click)="closeMenu()"
+                    >Mi cuenta</a
+                  >
+                }
                 <span class="app-shell--header__link app-shell--header__link--user"
                   >Hola, {{ username() }}</span
                 >
+                @if (isAdmin() && !isSuperadmin()) {
+                  <section class="app-shell--header__tracking" aria-label="Fichaje de jornada">
+                    <p class="app-shell--header__tracking-status">
+                      Estado: {{ getEmployeeWorkStatusLabel(employeeWorkStatus()) }}
+                    </p>
+
+                    @if (employeeLastCheckInIso()) {
+                      <p class="app-shell--header__tracking-meta">
+                        Última entrada: {{ formatTrackingDate(employeeLastCheckInIso()) }}
+                      </p>
+                    }
+
+                    @if (employeeLastCheckOutIso()) {
+                      <p class="app-shell--header__tracking-meta">
+                        Última salida: {{ formatTrackingDate(employeeLastCheckOutIso()) }}
+                      </p>
+                    }
+
+                    <div class="app-shell--header__tracking-actions">
+                      <button
+                        type="button"
+                        class="app-shell--header__tracking-btn app-shell--header__tracking-btn--entry"
+                        [disabled]="
+                          isEmployeeTrackingLoading() || employeeWorkStatus() === 'working'
+                        "
+                        (click)="clockIn()"
+                      >
+                        Fichar entrada
+                      </button>
+                      <button
+                        type="button"
+                        class="app-shell--header__tracking-btn app-shell--header__tracking-btn--exit"
+                        [disabled]="
+                          isEmployeeTrackingLoading() || employeeWorkStatus() !== 'working'
+                        "
+                        (click)="clockOut()"
+                      >
+                        Fichar salida
+                      </button>
+                    </div>
+
+                    @if (employeeTrackingError()) {
+                      <p class="app-shell--header__tracking-error">{{ employeeTrackingError() }}</p>
+                    }
+                  </section>
+                }
                 <button type="button" class="app-shell--header__link" (click)="logout()">
                   Cerrar sesión
                 </button>
               }
             </nav>
 
-            <a class="app-shell--header__cta" routerLink="/reservas" (click)="closeMenu()"
-              >Reservar ahora</a
-            >
+            @if (!isSuperadmin()) {
+              <a class="app-shell--header__cta" routerLink="/reservas" (click)="closeMenu()"
+                >Reservar ahora</a
+              >
+            }
           </div>
         </div>
       </header>
@@ -134,12 +186,6 @@ import { AppService } from './app.service';
       <main class="app-shell--main">
         <router-outlet />
       </main>
-
-      <footer class="app-shell--footer">
-        <div class="app-shell--footer__container">
-          <p class="app-shell--footer__text">© 2026 Arena Studio · Pinto, Madrid</p>
-        </div>
-      </footer>
     </div>
   `,
   styleUrl: './app.scss',
@@ -152,8 +198,17 @@ export class App {
   private readonly destroyRef = inject(DestroyRef);
   protected readonly isMenuOpen = signal(false);
   protected readonly isAuthenticated = signal(false);
+  protected readonly isClientAuthenticated = signal(false);
   protected readonly isAdmin = signal(false);
+  protected readonly isSuperadmin = signal(false);
   protected readonly username = signal('');
+  protected readonly employeeWorkStatus = signal<
+    'idle' | 'working' | 'vacation' | 'sick_leave' | 'recovering_hours'
+  >('idle');
+  protected readonly employeeLastCheckInIso = signal('');
+  protected readonly employeeLastCheckOutIso = signal('');
+  protected readonly isEmployeeTrackingLoading = signal(false);
+  protected readonly employeeTrackingError = signal('');
 
   protected readonly appName = this.appService.getAppName();
 
@@ -212,13 +267,134 @@ export class App {
   protected logout(): void {
     this.http.post<{ ok: boolean }>('/api/auth/logout', {}).subscribe({
       complete: () => {
-        this.isAuthenticated.set(false);
-        this.isAdmin.set(false);
-        this.username.set('');
-        this.closeMenu();
-        void this.router.navigate(['/']);
+        this.http.post<{ ok: boolean }>('/api/cliente/logout', {}).subscribe({
+          complete: () => {
+            this.resetAuthState();
+            this.closeMenu();
+            void this.router.navigate(['/']);
+          },
+        });
       },
     });
+  }
+
+  private getDisplayName(name?: string | null): string {
+    return (name ?? '').trim().split(/\s+/).filter(Boolean)[0] ?? '';
+  }
+
+  protected getEmployeeWorkStatusLabel(
+    status: 'idle' | 'working' | 'vacation' | 'sick_leave' | 'recovering_hours',
+  ): string {
+    switch (status) {
+      case 'working':
+        return 'Trabajando';
+      case 'vacation':
+        return 'Vacaciones';
+      case 'sick_leave':
+        return 'Baja';
+      case 'recovering_hours':
+        return 'Recuperando horas';
+      default:
+        return 'Sin fichar';
+    }
+  }
+
+  protected formatTrackingDate(value: string): string {
+    if (!value) {
+      return '';
+    }
+
+    const parsed = new Date(value);
+
+    if (Number.isNaN(parsed.getTime())) {
+      return value;
+    }
+
+    return parsed.toLocaleString('es-ES', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    });
+  }
+
+  protected clockIn(): void {
+    this.submitEmployeeTracking('check_in');
+  }
+
+  protected clockOut(): void {
+    this.submitEmployeeTracking('check_out');
+  }
+
+  private resetAuthState(): void {
+    this.isAuthenticated.set(false);
+    this.isClientAuthenticated.set(false);
+    this.isAdmin.set(false);
+    this.isSuperadmin.set(false);
+    this.username.set('');
+    this.employeeWorkStatus.set('idle');
+    this.employeeLastCheckInIso.set('');
+    this.employeeLastCheckOutIso.set('');
+    this.employeeTrackingError.set('');
+    this.isEmployeeTrackingLoading.set(false);
+  }
+
+  private refreshEmployeeTracking(): void {
+    this.http
+      .get<{
+        ok: boolean;
+        tracking?: {
+          workStatus?: 'idle' | 'working' | 'vacation' | 'sick_leave' | 'recovering_hours';
+          lastCheckInIso?: string;
+          lastCheckOutIso?: string;
+        };
+      }>('/api/empleado/fichaje')
+      .subscribe({
+        next: (response) => {
+          this.employeeWorkStatus.set(response?.tracking?.workStatus ?? 'idle');
+          this.employeeLastCheckInIso.set(response?.tracking?.lastCheckInIso ?? '');
+          this.employeeLastCheckOutIso.set(response?.tracking?.lastCheckOutIso ?? '');
+          this.employeeTrackingError.set('');
+        },
+        error: () => {
+          this.employeeWorkStatus.set('idle');
+          this.employeeLastCheckInIso.set('');
+          this.employeeLastCheckOutIso.set('');
+          this.employeeTrackingError.set('No se pudo cargar el estado de fichaje.');
+        },
+      });
+  }
+
+  private submitEmployeeTracking(action: 'check_in' | 'check_out'): void {
+    if (!this.isAdmin() || this.isSuperadmin() || this.isEmployeeTrackingLoading()) {
+      return;
+    }
+
+    this.isEmployeeTrackingLoading.set(true);
+    this.employeeTrackingError.set('');
+
+    this.http
+      .post<{
+        ok: boolean;
+        tracking?: {
+          workStatus?: 'idle' | 'working' | 'vacation' | 'sick_leave' | 'recovering_hours';
+          lastCheckInIso?: string;
+          lastCheckOutIso?: string;
+        };
+      }>('/api/empleado/fichaje', { action })
+      .subscribe({
+        next: (response) => {
+          this.employeeWorkStatus.set(response?.tracking?.workStatus ?? 'idle');
+          this.employeeLastCheckInIso.set(response?.tracking?.lastCheckInIso ?? '');
+          this.employeeLastCheckOutIso.set(response?.tracking?.lastCheckOutIso ?? '');
+          this.employeeTrackingError.set('');
+          this.isEmployeeTrackingLoading.set(false);
+        },
+        error: (error) => {
+          this.employeeTrackingError.set(
+            error?.error?.error ?? 'No se pudo registrar el fichaje. Inténtalo de nuevo.',
+          );
+          this.isEmployeeTrackingLoading.set(false);
+        },
+      });
   }
 
   private refreshAuthSession(): void {
@@ -231,18 +407,57 @@ export class App {
         ok: boolean;
         isAuthenticated: boolean;
         isAdmin: boolean;
+        role?: string;
         username?: string;
       }>('/api/auth/session')
       .subscribe({
         next: (response) => {
-          this.isAuthenticated.set(Boolean(response?.isAuthenticated));
-          this.isAdmin.set(Boolean(response?.isAdmin));
-          this.username.set(response?.username ?? '');
+          if (response?.isAuthenticated) {
+            this.isAuthenticated.set(true);
+            this.isClientAuthenticated.set(false);
+            this.isAdmin.set(Boolean(response?.isAdmin));
+            this.isSuperadmin.set(response?.role === 'superadmin');
+            this.username.set(this.getDisplayName(response?.username));
+
+            if (response?.isAdmin && response?.role !== 'superadmin') {
+              this.refreshEmployeeTracking();
+            } else {
+              this.employeeWorkStatus.set('idle');
+              this.employeeLastCheckInIso.set('');
+              this.employeeLastCheckOutIso.set('');
+              this.employeeTrackingError.set('');
+            }
+
+            return;
+          }
+
+          this.http
+            .get<{
+              ok: boolean;
+              isAuthenticated: boolean;
+              client?: {
+                fullName?: string;
+              } | null;
+            }>('/api/cliente/session')
+            .subscribe({
+              next: (clientResponse) => {
+                this.isAuthenticated.set(Boolean(clientResponse?.isAuthenticated));
+                this.isClientAuthenticated.set(Boolean(clientResponse?.isAuthenticated));
+                this.isAdmin.set(false);
+                this.isSuperadmin.set(false);
+                this.username.set(this.getDisplayName(clientResponse?.client?.fullName));
+                this.employeeWorkStatus.set('idle');
+                this.employeeLastCheckInIso.set('');
+                this.employeeLastCheckOutIso.set('');
+                this.employeeTrackingError.set('');
+              },
+              error: () => {
+                this.resetAuthState();
+              },
+            });
         },
         error: () => {
-          this.isAuthenticated.set(false);
-          this.isAdmin.set(false);
-          this.username.set('');
+          this.resetAuthState();
         },
       });
   }

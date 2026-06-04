@@ -1,47 +1,913 @@
-<section class="admin-panel">
+﻿<section class="admin-panel">
   <div class="admin-panel--container">
     @if (isChecking()) {
       <p class="admin-panel--container__hint">Comprobando acceso...</p>
     } @else {
       <header class="admin-panel--container__hero">
-        <h1 class="admin-panel--container__title">Panel de administración</h1>
-        <p class="admin-panel--container__description">
-          Acceso activo como {{ ownerEmail() || 'propietaria' }}
-        </p>
+        <div class="admin-panel--container__hero-left">
+          <h1 class="admin-panel--container__title admin-panel--container__title--static">
+            Panel de administración
+          </h1>
+          <p class="admin-panel--container__description admin-panel--container__description--hero">
+            Acceso activo como {{ ownerEmail() || 'propietaria' }}
+          </p>
+        </div>
+        <div class="admin-panel--container__hero-right">
+          <app-notification-badge></app-notification-badge>
+        </div>
       </header>
 
-      <div class="admin-panel--container__tabs">
-        <button
-          type="button"
-          class="admin-panel--container__tab"
-          [class.admin-panel--container__tab--active]="activeTab() === 'listado'"
-          (click)="setActiveTab('listado')"
-        >
-          Listado de reservas
-        </button>
-        <button
-          type="button"
-          class="admin-panel--container__tab"
-          [class.admin-panel--container__tab--active]="activeTab() === 'gestion'"
-          (click)="setActiveTab('gestion')"
-        >
-          Gestión de reservas
-        </button>
-        <button
-          type="button"
-          class="admin-panel--container__tab"
-          [class.admin-panel--container__tab--active]="activeTab() === 'bloqueos'"
-          (click)="setActiveTab('bloqueos')"
-        >
-          Bloquear horas
-        </button>
-      </div>
+      @if (activeTab() === 'home') {
+        <div class="admin-panel--container__module-grid">
+          <button
+            type="button"
+            class="admin-panel--container__module-card"
+            [style.--card-index]="0"
+            (click)="openAdminCard('packs')"
+          >
+            <div class="admin-panel--container__module-card-head">
+              <span class="admin-panel--container__module-card-icon" aria-hidden="true">✂️</span>
+            </div>
+            <h2 class="admin-panel--container__module-card-title">Packs</h2>
+          </button>
 
-      @if (activeTab() === 'listado') {
+          <button
+            type="button"
+            class="admin-panel--container__module-card"
+            [style.--card-index]="1"
+            (click)="openAdminCard('reservas')"
+          >
+            <div class="admin-panel--container__module-card-head">
+              <span class="admin-panel--container__module-card-icon" aria-hidden="true">🗓️</span>
+            </div>
+            <h2 class="admin-panel--container__module-card-title">Reservas</h2>
+          </button>
+
+          <button
+            type="button"
+            class="admin-panel--container__module-card"
+            [style.--card-index]="2"
+            (click)="openAdminCard('agenda')"
+          >
+            <div class="admin-panel--container__module-card-head">
+              <span class="admin-panel--container__module-card-icon" aria-hidden="true">📌</span>
+            </div>
+            <h2 class="admin-panel--container__module-card-title">Agenda</h2>
+          </button>
+
+          <button
+            type="button"
+            class="admin-panel--container__module-card"
+            [style.--card-index]="3"
+            (click)="openAdminCard('clientes')"
+          >
+            <div class="admin-panel--container__module-card-head">
+              <span class="admin-panel--container__module-card-icon" aria-hidden="true">👤</span>
+            </div>
+            <h2 class="admin-panel--container__module-card-title">Ficha de cliente</h2>
+          </button>
+
+          <button
+            type="button"
+            class="admin-panel--container__module-card"
+            [style.--card-index]="4"
+            (click)="openAdminCard('almacen')"
+          >
+            <div class="admin-panel--container__module-card-head">
+              <span class="admin-panel--container__module-card-icon" aria-hidden="true">📦</span>
+            </div>
+            <h2 class="admin-panel--container__module-card-title">Almacén</h2>
+          </button>
+
+          <button
+            type="button"
+            class="admin-panel--container__module-card"
+            [style.--card-index]="5"
+            (click)="openAdminCard('cierre')"
+          >
+            <div class="admin-panel--container__module-card-head">
+              <span class="admin-panel--container__module-card-icon" aria-hidden="true">💶</span>
+            </div>
+            <h2 class="admin-panel--container__module-card-title">Cierre de caja</h2>
+          </button>
+        </div>
+
+        <div class="admin-panel--container__tabs">
+          <button
+            type="button"
+            class="admin-panel--container__tab"
+            [class.admin-panel--container__tab--active]="activeTab() === 'estadisticas'"
+            (click)="setActiveTab('estadisticas')"
+          >
+            Estadísticas
+          </button>
+          @if (isSuperadmin()) {
+            <button
+              type="button"
+              class="admin-panel--container__tab"
+              [class.admin-panel--container__tab--active]="activeTab() === 'empleados'"
+              (click)="setActiveTab('empleados')"
+            >
+              Gestión de empleados
+            </button>
+          }
+        </div>
+      } @else {
+        <div class="admin-panel--container__tabs">
+          <button type="button" class="admin-panel--container__tab" (click)="setActiveTab('home')">
+            ← Volver al panel
+          </button>
+          @if (activeTab() !== 'agenda') {
+            <button
+              type="button"
+              class="admin-panel--container__tab"
+              [class.admin-panel--container__tab--active]="activeTab() === 'agenda'"
+              (click)="setActiveTab('agenda')"
+            >
+              Agenda
+            </button>
+          }
+        </div>
+      }
+
+      @if (activeTab() === 'agenda') {
+        <h2 class="admin-panel--container__subtitle">Agenda</h2>
+        <p class="admin-panel--container__hint">
+          Gestiona reservas, bloqueos y consulta rápida de citas por hoy, semana o mes.
+        </p>
+
+        <div class="admin-panel--container__employee-subtabs">
+          <button
+            type="button"
+            class="admin-panel--container__employee-subtab"
+            [class.admin-panel--container__employee-subtab--active]="
+              agendaManagementTab() === 'listado'
+            "
+            (click)="setAgendaManagementTab('listado')"
+          >
+            Listado de reservas
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__employee-subtab"
+            [class.admin-panel--container__employee-subtab--active]="
+              agendaManagementTab() === 'bloqueos'
+            "
+            (click)="setAgendaManagementTab('bloqueos')"
+          >
+            Bloquear horas
+          </button>
+        </div>
+
+        <div class="admin-panel--container__block-form admin-panel--container__block-form--compact">
+          <p class="admin-panel--container__hint">Vista de citas</p>
+          <div
+            class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact"
+          >
+            <button
+              type="button"
+              class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+              [class.admin-panel--container__action-button--accept]="agendaRange() === 'hoy'"
+              (click)="setAgendaRange('hoy')"
+            >
+              Hoy
+            </button>
+            <button
+              type="button"
+              class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+              [class.admin-panel--container__action-button--accept]="agendaRange() === 'semana'"
+              (click)="setAgendaRange('semana')"
+            >
+              Semana
+            </button>
+            <button
+              type="button"
+              class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+              [class.admin-panel--container__action-button--accept]="agendaRange() === 'mes'"
+              (click)="setAgendaRange('mes')"
+            >
+              Mes
+            </button>
+          </div>
+
+          @if (agendaRange() !== 'hoy') {
+            <div class="admin-panel--container__form-row">
+              <div class="admin-panel--container__form-group">
+                <label class="admin-panel--container__label">
+                  Selecciona fecha
+                  <input
+                    class="admin-panel--container__input"
+                    type="date"
+                    [value]="agendaSelectedDateIso()"
+                    (input)="onAgendaSelectedDateInput($event)"
+                  />
+                </label>
+              </div>
+            </div>
+          }
+
+          <div class="admin-panel--container__employee-stats-grid">
+            <span class="admin-panel--container__employee-stat-chip">
+              Rango: {{ getAgendaRangeLabel() }}
+            </span>
+            <span class="admin-panel--container__employee-stat-chip">
+              Citas en rango: {{ getAgendaTotalReservationsInRange() }}
+            </span>
+            <span class="admin-panel--container__employee-stat-chip">
+              Citas del día: {{ getAgendaSelectedDateReservations().length }}
+            </span>
+          </div>
+
+          <div class="admin-panel--container__form-row">
+            <div class="admin-panel--container__form-group">
+              <label class="admin-panel--container__label">
+                Citas del día
+                <div class="admin-panel--container__time-select-wrap">
+                  <select class="admin-panel--container__input admin-panel--container__time-select">
+                    @if (getAgendaSelectedDateReservations().length === 0) {
+                      <option>Sin citas para este día</option>
+                    } @else {
+                      @for (
+                        reservation of getAgendaSelectedDateReservations();
+                        track reservation.id
+                      ) {
+                        <option>
+                          {{ reservation.startTime }} - {{ reservation.endTime }} ·
+                          {{ reservation.customerName }} · {{ reservation.appointmentTypeName }}
+                        </option>
+                      }
+                    }
+                  </select>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div
+            class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact"
+          >
+            <button
+              type="button"
+              class="admin-panel--container__action-button admin-panel--container__action-button--accept"
+              (click)="openAgendaCalendarModal()"
+            >
+              Abrir calendario mensual
+            </button>
+            <button
+              type="button"
+              class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+              (click)="openAgendaWeekScheduleModal()"
+            >
+              Abrir agenda semanal (pantalla completa)
+            </button>
+          </div>
+        </div>
+
+        @if (showAgendaCalendarModal()) {
+          <div class="admin-panel--container__modal-backdrop" (click)="closeAgendaCalendarModal()">
+            <div
+              class="admin-panel--container__modal admin-panel--container__modal--agenda-calendar"
+              (click)="$event.stopPropagation()"
+            >
+              <div class="admin-panel--container__modal-head">
+                <div>
+                  <h3 class="admin-panel--container__modal-title">Agenda mensual</h3>
+                  <p class="admin-panel--container__modal-subtitle">
+                    Pulsa un día para abrir su agenda por horas.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  class="admin-panel--container__modal-close"
+                  (click)="closeAgendaCalendarModal()"
+                  aria-label="Cerrar"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div class="admin-panel--container__calendar-head">
+                <div class="admin-panel--container__month-nav" aria-label="Navegación de mes">
+                  <button
+                    type="button"
+                    class="admin-panel--container__month-nav-button"
+                    (click)="goToPreviousAgendaCalendarMonth()"
+                    aria-label="Mes anterior"
+                  >
+                    <svg
+                      class="admin-panel--container__month-nav-icon"
+                      viewBox="0 0 20 20"
+                      aria-hidden="true"
+                    >
+                      <path d="M12.5 4.5 7 10l5.5 5.5" />
+                    </svg>
+                  </button>
+                  <span class="admin-panel--container__month-nav-label">{{
+                    getAgendaCalendarMonthLabel()
+                  }}</span>
+                  <button
+                    type="button"
+                    class="admin-panel--container__month-nav-button"
+                    (click)="goToNextAgendaCalendarMonth()"
+                    aria-label="Mes siguiente"
+                  >
+                    <svg
+                      class="admin-panel--container__month-nav-icon"
+                      viewBox="0 0 20 20"
+                      aria-hidden="true"
+                    >
+                      <path d="M7.5 4.5 13 10l-5.5 5.5" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="admin-panel--container__calendar-weekdays">
+                @for (dayName of ['L', 'M', 'X', 'J', 'V', 'S', 'D']; track dayName) {
+                  <span>{{ dayName }}</span>
+                }
+              </div>
+
+              <div class="admin-panel--container__calendar-grid">
+                @for (day of getAgendaCalendarDays(); track day.dateIso) {
+                  <button
+                    type="button"
+                    class="admin-panel--container__calendar-day admin-panel--container__calendar-day--agenda"
+                    [class.admin-panel--container__calendar-day--outside]="!day.isCurrentMonth"
+                    [class.admin-panel--container__calendar-day--today]="day.isToday"
+                    (click)="openAgendaDaySchedule(day.dateIso)"
+                  >
+                    <span class="admin-panel--container__agenda-day-number-wrap">
+                      <span class="admin-panel--container__calendar-day-number">{{
+                        day.dayNumber
+                      }}</span>
+                      @if (day.reservationCount > 0) {
+                        <span class="admin-panel--container__agenda-day-count">
+                          {{ day.reservationCount }}
+                        </span>
+                      }
+                    </span>
+                  </button>
+                }
+              </div>
+
+              <p class="admin-panel--container__hint" style="margin: 0">
+                Si un día no tiene citas, no muestra contador.
+              </p>
+
+              <div class="admin-panel--container__modal-actions">
+                <button
+                  type="button"
+                  class="admin-panel--container__action-button admin-panel--container__action-button--accept"
+                  (click)="openAgendaWeekScheduleModal()"
+                >
+                  Ver semana completa
+                </button>
+              </div>
+            </div>
+          </div>
+        }
+
+        @if (showAgendaDayScheduleModal()) {
+          <div
+            class="admin-panel--container__modal-backdrop"
+            (click)="closeAgendaDayScheduleModal()"
+          >
+            <div
+              class="admin-panel--container__modal admin-panel--container__modal--agenda-day"
+              (click)="$event.stopPropagation()"
+            >
+              <div class="admin-panel--container__modal-head">
+                <div>
+                  <h3 class="admin-panel--container__modal-title">Agenda por horas</h3>
+                  <p class="admin-panel--container__modal-subtitle">
+                    {{ formatDate(agendaDayScheduleDateIso()) }}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  class="admin-panel--container__modal-close"
+                  (click)="closeAgendaDayScheduleModal()"
+                  aria-label="Cerrar"
+                >
+                  ×
+                </button>
+              </div>
+
+              <p class="admin-panel--container__hint" style="margin: 0">
+                Arrastra una cita a otra hora para recolocarla.
+                @if (isSuperadmin()) {
+                  También puedes ajustar la duración y permitir solapes.
+                }
+              </p>
+
+              <div class="admin-panel--container__agenda-hour-list">
+                @for (slot of agendaTimeSlotOptions; track slot) {
+                  <div class="admin-panel--container__agenda-hour-row">
+                    <span class="admin-panel--container__agenda-hour-label">{{ slot }}</span>
+                    <div
+                      class="admin-panel--container__agenda-hour-dropzone"
+                      (dragover)="allowAgendaReservationDrop($event)"
+                      (drop)="onAgendaReservationDrop($event, slot)"
+                      (click)="
+                        getAgendaReservationsByStartTime(slot).length === 0 &&
+                          openQuickReserveModal()
+                      "
+                    >
+                      @if (getAgendaReservationsByStartTime(slot).length === 0) {
+                        <span
+                          class="admin-panel--container__agenda-hour-empty"
+                          style="cursor: pointer"
+                          >Sin citas · Haz clic para reservar</span
+                        >
+                      } @else {
+                        @for (
+                          reservation of getAgendaReservationsByStartTime(slot);
+                          track reservation.id
+                        ) {
+                          <article
+                            class="admin-panel--container__agenda-reservation-card"
+                            draggable="true"
+                            (dragstart)="onAgendaReservationDragStart($event, reservation.id)"
+                            (dragend)="onAgendaReservationDragEnd()"
+                            (click)="openAgendaReservationDetail(reservation)"
+                            [style.--appointment-color]="
+                              getAppointmentTypeColor(reservation.appointmentTypeName)
+                            "
+                          >
+                            <div class="admin-panel--container__agenda-reservation-head">
+                              <span class="admin-panel--container__agenda-treatment-dot"></span>
+                              <p class="admin-panel--container__agenda-reservation-title">
+                                {{ reservation.customerName }}
+                              </p>
+                            </div>
+                            <p class="admin-panel--container__agenda-reservation-meta">
+                              {{ reservation.appointmentTypeName }} ·
+                              {{ formatDuration(reservation.durationMinutes) }}
+                            </p>
+
+                            @if (isSuperadmin()) {
+                              <div class="admin-panel--container__agenda-duration-controls">
+                                <select
+                                  class="admin-panel--container__input admin-panel--container__agenda-duration-select"
+                                  [value]="
+                                    getAgendaDurationDraft(
+                                      reservation.id,
+                                      reservation.durationMinutes
+                                    )
+                                  "
+                                  (change)="onAgendaDurationDraftChange(reservation.id, $event)"
+                                >
+                                  @for (duration of agendaDurationOptions; track duration) {
+                                    <option [value]="duration">
+                                      {{ formatDuration(duration) }}
+                                    </option>
+                                  }
+                                </select>
+
+                                <button
+                                  type="button"
+                                  class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                                  [disabled]="isAgendaReservationUpdating(reservation.id)"
+                                  (click)="saveAgendaReservationDuration(reservation)"
+                                >
+                                  Guardar duración
+                                </button>
+                              </div>
+                            }
+                          </article>
+                        }
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          </div>
+        }
+
+        @if (showAgendaWeekScheduleModal()) {
+          <div
+            class="admin-panel--container__modal-backdrop"
+            (click)="closeAgendaWeekScheduleModal()"
+          >
+            <div
+              class="admin-panel--container__modal admin-panel--container__modal--agenda-week-schedule"
+              (click)="$event.stopPropagation()"
+            >
+              <div class="admin-panel--container__modal-head">
+                <div>
+                  <h3 class="admin-panel--container__modal-title">Agenda semanal</h3>
+                  <p class="admin-panel--container__modal-subtitle">
+                    Semana {{ getAgendaWeekRangeLabel() }}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  class="admin-panel--container__modal-close"
+                  (click)="closeAgendaWeekScheduleModal()"
+                  aria-label="Cerrar"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div class="admin-panel--container__calendar-head">
+                <div class="admin-panel--container__month-nav" aria-label="Navegación de semana">
+                  <button
+                    type="button"
+                    class="admin-panel--container__month-nav-button"
+                    (click)="goToPreviousAgendaWeek()"
+                    aria-label="Semana anterior"
+                  >
+                    <svg
+                      class="admin-panel--container__month-nav-icon"
+                      viewBox="0 0 20 20"
+                      aria-hidden="true"
+                    >
+                      <path d="M12.5 4.5 7 10l5.5 5.5" />
+                    </svg>
+                  </button>
+                  <span class="admin-panel--container__month-nav-label">{{
+                    getAgendaWeekRangeLabel()
+                  }}</span>
+                  <button
+                    type="button"
+                    class="admin-panel--container__month-nav-button"
+                    (click)="goToNextAgendaWeek()"
+                    aria-label="Semana siguiente"
+                  >
+                    <svg
+                      class="admin-panel--container__month-nav-icon"
+                      viewBox="0 0 20 20"
+                      aria-hidden="true"
+                    >
+                      <path d="M7.5 4.5 13 10l-5.5 5.5" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="admin-panel--container__agenda-week-grid">
+                @for (day of getAgendaWeekDays(); track day.dateIso) {
+                  <section class="admin-panel--container__agenda-week-column">
+                    <header
+                      class="admin-panel--container__agenda-week-column-head"
+                      [class.admin-panel--container__agenda-week-column-head--today]="day.isToday"
+                    >
+                      <div class="admin-panel--container__agenda-week-day-head-copy">
+                        <p class="admin-panel--container__agenda-week-day-label">{{ day.label }}</p>
+                        @if (day.alertCount > 0) {
+                          <span class="admin-panel--container__agenda-alert-day-count">
+                            Avísame
+                            {{ day.pendingAlertCount > 0 ? day.pendingAlertCount : day.alertCount }}
+                          </span>
+                        }
+                      </div>
+                      @if (day.reservationCount > 0) {
+                        <span class="admin-panel--container__agenda-day-count">
+                          {{ day.reservationCount }}
+                        </span>
+                      }
+                    </header>
+
+                    <div class="admin-panel--container__agenda-week-hour-list">
+                      @for (slot of agendaTimeSlotOptions; track slot) {
+                        <div class="admin-panel--container__agenda-week-hour-row">
+                          <span class="admin-panel--container__agenda-week-hour-label">{{
+                            slot
+                          }}</span>
+                          <div
+                            class="admin-panel--container__agenda-week-dropzone"
+                            (dragover)="allowAgendaReservationDrop($event)"
+                            (drop)="onAgendaReservationDropToDateTime($event, day.dateIso, slot)"
+                            (click)="
+                              getAgendaReservationsByDateAndStartTime(day.dateIso, slot).length ===
+                                0 && openQuickReserveModal()
+                            "
+                            style="cursor: pointer"
+                          >
+                            @if (getAgendaAlertsByDateAndStartTime(day.dateIso, slot).length > 0) {
+                              <div class="admin-panel--container__agenda-alert-list">
+                                @for (
+                                  alert of getAgendaAlertsByDateAndStartTime(day.dateIso, slot);
+                                  track alert.id
+                                ) {
+                                  <article
+                                    class="admin-panel--container__agenda-alert-card"
+                                    [class.admin-panel--container__agenda-alert-card--approved]="
+                                      alert.approvalStatus === 'approved'
+                                    "
+                                    [class.admin-panel--container__agenda-alert-card--rejected]="
+                                      alert.approvalStatus === 'rejected'
+                                    "
+                                  >
+                                    <div class="admin-panel--container__agenda-alert-card__content">
+                                      <p class="admin-panel--container__agenda-alert-title">
+                                        {{ alert.clientEmail }}
+                                      </p>
+                                      <p class="admin-panel--container__agenda-alert-meta">
+                                        {{ alert.appointmentTypeName }}
+                                      </p>
+                                      <span class="admin-panel--container__agenda-alert-status">
+                                        @if (alert.approvalStatus === 'pending') {
+                                          Pendiente de Lidia
+                                        } @else if (alert.approvalStatus === 'approved') {
+                                          Aprobada
+                                        } @else {
+                                          Rechazada
+                                        }
+                                      </span>
+                                    </div>
+
+                                    @if (isSuperadmin() && alert.approvalStatus === 'pending') {
+                                      <div class="admin-panel--container__agenda-alert-actions">
+                                        <button
+                                          type="button"
+                                          class="admin-panel--container__agenda-alert-btn admin-panel--container__agenda-alert-btn--approve"
+                                          (click)="
+                                            $event.stopPropagation(); approveAgendaAlert(alert.id)
+                                          "
+                                          [disabled]="agendaAlertActionLoadingId() === alert.id"
+                                        >
+                                          Aprobar
+                                        </button>
+                                        <button
+                                          type="button"
+                                          class="admin-panel--container__agenda-alert-btn admin-panel--container__agenda-alert-btn--reject"
+                                          (click)="
+                                            $event.stopPropagation(); rejectAgendaAlert(alert.id)
+                                          "
+                                          [disabled]="agendaAlertActionLoadingId() === alert.id"
+                                        >
+                                          No
+                                        </button>
+                                      </div>
+                                    }
+                                  </article>
+                                }
+                              </div>
+                            }
+                            @for (
+                              reservation of getAgendaReservationsByDateAndStartTime(
+                                day.dateIso,
+                                slot
+                              );
+                              track reservation.id
+                            ) {
+                              <article
+                                class="admin-panel--container__agenda-reservation-card"
+                                draggable="true"
+                                (dragstart)="onAgendaReservationDragStart($event, reservation.id)"
+                                (dragend)="onAgendaReservationDragEnd()"
+                                (click)="openAgendaReservationDetail(reservation)"
+                                [style.--appointment-color]="
+                                  getAppointmentTypeColor(reservation.appointmentTypeName)
+                                "
+                              >
+                                <div class="admin-panel--container__agenda-reservation-head">
+                                  <span class="admin-panel--container__agenda-treatment-dot"></span>
+                                  <p class="admin-panel--container__agenda-reservation-title">
+                                    {{ reservation.customerName }}
+                                  </p>
+                                </div>
+                                <p class="admin-panel--container__agenda-reservation-meta">
+                                  {{ reservation.appointmentTypeName }} ·
+                                  {{ formatDuration(reservation.durationMinutes) }}
+                                </p>
+                              </article>
+                            }
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  </section>
+                }
+              </div>
+            </div>
+          </div>
+        }
+
+        <!-- Toast de error de drag & drop -->
+        @if (agendaDropToast()) {
+          <div class="admin-panel--container__agenda-drop-toast" role="alert" aria-live="assertive">
+            {{ agendaDropToast() }}
+          </div>
+        }
+
+        <!-- Modal de confirmación de reserva rápida -->
+        @if (showQuickReserveModal()) {
+          <div class="admin-panel--container__modal-backdrop" (click)="cancelQuickReserve()">
+            <div
+              class="admin-panel--container__modal admin-panel--container__modal--quick-reserve"
+              (click)="$event.stopPropagation()"
+            >
+              <div class="admin-panel--container__modal-body">
+                <div class="admin-panel--container__quick-reserve-icon">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M12 5v14m7-7H5" />
+                  </svg>
+                </div>
+                <h3 class="admin-panel--container__quick-reserve-title">
+                  ¿Crear una nueva reserva?
+                </h3>
+                <p class="admin-panel--container__quick-reserve-text">
+                  Serás redirigido a la página de reservas
+                </p>
+              </div>
+              <div class="admin-panel--container__modal-actions">
+                <button
+                  type="button"
+                  class="admin-panel--container__btn admin-panel--container__btn--secondary"
+                  (click)="cancelQuickReserve()"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  class="admin-panel--container__btn admin-panel--container__btn--primary"
+                  (click)="confirmQuickReserve()"
+                >
+                  Sí, crear reserva
+                </button>
+              </div>
+            </div>
+          </div>
+        }
+
+        <!-- Modal de detalle de cita -->
+        @if (agendaDetailReservation()) {
+          <div
+            class="admin-panel--container__modal-backdrop"
+            (click)="closeAgendaReservationDetail()"
+          >
+            <div
+              class="admin-panel--container__modal admin-panel--container__modal--agenda-detail"
+              (click)="$event.stopPropagation()"
+            >
+              <div class="admin-panel--container__modal-head">
+                <div>
+                  <h3 class="admin-panel--container__modal-title">Detalle de cita</h3>
+                  <p class="admin-panel--container__modal-subtitle">
+                    {{ agendaDetailReservation()!.dateIso }} ·
+                    {{ agendaDetailReservation()!.startTime }} –
+                    {{ agendaDetailReservation()!.endTime }}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  class="admin-panel--container__modal-close"
+                  (click)="closeAgendaReservationDetail()"
+                  aria-label="Cerrar"
+                >
+                  ×
+                </button>
+              </div>
+
+              @if (agendaDetailError()) {
+                <p class="admin-panel--container__error">{{ agendaDetailError() }}</p>
+              }
+
+              @if (agendaDetailMode() === 'view') {
+                <!-- Vista informativa -->
+                <div class="admin-panel--container__agenda-detail-info">
+                  <div
+                    class="admin-panel--container__agenda-detail-color-bar"
+                    [style.background]="
+                      getAppointmentTypeColor(agendaDetailReservation()!.appointmentTypeName)
+                    "
+                  ></div>
+                  <div class="admin-panel--container__agenda-detail-rows">
+                    <p class="admin-panel--container__agenda-detail-row">
+                      <span class="admin-panel--container__agenda-detail-label">Cliente</span>
+                      <span>{{ agendaDetailReservation()!.customerName }}</span>
+                    </p>
+                    <p class="admin-panel--container__agenda-detail-row">
+                      <span class="admin-panel--container__agenda-detail-label">Tratamiento</span>
+                      <span>{{ agendaDetailReservation()!.appointmentTypeName }}</span>
+                    </p>
+                    <p class="admin-panel--container__agenda-detail-row">
+                      <span class="admin-panel--container__agenda-detail-label">Duración</span>
+                      <span>{{ formatDuration(agendaDetailReservation()!.durationMinutes) }}</span>
+                    </p>
+                    <p class="admin-panel--container__agenda-detail-row">
+                      <span class="admin-panel--container__agenda-detail-label">Teléfono</span>
+                      <span>{{ agendaDetailReservation()!.customerPhone || '—' }}</span>
+                    </p>
+                    <p class="admin-panel--container__agenda-detail-row">
+                      <span class="admin-panel--container__agenda-detail-label">Email</span>
+                      <span>{{ agendaDetailReservation()!.customerEmail || '—' }}</span>
+                    </p>
+                    <p class="admin-panel--container__agenda-detail-row">
+                      <span class="admin-panel--container__agenda-detail-label">Estado</span>
+                      <span>{{ agendaDetailReservation()!.adminStatus }}</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div class="admin-panel--container__agenda-detail-actions">
+                  <button
+                    type="button"
+                    class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                    (click)="startAgendaReservationEdit()"
+                  >
+                    ✏️ Modificar
+                  </button>
+                  <button
+                    type="button"
+                    class="admin-panel--container__action-button admin-panel--container__action-button--reject"
+                    [disabled]="agendaDetailCancelling()"
+                    (click)="cancelAgendaReservationFromDetail()"
+                  >
+                    @if (agendaDetailCancelling()) {
+                      Cancelando…
+                    } @else {
+                      🗑️ Cancelar cita
+                    }
+                  </button>
+                </div>
+              } @else {
+                <!-- Formulario de edición -->
+                <div class="admin-panel--container__agenda-edit-form">
+                  <label class="admin-panel--container__label" for="agendaEditName">
+                    Tratamiento / pack
+                  </label>
+                  <select
+                    id="agendaEditName"
+                    class="admin-panel--container__input"
+                    [value]="agendaEditDraftName()"
+                    (change)="onAgendaEditDraftNameChange($event)"
+                  >
+                    @for (pack of agendaPackOptions; track pack.id) {
+                      <option [value]="pack.nombre">{{ pack.nombre }}</option>
+                    }
+                  </select>
+
+                  <label class="admin-panel--container__label" for="agendaEditDuration">
+                    Duración
+                  </label>
+                  <select
+                    id="agendaEditDuration"
+                    class="admin-panel--container__input"
+                    [value]="agendaEditDraftDuration()"
+                    (change)="onAgendaEditDraftDurationChange($event)"
+                  >
+                    @for (duration of agendaDurationOptions; track duration) {
+                      <option [value]="duration">{{ formatDuration(duration) }}</option>
+                    }
+                  </select>
+                </div>
+
+                <div class="admin-panel--container__agenda-detail-actions">
+                  <button
+                    type="button"
+                    class="admin-panel--container__action-button"
+                    [disabled]="agendaDetailSaving()"
+                    (click)="saveAgendaReservationEdit()"
+                  >
+                    @if (agendaDetailSaving()) {
+                      Guardando…
+                    } @else {
+                      💾 Guardar cambios
+                    }
+                  </button>
+                  <button
+                    type="button"
+                    class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                    [disabled]="agendaDetailSaving()"
+                    (click)="agendaDetailMode.set('view')"
+                  >
+                    Volver
+                  </button>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      }
+
+      @if (activeTab() === 'agenda' && agendaManagementTab() === 'listado') {
         <h2 class="admin-panel--container__subtitle">Listado de reservas</h2>
         <p class="admin-panel--container__hint">
           Vista informativa de todas las reservas recibidas.
         </p>
+        <div class="admin-panel--container__reservation-actions" style="margin: 0.75rem 0 1rem">
+          <button
+            type="button"
+            class="admin-panel--container__action-button admin-panel--container__action-button--accept"
+            (click)="openAgendaPackPicker()"
+          >
+            + Crear reserva desde agenda
+          </button>
+        </div>
 
         @if (listError()) {
           <p class="admin-panel--container__error">{{ listError() }}</p>
@@ -52,44 +918,232 @@
         } @else if (reservations().length === 0) {
           <p class="admin-panel--container__hint">No hay reservas registradas.</p>
         } @else {
-          <div class="admin-panel--container__list">
-            @for (reservation of reservations(); track reservation.id) {
-              <article class="admin-panel--container__reservation">
-                <div class="admin-panel--container__reservation-head">
-                  <h3 class="admin-panel--container__reservation-title">
-                    {{ reservation.appointmentTypeName }}
-                  </h3>
-                  <span
-                    class="admin-panel--container__status"
-                    [class.admin-panel--container__status--accepted]="
-                      reservation.adminStatus === 'accepted'
-                    "
-                    [class.admin-panel--container__status--rejected]="
-                      reservation.adminStatus === 'rejected'
-                    "
-                  >
-                    {{ getStatusLabel(reservation.adminStatus) }}
-                  </span>
-                </div>
-
-                <p class="admin-panel--container__reservation-text">
-                  {{ reservation.customerName }} · {{ reservation.customerPhone }} ·
-                  {{ reservation.customerEmail }}
-                </p>
-                <p class="admin-panel--container__reservation-text">
-                  {{ formatDate(reservation.dateIso) }} · {{ reservation.startTime }} -
-                  {{ reservation.endTime }} · {{ formatDuration(reservation.durationMinutes) }}
-                </p>
-                <p class="admin-panel--container__reservation-text">
-                  Señal: {{ reservation.paymentReceived ? 'Recibida' : 'Pendiente' }}
-                </p>
-              </article>
-            }
+          <div class="admin-panel--container__employee-subtabs">
+            <button
+              type="button"
+              class="admin-panel--container__employee-subtab"
+              [class.admin-panel--container__employee-subtab--active]="
+                reservationListRangeTab() === 'dia'
+              "
+              (click)="setReservationListRangeTab('dia')"
+            >
+              Día
+            </button>
+            <button
+              type="button"
+              class="admin-panel--container__employee-subtab"
+              [class.admin-panel--container__employee-subtab--active]="
+                reservationListRangeTab() === 'semana'
+              "
+              (click)="setReservationListRangeTab('semana')"
+            >
+              Semana
+            </button>
+            <button
+              type="button"
+              class="admin-panel--container__employee-subtab"
+              [class.admin-panel--container__employee-subtab--active]="
+                reservationListRangeTab() === 'mes'
+              "
+              (click)="setReservationListRangeTab('mes')"
+            >
+              Mes
+            </button>
+            <button
+              type="button"
+              class="admin-panel--container__employee-subtab"
+              [class.admin-panel--container__employee-subtab--active]="
+                reservationListRangeTab() === 'total'
+              "
+              (click)="setReservationListRangeTab('total')"
+            >
+              Total
+            </button>
           </div>
+
+          @if (!hasSelectedReservationListRange()) {
+            <p class="admin-panel--container__hint">
+              Selecciona una pestaña (día, semana, mes o total) para mostrar reservas.
+            </p>
+          } @else {
+            @if (reservationListRangeTab() !== 'total') {
+              <div class="admin-panel--container__reservation-filters">
+                <div class="admin-panel--container__reservation-filter-field">
+                  <label
+                    class="admin-panel--container__reservation-filter-label"
+                    for="rf-base-date"
+                  >
+                    Fecha base del rango
+                  </label>
+                  <input
+                    id="rf-base-date"
+                    class="admin-panel--container__reservation-filter-input"
+                    type="date"
+                    [value]="agendaSelectedDateIso()"
+                    (input)="onAgendaSelectedDateInput($event)"
+                  />
+                </div>
+              </div>
+            }
+
+            <div class="admin-panel--container__reservation-filters">
+              <div class="admin-panel--container__reservation-filter-field">
+                <label class="admin-panel--container__reservation-filter-label" for="rf-name"
+                  >Nombre</label
+                >
+                <input
+                  id="rf-name"
+                  class="admin-panel--container__reservation-filter-input"
+                  type="text"
+                  placeholder="Buscar por nombre…"
+                  [value]="reservationFilterName()"
+                  (input)="reservationFilterName.set($any($event.target).value)"
+                />
+              </div>
+              <div class="admin-panel--container__reservation-filter-field">
+                <label class="admin-panel--container__reservation-filter-label" for="rf-date"
+                  >Fecha</label
+                >
+                <input
+                  id="rf-date"
+                  class="admin-panel--container__reservation-filter-input"
+                  type="date"
+                  [value]="reservationFilterDate()"
+                  (input)="reservationFilterDate.set($any($event.target).value)"
+                />
+              </div>
+              <div class="admin-panel--container__reservation-filter-field">
+                <label class="admin-panel--container__reservation-filter-label" for="rf-pack"
+                  >Pack</label
+                >
+                <input
+                  id="rf-pack"
+                  class="admin-panel--container__reservation-filter-input"
+                  type="text"
+                  placeholder="Buscar por pack…"
+                  [value]="reservationFilterPack()"
+                  (input)="reservationFilterPack.set($any($event.target).value)"
+                />
+              </div>
+              @if (isReservationFilterActive()) {
+                <button
+                  type="button"
+                  class="admin-panel--container__reservation-filter-clear"
+                  (click)="clearReservationFilters()"
+                >
+                  Limpiar filtros
+                </button>
+              }
+            </div>
+
+            @if (filteredReservations().length === 0) {
+              <p class="admin-panel--container__hint">
+                No hay reservas en ese rango o con esos filtros.
+              </p>
+            } @else {
+              <p class="admin-panel--container__reservation-filter-count">
+                {{ filteredReservations().length }} de
+                {{ reservationsInSelectedListRange().length }} reservas
+              </p>
+              <div class="admin-panel--container__list">
+                @for (reservation of filteredReservations(); track reservation.id) {
+                  <article class="admin-panel--container__reservation">
+                    <div class="admin-panel--container__reservation-head">
+                      <h3 class="admin-panel--container__reservation-title">
+                        {{ reservation.appointmentTypeName }}
+                      </h3>
+                      <span
+                        class="admin-panel--container__status"
+                        [class.admin-panel--container__status--accepted]="
+                          reservation.adminStatus === 'accepted'
+                        "
+                        [class.admin-panel--container__status--rejected]="
+                          reservation.adminStatus === 'rejected'
+                        "
+                      >
+                        {{ getStatusLabel(reservation.adminStatus) }}
+                      </span>
+                    </div>
+
+                    <p class="admin-panel--container__reservation-text">
+                      {{ reservation.customerName }} · {{ reservation.customerPhone }} ·
+                      {{ reservation.customerEmail }}
+                    </p>
+                    <p class="admin-panel--container__reservation-text">
+                      {{ formatDate(reservation.dateIso) }} · {{ reservation.startTime }} -
+                      {{ reservation.endTime }} ·
+                      {{ formatDuration(reservation.durationMinutes) }}
+                    </p>
+                    <p class="admin-panel--container__reservation-text">
+                      Señal: {{ reservation.paymentReceived ? 'Recibida' : 'Pendiente' }}
+                    </p>
+
+                    <div class="admin-panel--container__reservation-actions">
+                      <button
+                        type="button"
+                        class="admin-panel--container__action-button"
+                        [disabled]="isActionLoading(reservation.id)"
+                        (click)="editReservation(reservation)"
+                      >
+                        Modificar cita
+                      </button>
+
+                      <button
+                        type="button"
+                        class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                        [disabled]="isActionLoading(reservation.id)"
+                        (click)="markPaymentReceived(reservation.id)"
+                      >
+                        @if (reservation.paymentReceived) {
+                          Pago recibido ✓
+                        } @else {
+                          Marcar pago recibido
+                        }
+                      </button>
+
+                      <button
+                        type="button"
+                        class="admin-panel--container__action-button admin-panel--container__action-button--accept"
+                        [disabled]="
+                          isActionLoading(reservation.id) ||
+                          !reservation.paymentReceived ||
+                          reservation.adminStatus === 'accepted'
+                        "
+                        (click)="setReservationStatus(reservation.id, 'accepted')"
+                      >
+                        Aceptar
+                      </button>
+
+                      <button
+                        type="button"
+                        class="admin-panel--container__action-button admin-panel--container__action-button--reject"
+                        [disabled]="
+                          isActionLoading(reservation.id) || reservation.adminStatus === 'rejected'
+                        "
+                        (click)="setReservationStatus(reservation.id, 'rejected')"
+                      >
+                        Rechazar
+                      </button>
+                    </div>
+                  </article>
+                }
+              </div>
+            }
+          }
         }
       }
 
-      @if (activeTab() === 'gestion') {
+      <app-agenda-pack-picker-modal
+        [visible]="showAgendaPackPicker()"
+        [packOptions]="agendaPackOptions"
+        [treatmentOptions]="agendaTreatmentOptions"
+        [selectedTypeId]="agendaSelectedPackTypeId()"
+        (close)="closeAgendaPackPicker()"
+        (selectType)="setAgendaSelectedPackTypeId($event)"
+        (confirm)="goToCalendarWithSelectedPack()"
+      />
+
+      @if (activeTab() === 'agenda' && agendaManagementTab() === 'gestion') {
         <h2 class="admin-panel--container__subtitle">Gestión de reservas</h2>
         <p class="admin-panel--container__hint">
           Pendientes por revisar: {{ getPendingReservationsCount() }}
@@ -140,9 +1194,18 @@
                 <div class="admin-panel--container__reservation-actions">
                   <button
                     type="button"
+                    class="admin-panel--container__action-button"
+                    [disabled]="isActionLoading(reservation.id)"
+                    (click)="editReservation(reservation)"
+                  >
+                    Modificar cita
+                  </button>
+
+                  <button
+                    type="button"
                     class="admin-panel--container__action-button admin-panel--container__action-button--soft"
                     [disabled]="isActionLoading(reservation.id)"
-                    (click)="markPaymentReceived(reservation.id, !reservation.paymentReceived)"
+                    (click)="markPaymentReceived(reservation.id)"
                   >
                     @if (reservation.paymentReceived) {
                       Pago recibido ✓
@@ -168,9 +1231,7 @@
                     type="button"
                     class="admin-panel--container__action-button admin-panel--container__action-button--reject"
                     [disabled]="
-                      isActionLoading(reservation.id) ||
-                      !reservation.paymentReceived ||
-                      reservation.adminStatus === 'rejected'
+                      isActionLoading(reservation.id) || reservation.adminStatus === 'rejected'
                     "
                     (click)="setReservationStatus(reservation.id, 'rejected')"
                   >
@@ -183,7 +1244,7 @@
         }
       }
 
-      @if (activeTab() === 'bloqueos') {
+      @if (activeTab() === 'agenda' && agendaManagementTab() === 'bloqueos') {
         <h2 class="admin-panel--container__subtitle">Bloquear horas o días</h2>
         <p class="admin-panel--container__hint">
           Define días completos o tramos de 30 minutos para bloquear disponibilidad.
@@ -267,7 +1328,7 @@
           </div>
         </div>
 
-        <div class="admin-panel--container__block-form">
+        <div class="admin-panel--container__block-form admin-panel--container__cierre-card">
           <div class="admin-panel--container__label">
             Fecha
             <div class="admin-panel--container__selected-date">
@@ -455,6 +1516,2103 @@
         }
       }
 
+      @if (activeTab() === 'clientes') {
+        <h2 class="admin-panel--container__subtitle">Fichas de clientes</h2>
+        <p class="admin-panel--container__hint">
+          Organiza clientes por vistas: crear, listado resumido y buscador con ficha completa.
+        </p>
+
+        <app-client-management-tabs
+          [activeTab]="clientManagementTab()"
+          (tabChange)="setClientManagementTab($event)"
+        />
+
+        @if (clientCardsError()) {
+          <p class="admin-panel--container__error">{{ clientCardsError() }}</p>
+        }
+
+        @if (clientCardsMessage()) {
+          <p class="admin-panel--container__success">{{ clientCardsMessage() }}</p>
+        }
+
+        <div class="admin-panel--container__client-stats-toolbar">
+          <div class="admin-panel--container__employee-stats-grid">
+            <span class="admin-panel--container__employee-stat-chip">
+              Total packs: {{ getGlobalTreatmentsCount() }}
+            </span>
+            <span class="admin-panel--container__employee-stat-chip">
+              Clientes con historial: {{ getClientsWithTreatmentsCount() }}
+            </span>
+          </div>
+        </div>
+
+        @if (isLoadingClientCards()) {
+          <p class="admin-panel--container__hint">Cargando fichas...</p>
+        } @else {
+          @if (clientManagementTab() === 'crear') {
+            <div class="admin-panel--container__block-form">
+              <label class="admin-panel--container__label">
+                Nombre completo
+                <input
+                  class="admin-panel--container__input"
+                  type="text"
+                  maxlength="80"
+                  placeholder="Nombre y apellidos"
+                  [value]="clientFullName()"
+                  (input)="onClientFullNameInput($event)"
+                />
+              </label>
+
+              <div class="admin-panel--container__time-range">
+                <label class="admin-panel--container__label">
+                  Email
+                  <input
+                    class="admin-panel--container__input"
+                    type="email"
+                    maxlength="120"
+                    placeholder="cliente@email.com"
+                    [value]="clientEmail()"
+                    (input)="onClientEmailInput($event)"
+                  />
+                </label>
+
+                <label class="admin-panel--container__label">
+                  Teléfono
+                  <input
+                    class="admin-panel--container__input"
+                    type="text"
+                    maxlength="30"
+                    placeholder="600 000 000"
+                    [value]="clientPhone()"
+                    (input)="onClientPhoneInput($event)"
+                  />
+                </label>
+
+                <label class="admin-panel--container__label">
+                  Fecha de nacimiento
+                  <input
+                    class="admin-panel--container__input"
+                    type="date"
+                    [value]="clientBirthDateIso()"
+                    (input)="onClientBirthDateInput($event)"
+                  />
+                </label>
+              </div>
+
+              <label class="admin-panel--container__label">
+                Observaciones (opcional)
+                <textarea
+                  class="admin-panel--container__input admin-panel--container__textarea"
+                  rows="3"
+                  maxlength="500"
+                  placeholder="Preferencias, observaciones, historial..."
+                  [value]="clientNotes()"
+                  (input)="onClientNotesInput($event)"
+                ></textarea>
+              </label>
+
+              <button
+                type="button"
+                class="admin-panel--container__button admin-panel--container__button--primary"
+                [disabled]="clientFormLoading()"
+                (click)="createClientCard()"
+              >
+                Crear ficha de cliente
+              </button>
+            </div>
+          }
+
+          @if (clientManagementTab() === 'listado') {
+            <app-client-summary-list
+              [cards]="getClientSummaryCards()"
+              emptyMessage="Todavía no hay fichas de clientes."
+              (openCard)="openClientDetailModal($event)"
+            />
+          }
+
+          @if (clientManagementTab() === 'buscar') {
+            <label class="admin-panel--container__label">
+              Buscar fichas
+              <div class="admin-panel--container__search-wrap">
+                <input
+                  class="admin-panel--container__input admin-panel--container__search-input"
+                  type="text"
+                  placeholder="Buscar por nombre, email o teléfono"
+                  [value]="clientCardsSearch()"
+                  (input)="onClientSearchInput($event)"
+                />
+                @if (clientCardsSearch()) {
+                  <button
+                    type="button"
+                    class="admin-panel--container__search-clear"
+                    aria-label="Limpiar búsqueda"
+                    (click)="clearClientSearch()"
+                  >
+                    ×
+                  </button>
+                }
+              </div>
+            </label>
+
+            @if (clientCards().length === 0) {
+              <p class="admin-panel--container__hint">Todavía no hay fichas de clientes.</p>
+            } @else if (!clientCardsSearch().trim()) {
+              <p class="admin-panel--container__hint">
+                Escribe para buscar clientes por nombre, email o teléfono.
+              </p>
+            } @else if (getFilteredClientCards().length === 0) {
+              <p class="admin-panel--container__hint">No hay fichas para ese filtro.</p>
+            } @else {
+              <app-client-summary-list
+                [cards]="getFilteredClientCards()"
+                emptyMessage="No hay fichas para ese filtro."
+                (openCard)="openClientDetailModal($event)"
+              />
+            }
+          }
+        }
+
+        @if (showClientDetailModal()) {
+          <div class="admin-panel--container__modal-backdrop" (click)="closeClientDetailModal()">
+            <div
+              class="admin-panel--container__modal admin-panel--container__modal--client"
+              (click)="$event.stopPropagation()"
+            >
+              @if (getSelectedClientCard(); as card) {
+                <div class="admin-panel--container__modal-head">
+                  <div>
+                    <h3 class="admin-panel--container__modal-title">{{ card.fullName }}</h3>
+                    <p class="admin-panel--container__modal-subtitle">
+                      {{ card.email }} · {{ card.phone }}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    class="admin-panel--container__modal-close"
+                    (click)="closeClientDetailModal()"
+                    aria-label="Cerrar"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <p class="admin-panel--container__reservation-text">
+                  Alta: {{ formatDateTime(card.createdAtIso) }} · Creada por:
+                  {{ card.createdByEmail }}
+                </p>
+
+                <div
+                  class="admin-panel--container__block-form admin-panel--container__block-form--compact admin-panel--container__client-modal-card"
+                >
+                  <p class="admin-panel--container__hint">Editar ficha</p>
+
+                  <label class="admin-panel--container__label">
+                    Nombre completo
+                    <input
+                      class="admin-panel--container__input"
+                      type="text"
+                      maxlength="80"
+                      [value]="clientEditFullName()"
+                      (input)="onClientEditFullNameInput($event)"
+                    />
+                  </label>
+
+                  <div class="admin-panel--container__time-range">
+                    <label class="admin-panel--container__label">
+                      Email
+                      <input
+                        class="admin-panel--container__input"
+                        type="email"
+                        maxlength="120"
+                        [value]="clientEditEmail()"
+                        (input)="onClientEditEmailInput($event)"
+                      />
+                    </label>
+
+                    <label class="admin-panel--container__label">
+                      Teléfono
+                      <input
+                        class="admin-panel--container__input"
+                        type="text"
+                        maxlength="30"
+                        [value]="clientEditPhone()"
+                        (input)="onClientEditPhoneInput($event)"
+                      />
+                    </label>
+
+                    <label class="admin-panel--container__label">
+                      Fecha de nacimiento
+                      <input
+                        class="admin-panel--container__input"
+                        type="date"
+                        [value]="clientEditBirthDateIso()"
+                        (input)="onClientEditBirthDateInput($event)"
+                      />
+                    </label>
+                  </div>
+
+                  <label class="admin-panel--container__label">
+                    Observaciones
+                    <textarea
+                      class="admin-panel--container__input admin-panel--container__textarea"
+                      rows="3"
+                      maxlength="500"
+                      [value]="clientEditNotes()"
+                      (input)="onClientEditNotesInput($event)"
+                    ></textarea>
+                  </label>
+
+                  <button
+                    type="button"
+                    class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
+                    [disabled]="clientEditLoading()"
+                    (click)="updateClientCard()"
+                  >
+                    Guardar cambios de ficha
+                  </button>
+                </div>
+
+                <div class="admin-panel--container__employee-stats-grid">
+                  <span class="admin-panel--container__employee-stat-chip"
+                    >Total packs: {{ card.treatments.length }}</span
+                  >
+                  <span class="admin-panel--container__employee-stat-chip"
+                    >Último: {{ getClientLatestTreatmentLabel(card) }}</span
+                  >
+                </div>
+
+                <div class="admin-panel--container__client-modal-content">
+                  <div
+                    class="admin-panel--container__block-form admin-panel--container__block-form--compact admin-panel--container__client-modal-card"
+                  >
+                    <p class="admin-panel--container__hint">Opciones</p>
+                    <button
+                      type="button"
+                      class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
+                      (click)="openPaymentModal()"
+                    >
+                      💰 Cobrar pago
+                    </button>
+                  </div>
+
+                  <div
+                    class="admin-panel--container__block-form admin-panel--container__block-form--compact admin-panel--container__client-modal-card"
+                  >
+                    <p class="admin-panel--container__hint">Añadir tratamiento</p>
+                    <div class="admin-panel--container__client-modal-fields">
+                      <label class="admin-panel--container__label">
+                        Tratamiento
+                        <div class="admin-panel--container__time-select-wrap">
+                          <select
+                            class="admin-panel--container__input admin-panel--container__time-select"
+                            [value]="clientTreatmentName()"
+                            (change)="onClientTreatmentNameInput($event)"
+                          >
+                            <option value="">Selecciona tratamiento</option>
+                            <option value="" disabled>──── Packs ────</option>
+                            @for (treatment of clientPackOptions; track treatment.name) {
+                              <option [value]="treatment.name">
+                                {{ getClientTreatmentOptionLabel(treatment) }}
+                              </option>
+                            }
+                            <option value="" disabled>──── Tratamientos ────</option>
+                            @for (treatment of clientTratamientoOptions; track treatment.name) {
+                              <option [value]="treatment.name">
+                                {{ getClientTreatmentOptionLabel(treatment) }}
+                              </option>
+                            }
+                          </select>
+                        </div>
+                      </label>
+                      <label class="admin-panel--container__label">
+                        Nota (opcional)
+                        <input
+                          class="admin-panel--container__input"
+                          type="text"
+                          maxlength="300"
+                          placeholder="Detalle del servicio"
+                          [value]="clientTreatmentNote()"
+                          (input)="onClientTreatmentNoteInput($event)"
+                        />
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
+                      [disabled]="clientTreatmentLoading()"
+                      (click)="addClientTreatment()"
+                    >
+                      Añadir tratamiento
+                    </button>
+                  </div>
+
+                  <div
+                    class="admin-panel--container__client-chart admin-panel--container__client-modal-card"
+                  >
+                    <div class="admin-panel--container__client-chart-head">
+                      <p class="admin-panel--container__employee-history-title">Gráfica de packs</p>
+                      <label
+                        class="admin-panel--container__label admin-panel--container__label--inline"
+                      >
+                        Tipo
+                        <div class="admin-panel--container__time-select-wrap">
+                          <select
+                            class="admin-panel--container__input admin-panel--container__time-select"
+                            [value]="clientChartType()"
+                            (change)="onClientChartTypeChange($event)"
+                          >
+                            <option value="bar">Barras / Columnas</option>
+                            <option value="pie">Circular</option>
+                          </select>
+                        </div>
+                      </label>
+                    </div>
+
+                    @let selectedChartType = clientChartType();
+                    @let categoryRows = getClientTreatmentCategoryRows(card);
+                    @let pieData = getClientTreatmentPieData(card);
+
+                    @if (card.treatments.length === 0) {
+                      <p class="admin-panel--container__hint">Sin datos para mostrar gráfica.</p>
+                    } @else {
+                      @if (selectedChartType === 'bar') {
+                        @let barTicks = getClientBarChartTicks(categoryRows);
+                        <div class="admin-panel--container__client-bar-chart">
+                          <div class="admin-panel--container__client-bar-axis">
+                            @for (tick of barTicks; track $index) {
+                              <span>{{ tick }}</span>
+                            }
+                          </div>
+
+                          <div class="admin-panel--container__client-bar-main">
+                            <div class="admin-panel--container__client-bar-plot">
+                              <div class="admin-panel--container__client-columns">
+                                @for (row of categoryRows; track row.name) {
+                                  <div class="admin-panel--container__client-column-item">
+                                    <span class="admin-panel--container__client-column-value">{{
+                                      row.count
+                                    }}</span>
+                                    <div
+                                      class="admin-panel--container__client-column-bar"
+                                      [style.height.%]="row.heightPercent"
+                                      [style.background]="row.color"
+                                    ></div>
+                                  </div>
+                                }
+                              </div>
+                            </div>
+
+                            <div class="admin-panel--container__client-column-labels">
+                              @for (row of categoryRows; track row.name) {
+                                <span class="admin-panel--container__client-column-label">{{
+                                  row.name
+                                }}</span>
+                              }
+                            </div>
+                          </div>
+                        </div>
+                      }
+
+                      @if (selectedChartType === 'pie') {
+                        @if (pieData.total === 0) {
+                          <p class="admin-panel--container__hint">
+                            Sin datos para mostrar gráfica.
+                          </p>
+                        } @else {
+                          <div class="admin-panel--container__client-pie-layout">
+                            <div
+                              class="admin-panel--container__client-pie-chart"
+                              [style.background]="pieData.gradient"
+                              role="img"
+                              [attr.aria-label]="'Distribución de packs. Total: ' + pieData.total"
+                            >
+                              <div class="admin-panel--container__client-pie-hole">
+                                <span>Total</span>
+                                <strong>{{ pieData.total }}</strong>
+                              </div>
+                            </div>
+
+                            <div class="admin-panel--container__client-chart-list">
+                              @for (slice of pieData.slices; track slice.name) {
+                                <div class="admin-panel--container__client-chart-row">
+                                  <div class="admin-panel--container__client-chart-legend">
+                                    <span
+                                      class="admin-panel--container__client-chart-dot"
+                                      [style.background]="slice.color"
+                                    ></span>
+                                    <span class="admin-panel--container__client-chart-label">{{
+                                      slice.name
+                                    }}</span>
+                                    <span class="admin-panel--container__client-chart-value"
+                                      >{{ slice.count }} ({{ slice.percentage }}%)</span
+                                    >
+                                  </div>
+                                </div>
+                              }
+                            </div>
+                          </div>
+                        }
+                      }
+                    }
+                  </div>
+
+                  <div
+                    class="admin-panel--container__employee-history admin-panel--container__client-modal-card admin-panel--container__client-modal-card--history"
+                  >
+                    <p class="admin-panel--container__employee-history-title">Historial de packs</p>
+                    @if (card.treatments.length === 0) {
+                      <p class="admin-panel--container__hint">
+                        Este cliente aún no tiene packs registrados.
+                      </p>
+                    } @else {
+                      <div
+                        class="admin-panel--container__employee-history-list admin-panel--container__employee-history-list--compact"
+                      >
+                        @for (item of card.treatments; track item.id) {
+                          <article class="admin-panel--container__employee-history-item">
+                            <p class="admin-panel--container__employee-history-text">
+                              <strong>{{ item.name }}</strong> ·
+                              {{ formatDateTime(item.createdAtIso) }}
+                            </p>
+                            @if (item.note) {
+                              <p class="admin-panel--container__employee-history-note">
+                                {{ item.note }}
+                              </p>
+                            }
+                          </article>
+                        }
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      }
+
+      @if (activeTab() === 'almacen') {
+        <h2 class="admin-panel--container__subtitle">Almacén</h2>
+        <p class="admin-panel--container__hint">
+          Gestiona productos del salón con alta rápida y consulta de stock.
+        </p>
+
+        @if (stockError()) {
+          <p class="admin-panel--container__error">{{ stockError() }}</p>
+        }
+
+        @if (stockMessage()) {
+          <p class="admin-panel--container__success">{{ stockMessage() }}</p>
+        }
+
+        <div class="admin-panel--container__employee-subtabs">
+          <button
+            type="button"
+            class="admin-panel--container__employee-subtab"
+            [class.admin-panel--container__employee-subtab--active]="
+              stockManagementTab() === 'crear'
+            "
+            (click)="setStockManagementTab('crear')"
+          >
+            Añadir producto
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__employee-subtab"
+            [class.admin-panel--container__employee-subtab--active]="stockManagementTab() === 'ver'"
+            (click)="setStockManagementTab('ver')"
+          >
+            Ver stock
+          </button>
+        </div>
+
+        @if (stockManagementTab() === 'crear') {
+          <div class="admin-panel--container__block-form">
+            <div class="admin-panel--container__time-range">
+              <label class="admin-panel--container__label">
+                Nombre del producto
+                <input
+                  class="admin-panel--container__input"
+                  type="text"
+                  maxlength="120"
+                  placeholder="Ej. Champú reparador"
+                  [value]="stockCreateName()"
+                  (input)="onStockCreateNameInput($event)"
+                />
+              </label>
+
+              <label class="admin-panel--container__label">
+                Marca
+                <input
+                  class="admin-panel--container__input"
+                  type="text"
+                  maxlength="80"
+                  placeholder="Ej. Kérastase"
+                  [value]="stockCreateBrand()"
+                  (input)="onStockCreateBrandInput($event)"
+                />
+              </label>
+            </div>
+
+            <div class="admin-panel--container__time-range">
+              <label class="admin-panel--container__label">
+                Cantidad
+                <input
+                  class="admin-panel--container__input"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="0"
+                  [value]="stockCreateQuantity()"
+                  (input)="onStockCreateQuantityInput($event)"
+                />
+              </label>
+
+              <label class="admin-panel--container__label">
+                Precio
+                <input
+                  class="admin-panel--container__input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  [value]="stockCreatePrice()"
+                  (input)="onStockCreatePriceInput($event)"
+                />
+              </label>
+
+              <label class="admin-panel--container__label">
+                Color
+                <input
+                  class="admin-panel--container__input"
+                  type="text"
+                  maxlength="40"
+                  placeholder="Ej. Rubio ceniza"
+                  [value]="stockCreateColor()"
+                  (input)="onStockCreateColorInput($event)"
+                />
+              </label>
+            </div>
+
+            <button
+              type="button"
+              class="admin-panel--container__button admin-panel--container__button--primary"
+              [disabled]="stockCreateLoading()"
+              (click)="createStockProduct()"
+            >
+              Guardar producto
+            </button>
+          </div>
+        }
+
+        @if (stockManagementTab() === 'ver') {
+          <div class="admin-panel--container__employee-filters">
+            <label class="admin-panel--container__label">
+              Buscar por nombre
+              <input
+                class="admin-panel--container__input"
+                type="text"
+                placeholder="Nombre del producto"
+                [value]="stockFilterName()"
+                (input)="onStockFilterNameInput($event)"
+              />
+            </label>
+
+            <label class="admin-panel--container__label">
+              Marca
+              <input
+                class="admin-panel--container__input"
+                type="text"
+                placeholder="Marca"
+                [value]="stockFilterBrand()"
+                (input)="onStockFilterBrandInput($event)"
+              />
+            </label>
+
+            <label class="admin-panel--container__label">
+              Color
+              <input
+                class="admin-panel--container__input"
+                type="text"
+                placeholder="Color"
+                [value]="stockFilterColor()"
+                (input)="onStockFilterColorInput($event)"
+              />
+            </label>
+
+            <label class="admin-panel--container__label">
+              Cantidad mínima
+              <input
+                class="admin-panel--container__input"
+                type="number"
+                min="0"
+                step="1"
+                placeholder="0"
+                [value]="stockFilterMinQuantity()"
+                (input)="onStockFilterMinQuantityInput($event)"
+              />
+            </label>
+
+            <label class="admin-panel--container__label">
+              Precio máximo
+              <input
+                class="admin-panel--container__input"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                [value]="stockFilterMaxPrice()"
+                (input)="onStockFilterMaxPriceInput($event)"
+              />
+            </label>
+          </div>
+
+          <div
+            class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact"
+          >
+            <button
+              type="button"
+              class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+              (click)="clearStockFilters()"
+            >
+              Limpiar filtros
+            </button>
+          </div>
+
+          @if (isLoadingStockProducts()) {
+            <p class="admin-panel--container__hint">Cargando stock...</p>
+          } @else if (stockProducts().length === 0) {
+            <p class="admin-panel--container__hint">No hay productos registrados en almacén.</p>
+          } @else if (getFilteredStockProducts().length === 0) {
+            <p class="admin-panel--container__hint">No hay productos para esos filtros.</p>
+          } @else {
+            <div class="admin-panel--container__list">
+              @for (product of getFilteredStockProducts(); track product.id) {
+                <article class="admin-panel--container__reservation">
+                  <div class="admin-panel--container__reservation-head">
+                    <h3 class="admin-panel--container__reservation-title">
+                      {{ product.productName }}
+                    </h3>
+                    <div class="admin-panel--container__stock-quantity-row">
+                      <button
+                        type="button"
+                        class="admin-panel--container__stock-qty-btn admin-panel--container__stock-qty-btn--minus"
+                        [disabled]="
+                          stockAdjustingProductId() === product.id || product.quantity === 0
+                        "
+                        (click)="adjustStockQuantity(product.id, -1)"
+                        title="Restar 1"
+                      >
+                        &#8722;
+                      </button>
+                      <span class="admin-panel--container__stock-qty-value">{{
+                        product.quantity
+                      }}</span>
+                      <button
+                        type="button"
+                        class="admin-panel--container__stock-qty-btn admin-panel--container__stock-qty-btn--plus"
+                        [disabled]="stockAdjustingProductId() === product.id"
+                        (click)="adjustStockQuantity(product.id, 1)"
+                        title="Sumar 1"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  <p class="admin-panel--container__reservation-text">
+                    Marca: {{ product.brand }} &middot; Color: {{ product.color }}
+                  </p>
+                  <p class="admin-panel--container__reservation-text">
+                    Precio: {{ product.price }} &euro; &middot; Alta:
+                    {{ formatDateTime(product.createdAtIso) }}
+                  </p>
+                </article>
+              }
+              @if (stockAdjustError()) {
+                <p class="admin-panel--container__error">{{ stockAdjustError() }}</p>
+              }
+            </div>
+          }
+        }
+      }
+
+      @if (activeTab() === 'cierre') {
+        <h2 class="admin-panel--container__subtitle">Cierre de caja</h2>
+
+        @if (cierreError()) {
+          <p class="admin-panel--container__error-message">{{ cierreError() }}</p>
+        }
+        @if (cierreMessage()) {
+          <p class="admin-panel--container__success-message">{{ cierreMessage() }}</p>
+        }
+
+        <!-- Formulario de registro -->
+        <div class="admin-panel--container__block-form">
+          <h3 class="admin-panel--container__block-form-title">Registrar cierre del día</h3>
+          <p class="admin-panel--container__hint">
+            Introduce los importes cobrados por cada método de pago. El total se calcula
+            automáticamente.
+          </p>
+
+          <div class="admin-panel--container__cierre-summary">
+            @if (isLoadingCierreAutoDiario()) {
+              <div class="admin-panel--container__cierre-summary-row">
+                <span class="admin-panel--container__cierre-summary-label"
+                  >Cargando acumulado automático del día...</span
+                >
+              </div>
+            } @else if (hasCierreAutoDiario() && cierreAutoDiario(); as auto) {
+              <div class="admin-panel--container__cierre-summary-row">
+                <span class="admin-panel--container__cierre-summary-label"
+                  >🧾 Acumulado automático ({{ auto.dateIso }})</span
+                >
+                <span class="admin-panel--container__cierre-summary-value"
+                  >Actualizado: {{ formatDateTime(auto.updatedAtIso) }}</span
+                >
+              </div>
+              <div class="admin-panel--container__cierre-summary-row">
+                <span class="admin-panel--container__cierre-summary-label">💵 Efectivo</span>
+                <span class="admin-panel--container__cierre-summary-value"
+                  >{{ auto.efectivo | number: '1.2-2' }} €</span
+                >
+              </div>
+              <div class="admin-panel--container__cierre-summary-row">
+                <span class="admin-panel--container__cierre-summary-label">💳 Tarjeta</span>
+                <span class="admin-panel--container__cierre-summary-value"
+                  >{{ auto.tarjeta | number: '1.2-2' }} €</span
+                >
+              </div>
+              <div class="admin-panel--container__cierre-summary-row">
+                <span class="admin-panel--container__cierre-summary-label">📱 Bizum</span>
+                <span class="admin-panel--container__cierre-summary-value"
+                  >{{ auto.bizum | number: '1.2-2' }} €</span
+                >
+              </div>
+              <div
+                class="admin-panel--container__cierre-summary-row admin-panel--container__cierre-summary-row--total"
+              >
+                <span class="admin-panel--container__cierre-summary-label">TOTAL AUTO</span>
+                <span class="admin-panel--container__cierre-summary-value"
+                  >{{ auto.total | number: '1.2-2' }} €</span
+                >
+              </div>
+              <button
+                type="button"
+                class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                (click)="applyCierreAutoDiarioToForm()"
+              >
+                Usar acumulado automático en formulario
+              </button>
+            } @else {
+              <div class="admin-panel--container__cierre-summary-row">
+                <span class="admin-panel--container__cierre-summary-label"
+                  >Aún no hay cobros automáticos registrados hoy.</span
+                >
+              </div>
+            }
+          </div>
+
+          <div class="admin-panel--container__form-row">
+            <div class="admin-panel--container__form-group">
+              <label class="admin-panel--container__label" for="cierreEfectivo">Efectivo (€)</label>
+              <input
+                id="cierreEfectivo"
+                class="admin-panel--container__input"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                [value]="cierreEfectivo()"
+                (input)="onCierreEfectivoInput($event)"
+              />
+            </div>
+            <div class="admin-panel--container__form-group">
+              <label class="admin-panel--container__label" for="cierreTarjeta">Tarjeta (€)</label>
+              <input
+                id="cierreTarjeta"
+                class="admin-panel--container__input"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                [value]="cierreTarjeta()"
+                (input)="onCierreTarjetaInput($event)"
+              />
+            </div>
+            <div class="admin-panel--container__form-group">
+              <label class="admin-panel--container__label" for="cierreBizum">Bizum (€)</label>
+              <input
+                id="cierreBizum"
+                class="admin-panel--container__input"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                [value]="cierreBizum()"
+                (input)="onCierreBizumInput($event)"
+              />
+            </div>
+          </div>
+
+          <!-- Resumen de totales -->
+          <div class="admin-panel--container__cierre-summary">
+            <div class="admin-panel--container__cierre-summary-row">
+              <span class="admin-panel--container__cierre-summary-label">💵 Efectivo</span>
+              <span class="admin-panel--container__cierre-summary-value"
+                >{{ cierreEfectivoNum() | number: '1.2-2' }} €</span
+              >
+            </div>
+            <div class="admin-panel--container__cierre-summary-row">
+              <span class="admin-panel--container__cierre-summary-label">💳 Tarjeta</span>
+              <span class="admin-panel--container__cierre-summary-value"
+                >{{ cierreTarjetaNum() | number: '1.2-2' }} €</span
+              >
+            </div>
+            <div class="admin-panel--container__cierre-summary-row">
+              <span class="admin-panel--container__cierre-summary-label">📱 Bizum</span>
+              <span class="admin-panel--container__cierre-summary-value"
+                >{{ cierreBizumNum() | number: '1.2-2' }} €</span
+              >
+            </div>
+            <div
+              class="admin-panel--container__cierre-summary-row admin-panel--container__cierre-summary-row--total"
+            >
+              <span class="admin-panel--container__cierre-summary-label">TOTAL</span>
+              <span class="admin-panel--container__cierre-summary-value"
+                >{{ cierreTotal() | number: '1.2-2' }} €</span
+              >
+            </div>
+          </div>
+
+          <div class="admin-panel--container__form-group">
+            <label class="admin-panel--container__label" for="cierreNotas">Notas (opcional)</label>
+            <textarea
+              id="cierreNotas"
+              class="admin-panel--container__textarea"
+              rows="3"
+              placeholder="Observaciones del cierre..."
+              [value]="cierreNotas()"
+              (input)="onCierreNotasInput($event)"
+            ></textarea>
+          </div>
+
+          <div class="admin-panel--container__btn-wrapper">
+            <button
+              class="admin-panel--container__btn admin-panel--container__btn--primary"
+              [disabled]="cierreLoading()"
+              (click)="registrarCierre()"
+            >
+              @if (cierreLoading()) {
+                Registrando...
+              } @else {
+                Registrar cierre
+              }
+            </button>
+          </div>
+
+          <div
+            class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact admin-panel--container__section admin-panel--container__cierre-card admin-panel--container__cierre-card--compact"
+          >
+            <button
+              type="button"
+              class="admin-panel--container__action-button admin-panel--container__action-button--secondary"
+              [disabled]="!canExportLatestCierrePdf()"
+              (click)="exportLatestCierrePdf()"
+            >
+              Exportar último cierre en PDF
+            </button>
+            <span class="admin-panel--container__hint admin-panel--container__hint--compact">
+              Genera un PDF imprimible desde navegador, listo para guardar o compartir.
+            </span>
+          </div>
+        </div>
+
+        <!-- Historial de cierres -->
+        <div class="admin-panel--container__section admin-panel--container__cierre-card">
+          <h3 class="admin-panel--container__block-form-title">Historial de cierres</h3>
+
+          @if (isLoadingCierres()) {
+            <p class="admin-panel--container__hint">Cargando historial...</p>
+          } @else if (cierreHistorial().length === 0) {
+            <p class="admin-panel--container__hint">No hay cierres registrados todavía.</p>
+          } @else {
+            <div class="admin-panel--container__table-wrapper">
+              <table class="admin-panel--container__table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Efectivo</th>
+                    <th>Tarjeta</th>
+                    <th>Bizum</th>
+                    <th>Total</th>
+                    <th>Notas</th>
+                    <th>Estado fiscal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (cierre of cierreHistorial(); track cierre.id) {
+                    <tr>
+                      <td>{{ cierre.fechaIso }}</td>
+                      <td>{{ cierre.efectivo | number: '1.2-2' }} €</td>
+                      <td>{{ cierre.tarjeta | number: '1.2-2' }} €</td>
+                      <td>{{ cierre.bizum | number: '1.2-2' }} €</td>
+                      <td>
+                        <strong>{{ cierre.total | number: '1.2-2' }} €</strong>
+                      </td>
+                      <td>{{ cierre.notas || '—' }}</td>
+                      <td>
+                        @if (cierre.enviadoAlServicioFiscal) {
+                          <span
+                            class="admin-panel--container__badge admin-panel--container__badge--green"
+                            >Enviado ✓</span
+                          >
+                        } @else {
+                          <span
+                            class="admin-panel--container__badge admin-panel--container__badge--gray"
+                            >Pendiente</span
+                          >
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </div>
+
+        <div class="admin-panel--container__section admin-panel--container__cierre-card">
+          <h3 class="admin-panel--container__block-form-title">Estadísticas de caja</h3>
+          <p class="admin-panel--container__hint">
+            Visualiza el dinero generado por semana, mes o año, y compara efectivo, tarjeta, Bizum,
+            digital o total.
+          </p>
+
+          <div class="admin-panel--container__client-stats-filters">
+            <label class="admin-panel--container__label">
+              Periodo
+              <div class="admin-panel--container__time-select-wrap">
+                <select
+                  class="admin-panel--container__input admin-panel--container__time-select"
+                  [value]="cierreStatsRange()"
+                  (change)="onCierreStatsRangeChange($event)"
+                >
+                  <option value="semana">Semana actual</option>
+                  <option value="mes">Mes actual</option>
+                  <option value="anio">Año actual</option>
+                </select>
+              </div>
+            </label>
+
+            <label class="admin-panel--container__label">
+              Métrica
+              <div class="admin-panel--container__time-select-wrap">
+                <select
+                  class="admin-panel--container__input admin-panel--container__time-select"
+                  [value]="cierreStatsMetric()"
+                  (change)="onCierreStatsMetricChange($event)"
+                >
+                  <option value="efectivo">Efectivo</option>
+                  <option value="tarjeta">Tarjeta</option>
+                  <option value="bizum">Bizum</option>
+                  <option value="digital">Tarjeta + Bizum</option>
+                  <option value="total">Total</option>
+                </select>
+              </div>
+            </label>
+          </div>
+
+          <div class="admin-panel--container__employee-stats-grid">
+            <span class="admin-panel--container__employee-stat-chip">
+              Rango · {{ getCierreStatsRangeLabel() }}
+            </span>
+            <span class="admin-panel--container__employee-stat-chip">
+              Vista · {{ getCierreStatsMetricLabel() }}
+            </span>
+            <span class="admin-panel--container__employee-stat-chip">
+              Total · {{ getCierreStatsTotalAmount() | number: '1.2-2' }} €
+            </span>
+            <span class="admin-panel--container__employee-stat-chip">
+              Cierres · {{ getCierreStatsEntries().length }}
+            </span>
+          </div>
+          @let cierreTimelineRows = getCierreStatsTimelineRows();
+          @let cierrePieData = getCierreStatsPieData();
+
+          <div
+            class="admin-panel--container__client-chart admin-panel--container__client-chart--stats admin-panel--container__section admin-panel--container__cierre-card admin-panel--container__cierre-card--chart"
+          >
+            <div class="admin-panel--container__client-chart-head">
+              <p class="admin-panel--container__employee-history-title">Evolución del dinero</p>
+              <div class="admin-panel--container__client-chart-controls">
+                <span class="admin-panel--container__employee-stat-chip">
+                  Agrupación: {{ getCierreStatsGroupingLabel() }}
+                </span>
+              </div>
+            </div>
+
+            @if (cierreTimelineRows.length === 0) {
+              <p class="admin-panel--container__hint">
+                No hay cierres registrados en ese periodo para generar la gráfica de barras.
+              </p>
+            } @else {
+              @let cierreBarTicks = getCierreStatsBarTicks(cierreTimelineRows);
+              <div class="admin-panel--container__client-bar-chart">
+                <div class="admin-panel--container__client-bar-axis">
+                  @for (tick of cierreBarTicks; track $index) {
+                    <span>{{ tick | number: '1.0-0' }}</span>
+                  }
+                </div>
+
+                <div class="admin-panel--container__client-bar-main">
+                  <div class="admin-panel--container__client-bar-scroll">
+                    <div
+                      class="admin-panel--container__client-bar-scroll-inner"
+                      [style.min-width.rem]="
+                        getCierreStatsChartMinWidthRem(cierreTimelineRows.length)
+                      "
+                    >
+                      <div class="admin-panel--container__client-bar-plot">
+                        <div class="admin-panel--container__client-columns">
+                          @for (row of cierreTimelineRows; track row.key) {
+                            <div class="admin-panel--container__client-column-item">
+                              <span class="admin-panel--container__client-column-value">
+                                {{ row.amount | number: '1.0-0' }}
+                              </span>
+                              <div
+                                class="admin-panel--container__client-column-bar"
+                                [style.height.%]="row.heightPercent"
+                                [style.background]="row.color"
+                                [attr.title]="
+                                  row.tooltipLabel + ' · ' + (row.amount | number: '1.2-2') + ' €'
+                                "
+                              ></div>
+                            </div>
+                          }
+                        </div>
+                      </div>
+
+                      <div class="admin-panel--container__client-column-labels">
+                        @for (row of cierreTimelineRows; track row.key) {
+                          <span
+                            class="admin-panel--container__client-column-label"
+                            [attr.title]="row.tooltipLabel"
+                          >
+                            {{ row.showLabel ? row.shortLabel : '·' }}
+                          </span>
+                        }
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+
+          <div
+            class="admin-panel--container__client-chart admin-panel--container__client-chart--stats admin-panel--container__section admin-panel--container__cierre-card admin-panel--container__cierre-card--chart"
+          >
+            <div class="admin-panel--container__client-chart-head">
+              <p class="admin-panel--container__employee-history-title">
+                Reparto por forma de pago
+              </p>
+              <div class="admin-panel--container__client-chart-controls">
+                <span class="admin-panel--container__employee-stat-chip">
+                  Periodo: {{ getCierreStatsRangeLabel() }}
+                </span>
+              </div>
+            </div>
+
+            @if (cierrePieData.total === 0) {
+              <p class="admin-panel--container__hint">
+                No hay importes acumulados para mostrar la gráfica circular.
+              </p>
+            } @else {
+              <div class="admin-panel--container__client-pie-layout">
+                <div
+                  class="admin-panel--container__client-pie-chart admin-panel--container__client-pie-chart--stats"
+                  [style.background]="cierrePieData.gradient"
+                  role="img"
+                  [attr.aria-label]="'Reparto de ingresos. Total: ' + cierrePieData.total"
+                >
+                  <div class="admin-panel--container__client-pie-hole">
+                    <span>Total</span>
+                    <strong>{{ cierrePieData.total | number: '1.0-0' }} €</strong>
+                  </div>
+                </div>
+
+                <div class="admin-panel--container__client-chart-list">
+                  @for (slice of cierrePieData.slices; track slice.name) {
+                    <div class="admin-panel--container__client-chart-row">
+                      <div class="admin-panel--container__client-chart-legend">
+                        <span
+                          class="admin-panel--container__client-chart-dot"
+                          [style.background]="slice.color"
+                        ></span>
+                        <span class="admin-panel--container__client-chart-label">
+                          {{ slice.name }}
+                        </span>
+                      </div>
+                      <span class="admin-panel--container__client-chart-value">
+                        {{ slice.amount | number: '1.2-2' }} € · {{ slice.percentage }}%
+                      </span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      @if (activeTab() === 'estadisticas') {
+        <h2 class="admin-panel--container__subtitle">Estadísticas de packs</h2>
+        <p class="admin-panel--container__hint">
+          Análisis completo de packs: comparativas por empleado, especialidades y evolución
+          temporal.
+        </p>
+
+        <div class="admin-panel--container__client-stats-filters">
+          <label class="admin-panel--container__label">
+            Periodo
+            <div class="admin-panel--container__time-select-wrap">
+              <select
+                class="admin-panel--container__input admin-panel--container__time-select"
+                [value]="globalTreatmentFilterPreset()"
+                (change)="onGlobalTreatmentFilterPresetChange($event)"
+              >
+                <option value="all">Todo el histórico</option>
+                <option value="month">Mes actual</option>
+                <option value="last30">Últimos 30 días</option>
+                <option value="year">Año actual</option>
+                <option value="custom">Rango personalizado</option>
+              </select>
+            </div>
+          </label>
+
+          <div class="admin-panel--container__client-stats-range">
+            <label class="admin-panel--container__label">
+              Desde
+              <input
+                class="admin-panel--container__input"
+                type="date"
+                [value]="globalTreatmentStartDateIso()"
+                (input)="onGlobalTreatmentStartDateInput($event)"
+              />
+            </label>
+
+            <label class="admin-panel--container__label">
+              Hasta
+              <input
+                class="admin-panel--container__input"
+                type="date"
+                [value]="globalTreatmentEndDateIso()"
+                (input)="onGlobalTreatmentEndDateInput($event)"
+              />
+            </label>
+          </div>
+
+          <label class="admin-panel--container__label">
+            Empleado
+            <div class="admin-panel--container__time-select-wrap">
+              <select
+                class="admin-panel--container__input admin-panel--container__time-select"
+                [value]="globalTreatmentEmployeeFilterEmail()"
+                (change)="onGlobalTreatmentEmployeeFilterChange($event)"
+              >
+                <option value="all">Todos los empleados</option>
+                @for (option of getGlobalTreatmentEmployeeOptions(); track option.email) {
+                  <option [value]="option.email">{{ option.label }}</option>
+                }
+              </select>
+            </div>
+          </label>
+
+          <div
+            class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact"
+          >
+            <button
+              type="button"
+              class="admin-panel--container__action-button admin-panel--container__action-button--secondary"
+              (click)="resetGlobalTreatmentPreferencesToDefaults()"
+            >
+              Restaurar vista
+            </button>
+            <button
+              type="button"
+              class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+              (click)="clearGlobalTreatmentDateRange()"
+            >
+              Limpiar filtros
+            </button>
+          </div>
+        </div>
+
+        <div class="admin-panel--container__block-form admin-panel--container__block-form--compact">
+          <label class="admin-panel--container__label admin-panel--container__label--inline">
+            Guardar vista
+            <div
+              class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact"
+            >
+              <input
+                class="admin-panel--container__input"
+                type="text"
+                maxlength="40"
+                placeholder="Ej. Últimos 30 días"
+                [value]="globalTreatmentSavedViewName()"
+                (input)="onGlobalTreatmentSavedViewNameInput($event)"
+              />
+              <button
+                type="button"
+                class="admin-panel--container__action-button"
+                [disabled]="!canSaveGlobalTreatmentView()"
+                (click)="saveCurrentGlobalTreatmentView()"
+              >
+                Guardar vista
+              </button>
+            </div>
+          </label>
+
+          @let savedViews = getGlobalTreatmentSavedViews();
+
+          @if (savedViews.length > 0) {
+            <div class="admin-panel--container__employee-stats-grid" aria-label="Vistas guardadas">
+              @for (view of savedViews; track view.id) {
+                <div
+                  class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact admin-panel--container__reservation-actions--saved-view-row"
+                >
+                  <button
+                    type="button"
+                    class="admin-panel--container__employee-stat-chip admin-panel--container__saved-view-button"
+                    [class.admin-panel--container__saved-view-button--active]="
+                      isGlobalTreatmentSavedViewActive(view.id)
+                    "
+                    (click)="applyGlobalTreatmentSavedView(view.id)"
+                  >
+                    {{ view.name }}
+                  </button>
+                  <button
+                    type="button"
+                    class="admin-panel--container__employee-clear-filter admin-panel--container__employee-clear-filter--saved-view-remove"
+                    (click)="deleteGlobalTreatmentSavedView(view.id)"
+                    [attr.aria-label]="'Eliminar vista ' + view.name"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="admin-panel--container__hint admin-panel--container__hint--compact">
+              Guarda combinaciones de filtros y gráficos para reutilizarlas después.
+            </p>
+          }
+        </div>
+
+        <p class="admin-panel--container__hint">Filtros activos</p>
+        <div class="admin-panel--container__employee-stats-grid">
+          <span class="admin-panel--container__employee-stat-chip">
+            Período · {{ getGlobalTreatmentFilterLabel() }}
+          </span>
+          <span class="admin-panel--container__employee-stat-chip">
+            Empl. · {{ getGlobalTreatmentEmployeeFilterLabel() }}
+          </span>
+          <span class="admin-panel--container__employee-stat-chip">
+            Trat. · {{ getGlobalTreatmentNameFilterLabel() }}
+          </span>
+        </div>
+
+        <p class="admin-panel--container__hint">Resumen</p>
+        <div class="admin-panel--container__employee-stats-grid">
+          <span class="admin-panel--container__employee-stat-chip">
+            Total · {{ getFilteredGlobalTreatmentsCount() }}
+          </span>
+          <span class="admin-panel--container__employee-stat-chip">
+            Clientes · {{ getFilteredClientsWithTreatmentsCount() }}
+          </span>
+          <span
+            class="admin-panel--container__employee-stat-chip admin-panel--container__employee-stat-chip--multiline"
+          >
+            Top · {{ getGlobalTopEmployeeLabel() }}
+          </span>
+          <span
+            class="admin-panel--container__employee-stat-chip admin-panel--container__employee-stat-chip--multiline"
+          >
+            Último · {{ getFilteredGlobalLatestTreatmentLabel() }}
+          </span>
+        </div>
+
+        <div
+          class="admin-panel--container__client-chart admin-panel--container__client-chart--stats"
+        >
+          <div class="admin-panel--container__client-chart-head">
+            <p class="admin-panel--container__employee-history-title">Comparativa por empleado</p>
+            <div class="admin-panel--container__client-chart-controls">
+              <span class="admin-panel--container__employee-stat-chip">
+                Empleados activos: {{ getGlobalTreatmentEmployeeRankingRows().length }}
+              </span>
+              @if (hasGlobalTreatmentEmployeeFilterSelected()) {
+                <button
+                  type="button"
+                  class="admin-panel--container__employee-clear-filter"
+                  (click)="clearGlobalTreatmentEmployeeFilter()"
+                >
+                  Quitar selección
+                </button>
+              }
+            </div>
+          </div>
+
+          <p class="admin-panel--container__hint">
+            Pulsa un trabajador para filtrar toda la vista global.
+          </p>
+
+          @let employeeRankingRows = getGlobalTreatmentEmployeeRankingRows();
+
+          @if (employeeRankingRows.length === 0) {
+            <p class="admin-panel--container__hint">
+              No hay suficientes datos para comparar empleados en este filtro.
+            </p>
+          } @else {
+            <div class="admin-panel--container__employee-ranking-list">
+              @for (row of employeeRankingRows; track row.email; let rankIndex = $index) {
+                <button
+                  type="button"
+                  class="admin-panel--container__employee-ranking-row"
+                  [class.admin-panel--container__employee-ranking-row--interactive]="
+                    canApplyGlobalTreatmentEmployeeFilter(row.email)
+                  "
+                  [class.admin-panel--container__employee-ranking-row--active]="
+                    isGlobalTreatmentEmployeeFilterSelected(row.email)
+                  "
+                  [disabled]="!canApplyGlobalTreatmentEmployeeFilter(row.email)"
+                  (click)="applyGlobalTreatmentEmployeeFilter(row.email)"
+                >
+                  <div class="admin-panel--container__employee-ranking-head">
+                    <div class="admin-panel--container__employee-badges">
+                      <span class="admin-panel--container__employee-stat-chip">
+                        #{{ rankIndex + 1 }}
+                      </span>
+                      <span class="admin-panel--container__employee-ranking-name">
+                        {{ row.label }}
+                      </span>
+                    </div>
+                    <div class="admin-panel--container__employee-badges">
+                      <span class="admin-panel--container__employee-ranking-value">
+                        {{ row.count }} packs
+                      </span>
+                      <span class="admin-panel--container__employee-stat-chip">
+                        {{ row.percentage }}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="admin-panel--container__employee-ranking-track">
+                    <div
+                      class="admin-panel--container__employee-ranking-fill"
+                      [style.width.%]="row.widthPercent"
+                      [style.background]="row.color"
+                    ></div>
+                  </div>
+                </button>
+              }
+            </div>
+          }
+        </div>
+
+        <div
+          class="admin-panel--container__client-chart admin-panel--container__client-chart--stats"
+        >
+          <div class="admin-panel--container__client-chart-head">
+            <p class="admin-panel--container__employee-history-title">
+              Especialidades por empleado
+            </p>
+            <div class="admin-panel--container__client-chart-controls">
+              <span class="admin-panel--container__employee-stat-chip">
+                Perfiles: {{ getGlobalTreatmentEmployeeSpecialtyRows().length }}
+              </span>
+              @if (hasGlobalTreatmentEmployeeFilterSelected()) {
+                <button
+                  type="button"
+                  class="admin-panel--container__employee-clear-filter"
+                  (click)="clearGlobalTreatmentEmployeeFilter()"
+                >
+                  Quitar selección
+                </button>
+              }
+            </div>
+          </div>
+
+          <p class="admin-panel--container__hint">
+            Cada tarjeta resume el tratamiento más frecuente y los tipos dominantes por trabajador.
+          </p>
+
+          @let employeeSpecialtyRows = getGlobalTreatmentEmployeeSpecialtyRows();
+
+          @if (employeeSpecialtyRows.length === 0) {
+            <p class="admin-panel--container__hint">
+              No hay datos suficientes para cruzar empleados con tipos de tratamiento.
+            </p>
+          } @else {
+            <div class="admin-panel--container__employee-specialty-grid">
+              @for (row of employeeSpecialtyRows; track row.email) {
+                <button
+                  type="button"
+                  class="admin-panel--container__employee-specialty-card"
+                  [class.admin-panel--container__employee-specialty-card--interactive]="
+                    canApplyGlobalTreatmentEmployeeFilter(row.email)
+                  "
+                  [class.admin-panel--container__employee-specialty-card--active]="
+                    isGlobalTreatmentEmployeeFilterSelected(row.email)
+                  "
+                  [disabled]="!canApplyGlobalTreatmentEmployeeFilter(row.email)"
+                  (click)="applyGlobalTreatmentEmployeeFilter(row.email)"
+                >
+                  <div class="admin-panel--container__employee-specialty-head">
+                    <div>
+                      <p class="admin-panel--container__employee-specialty-name">{{ row.label }}</p>
+                      <p class="admin-panel--container__employee-specialty-meta">
+                        {{ row.totalCount }} packs · {{ row.uniqueTreatmentsCount }} tipos
+                      </p>
+                    </div>
+                    <span class="admin-panel--container__employee-stat-chip">
+                      Top: {{ row.topTreatmentLabel }}
+                    </span>
+                  </div>
+
+                  <div class="admin-panel--container__employee-specialty-tags">
+                    @for (item of row.topTreatments; track item.name) {
+                      <span class="admin-panel--container__employee-specialty-tag">
+                        {{ item.name }} · {{ item.count }}
+                      </span>
+                    }
+                  </div>
+                </button>
+              }
+            </div>
+          }
+        </div>
+
+        <div
+          class="admin-panel--container__client-chart admin-panel--container__client-chart--stats"
+        >
+          <div class="admin-panel--container__client-chart-head">
+            <p class="admin-panel--container__employee-history-title">Distribución de packs</p>
+            <div class="admin-panel--container__client-chart-controls">
+              @if (hasGlobalTreatmentNameFilterSelected()) {
+                <button
+                  type="button"
+                  class="admin-panel--container__employee-clear-filter"
+                  (click)="clearGlobalTreatmentNameFilter()"
+                >
+                  Quitar packs
+                </button>
+              }
+              <label class="admin-panel--container__label admin-panel--container__label--inline">
+                Tipo
+                <div class="admin-panel--container__time-select-wrap">
+                  <select
+                    class="admin-panel--container__input admin-panel--container__time-select"
+                    [value]="clientChartType()"
+                    (change)="onClientChartTypeChange($event)"
+                  >
+                    <option value="bar">Barras / Columnas</option>
+                    <option value="pie">Circular</option>
+                  </select>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          @let selectedGlobalChartType = clientChartType();
+          @let globalCategoryRows = getGlobalTreatmentCategoryRows();
+          @let globalPieData = getGlobalTreatmentPieData();
+          @let globalTimelineRows = getGlobalTimelineTreatmentRows();
+
+          @if (getFilteredGlobalTreatmentsCount() === 0) {
+            <p class="admin-panel--container__hint">No hay packs en el periodo seleccionado.</p>
+          } @else {
+            @if (selectedGlobalChartType === 'bar') {
+              @let globalBarTicks = getClientBarChartTicks(globalCategoryRows);
+              <div class="admin-panel--container__client-bar-chart">
+                <div class="admin-panel--container__client-bar-axis">
+                  @for (tick of globalBarTicks; track $index) {
+                    <span>{{ tick }}</span>
+                  }
+                </div>
+
+                <div class="admin-panel--container__client-bar-main">
+                  <div class="admin-panel--container__client-bar-plot">
+                    <div class="admin-panel--container__client-columns">
+                      @for (row of globalCategoryRows; track row.name) {
+                        <button
+                          type="button"
+                          class="admin-panel--container__client-column-item admin-panel--container__client-column-item--filter"
+                          [class.admin-panel--container__client-column-item--filter-active]="
+                            isGlobalTreatmentNameFilterSelected(row.name)
+                          "
+                          [disabled]="!canApplyGlobalTreatmentNameFilter(row.name)"
+                          (click)="applyGlobalTreatmentNameFilter(row.name)"
+                        >
+                          <span class="admin-panel--container__client-column-value">
+                            {{ row.count }}
+                          </span>
+                          <div
+                            class="admin-panel--container__client-column-bar"
+                            [style.height.%]="row.heightPercent"
+                            [style.background]="row.color"
+                          ></div>
+                        </button>
+                      }
+                    </div>
+                  </div>
+
+                  <div class="admin-panel--container__client-column-labels">
+                    @for (row of globalCategoryRows; track row.name) {
+                      <span class="admin-panel--container__client-column-label">
+                        {{ row.name }}
+                      </span>
+                    }
+                  </div>
+                </div>
+              </div>
+            }
+
+            @if (selectedGlobalChartType === 'pie') {
+              @if (globalPieData.total === 0) {
+                <p class="admin-panel--container__hint">Sin datos para mostrar gráfica.</p>
+              } @else {
+                <div class="admin-panel--container__client-pie-layout">
+                  <div
+                    class="admin-panel--container__client-pie-chart admin-panel--container__client-pie-chart--stats"
+                    [style.background]="globalPieData.gradient"
+                    role="img"
+                    [attr.aria-label]="
+                      'Distribución global de packs. Total: ' + globalPieData.total
+                    "
+                  >
+                    <div class="admin-panel--container__client-pie-hole">
+                      <span>Total</span>
+                      <strong>{{ globalPieData.total }}</strong>
+                    </div>
+                  </div>
+
+                  <div class="admin-panel--container__client-chart-list">
+                    @for (slice of globalPieData.slices; track slice.name) {
+                      <button
+                        type="button"
+                        class="admin-panel--container__client-chart-row admin-panel--container__client-chart-row--filter"
+                        [class.admin-panel--container__client-chart-row--filter-active]="
+                          isGlobalTreatmentNameFilterSelected(slice.name)
+                        "
+                        [disabled]="!canApplyGlobalTreatmentNameFilter(slice.name)"
+                        (click)="applyGlobalTreatmentNameFilter(slice.name)"
+                      >
+                        <div class="admin-panel--container__client-chart-legend">
+                          <span
+                            class="admin-panel--container__client-chart-dot"
+                            [style.background]="slice.color"
+                          ></span>
+                          <span class="admin-panel--container__client-chart-label">
+                            {{ slice.name }}
+                          </span>
+                          <span class="admin-panel--container__client-chart-value">
+                            {{ slice.count }} ({{ slice.percentage }}%)
+                          </span>
+                        </div>
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+            }
+          }
+        </div>
+
+        <div
+          class="admin-panel--container__client-chart admin-panel--container__client-chart--stats"
+        >
+          <div class="admin-panel--container__client-chart-head">
+            <p class="admin-panel--container__employee-history-title">
+              Evolución temporal de packs
+            </p>
+            <div class="admin-panel--container__client-chart-controls">
+              <span class="admin-panel--container__employee-stat-chip">
+                {{ getGlobalTreatmentTimelineGroupingSummary() }} · {{ globalTimelineRows.length }}
+                puntos
+              </span>
+              <label class="admin-panel--container__label admin-panel--container__label--inline">
+                Agrupar por
+                <div class="admin-panel--container__time-select-wrap">
+                  <select
+                    class="admin-panel--container__input admin-panel--container__time-select"
+                    [value]="globalTreatmentTimelineGrouping()"
+                    (change)="onGlobalTreatmentTimelineGroupingChange($event)"
+                  >
+                    <option value="auto">Automático</option>
+                    <option value="month">Mes</option>
+                    <option value="week">Semana</option>
+                    <option value="day">Día</option>
+                  </select>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          @if (globalTimelineRows.length === 0) {
+            <p class="admin-panel--container__hint">
+              No hay suficientes datos para mostrar evolución temporal.
+            </p>
+          } @else {
+            @let timelineBarTicks = getClientBarChartTicks(globalTimelineRows);
+            <div class="admin-panel--container__client-bar-scroll">
+              <div
+                class="admin-panel--container__client-bar-scroll-inner"
+                [style.min-width.rem]="getGlobalTimelineChartMinWidthRem(globalTimelineRows.length)"
+              >
+                <div class="admin-panel--container__client-bar-chart">
+                  <div class="admin-panel--container__client-bar-axis">
+                    @for (tick of timelineBarTicks; track $index) {
+                      <span>{{ tick }}</span>
+                    }
+                  </div>
+
+                  <div class="admin-panel--container__client-bar-main">
+                    <div class="admin-panel--container__client-bar-plot">
+                      <div class="admin-panel--container__client-columns">
+                        @for (row of globalTimelineRows; track row.key) {
+                          <div
+                            class="admin-panel--container__client-column-item admin-panel--container__client-column-item--tooltip"
+                            tabindex="0"
+                            [attr.title]="row.tooltipLabel + ' · ' + row.count + ' packs'"
+                            [attr.aria-label]="row.tooltipLabel + '. ' + row.count + ' packs'"
+                          >
+                            <span class="admin-panel--container__client-column-tooltip">
+                              {{ row.tooltipLabel }} · {{ row.count }} packs
+                            </span>
+                            <span class="admin-panel--container__client-column-value">
+                              {{ row.count }}
+                            </span>
+                            <div
+                              class="admin-panel--container__client-column-bar"
+                              [style.height.%]="row.heightPercent"
+                              [style.background]="row.color"
+                            ></div>
+                          </div>
+                        }
+                      </div>
+                    </div>
+
+                    <div
+                      class="admin-panel--container__client-column-labels"
+                      [class.admin-panel--container__client-column-labels--dense]="
+                        isGlobalTimelineDense(globalTimelineRows)
+                      "
+                    >
+                      @for (row of globalTimelineRows; track row.key) {
+                        <span
+                          class="admin-panel--container__client-column-label"
+                          [class.admin-panel--container__client-column-label--hidden]="
+                            !row.showLabel
+                          "
+                          [attr.title]="row.label"
+                        >
+                          {{ row.showLabel ? row.shortLabel : '' }}
+                        </span>
+                      }
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      @if (activeTab() === 'empleados' && isSuperadmin()) {
+        <h2 class="admin-panel--container__subtitle">Gestión de empleados</h2>
+        <p class="admin-panel--container__hint">
+          Organiza empleados por vistas: crear, listado resumido y buscador con ficha en modal.
+        </p>
+
+        <app-employee-management-tabs
+          [activeTab]="employeeManagementTab()"
+          (tabChange)="setEmployeeManagementTab($event)"
+        />
+
+        @if (employeeError()) {
+          <p class="admin-panel--container__error">{{ employeeError() }}</p>
+        }
+
+        @if (employeeMessage()) {
+          <p class="admin-panel--container__success">{{ employeeMessage() }}</p>
+        }
+
+        @if (isLoadingEmployees()) {
+          <p class="admin-panel--container__hint">Cargando usuarios...</p>
+        } @else if (employeeUsers().length === 0 || getEmployeeSummaryUsers().length === 0) {
+          <p class="admin-panel--container__hint">No hay usuarios registrados.</p>
+        } @else {
+          @if (employeeManagementTab() === 'crear') {
+            <app-employee-create-form
+              [username]="employeeCreateUsername()"
+              [email]="employeeCreateEmail()"
+              [password]="employeeCreatePassword()"
+              [role]="employeeCreateRole()"
+              [loading]="employeeCreateLoading()"
+              (usernameInput)="onEmployeeCreateUsernameInput($event)"
+              (emailInput)="onEmployeeCreateEmailInput($event)"
+              (passwordInput)="onEmployeeCreatePasswordInput($event)"
+              (roleChange)="onEmployeeCreateRoleChange($event)"
+              (submitCreate)="createEmployee()"
+            />
+          }
+
+          @if (employeeManagementTab() === 'listado') {
+            <app-employee-summary-list
+              [users]="getEmployeeSummaryUsers()"
+              (openEmployee)="openEmployeeDetailModal($event)"
+            />
+          }
+
+          @if (employeeManagementTab() === 'buscar') {
+            <app-employee-search-filters
+              [search]="employeeSearch()"
+              [roleFilter]="employeeRoleFilter()"
+              (searchInput)="onEmployeeSearchInput($event)"
+              (roleFilterChange)="onEmployeeRoleFilterChange($event)"
+            />
+
+            @if (!employeeSearch().trim()) {
+              <p class="admin-panel--container__hint">
+                Escribe para buscar empleados por usuario o email.
+              </p>
+            } @else if (getFilteredEmployeeUsers().length === 0) {
+              <p class="admin-panel--container__hint">
+                No hay usuarios que coincidan con la búsqueda o el filtro seleccionado.
+              </p>
+            } @else {
+              <app-employee-summary-list
+                [users]="getFilteredEmployeeUsers()"
+                [hideSuperadmin]="true"
+                emptyMessage="No hay usuarios que coincidan con la búsqueda o el filtro seleccionado."
+                (openEmployee)="openEmployeeDetailModal($event)"
+              />
+            }
+          }
+
+          @if (showEmployeeDetailModal()) {
+            <div
+              class="admin-panel--container__modal-backdrop"
+              (click)="closeEmployeeDetailModal()"
+            >
+              <div class="admin-panel--container__modal" (click)="$event.stopPropagation()">
+                @if (getSelectedEmployeeDetail(); as user) {
+                  <div class="admin-panel--container__modal-head">
+                    <div>
+                      <h3 class="admin-panel--container__modal-title">{{ user.username }}</h3>
+                      <p class="admin-panel--container__modal-subtitle">{{ user.email }}</p>
+                    </div>
+                    <button
+                      type="button"
+                      class="admin-panel--container__modal-close"
+                      (click)="closeEmployeeDetailModal()"
+                      aria-label="Cerrar"
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <div class="admin-panel--container__employee-badges">
+                    <span class="admin-panel--container__status">{{
+                      getRoleLabel(user.role)
+                    }}</span>
+                    <span
+                      class="admin-panel--container__status admin-panel--container__status--work"
+                    >
+                      {{ getEmployeeWorkStatusLabel(user.tracking.workStatus) }}
+                    </span>
+                  </div>
+
+                  <div class="admin-panel--container__employee-detail-tabs" role="tablist">
+                    <button
+                      type="button"
+                      class="admin-panel--container__employee-detail-tab"
+                      [class.admin-panel--container__employee-detail-tab--active]="
+                        isEmployeeDetailTab('acciones')
+                      "
+                      (click)="setEmployeeDetailTab('acciones')"
+                    >
+                      Acciones
+                    </button>
+                    <button
+                      type="button"
+                      class="admin-panel--container__employee-detail-tab"
+                      [class.admin-panel--container__employee-detail-tab--active]="
+                        isEmployeeDetailTab('movimientos')
+                      "
+                      (click)="setEmployeeDetailTab('movimientos')"
+                    >
+                      Información
+                    </button>
+                  </div>
+
+                  @if (isEmployeeDetailTab('acciones')) {
+                    <div
+                      class="admin-panel--container__employee-tab-panel admin-panel--container__employee-tab-panel--actions"
+                    >
+                      <div class="admin-panel--container__employee-action-grid">
+                        <button
+                          type="button"
+                          class="admin-panel--container__action-button admin-panel--container__action-button--accept admin-panel--container__employee-action-tile"
+                          [disabled]="!canPromote(user) || isEmployeeActionLoading(user.email)"
+                          (click)="promoteToAdmin(user.email)"
+                        >
+                          <span class="admin-panel--container__employee-action-icon">🛡️</span>
+                          <span>Hacer admin</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          class="admin-panel--container__action-button admin-panel--container__action-button--soft admin-panel--container__employee-action-tile"
+                          [disabled]="!canDemote(user) || isEmployeeActionLoading(user.email)"
+                          (click)="setAsEmployee(user.email)"
+                        >
+                          <span class="admin-panel--container__employee-action-icon">👤</span>
+                          <span>Pasar a empleado</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          class="admin-panel--container__action-button admin-panel--container__action-button--accept admin-panel--container__employee-action-tile"
+                          [disabled]="!canMarkCheckIn(user) || isEmployeeActionLoading(user.email)"
+                          (click)="updateEmployeeTracking(user.email, 'check_in')"
+                        >
+                          <span class="admin-panel--container__employee-action-icon">🟢</span>
+                          <span>Marcar entrada</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          class="admin-panel--container__action-button admin-panel--container__action-button--soft admin-panel--container__employee-action-tile"
+                          [disabled]="!canMarkCheckOut(user) || isEmployeeActionLoading(user.email)"
+                          (click)="updateEmployeeTracking(user.email, 'check_out')"
+                        >
+                          <span class="admin-panel--container__employee-action-icon">🔴</span>
+                          <span>Marcar salida</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          class="admin-panel--container__action-button admin-panel--container__action-button--soft admin-panel--container__employee-action-tile"
+                          [disabled]="isEmployeeActionLoading(user.email)"
+                          (click)="openEmployeeTrackingCalendarModal(user.email, 'vacation')"
+                        >
+                          <span class="admin-panel--container__employee-action-icon">🌴</span>
+                          <span>Vacaciones</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          class="admin-panel--container__action-button admin-panel--container__action-button--reject admin-panel--container__employee-action-tile"
+                          [disabled]="isEmployeeActionLoading(user.email)"
+                          (click)="openEmployeeTrackingCalendarModal(user.email, 'sick_leave')"
+                        >
+                          <span class="admin-panel--container__employee-action-icon">🏥</span>
+                          <span>Baja</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          class="admin-panel--container__action-button admin-panel--container__action-button--soft admin-panel--container__employee-action-tile"
+                          [disabled]="isEmployeeActionLoading(user.email)"
+                          (click)="
+                            openEmployeeTrackingCalendarModal(user.email, 'recovering_hours')
+                          "
+                        >
+                          <span class="admin-panel--container__employee-action-icon">⏱️</span>
+                          <span>Recuperación de horas</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          class="admin-panel--container__action-button admin-panel--container__employee-action-tile"
+                          [disabled]="isEmployeeActionLoading(user.email)"
+                          (click)="updateEmployeeTracking(user.email, 'clear_status')"
+                        >
+                          <span class="admin-panel--container__employee-action-icon">🧹</span>
+                          <span>Limpiar estado</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          class="admin-panel--container__action-button admin-panel--container__action-button--reject admin-panel--container__employee-action-tile"
+                          [disabled]="
+                            !canDeleteEmployee(user) || isEmployeeActionLoading(user.email)
+                          "
+                          (click)="deleteEmployee(user.email)"
+                        >
+                          <span class="admin-panel--container__employee-action-icon">🗑️</span>
+                          <span>Eliminar empleado</span>
+                        </button>
+                      </div>
+
+                      <label
+                        class="admin-panel--container__label admin-panel--container__employee-note-label"
+                      >
+                        Nota rápida
+                        <input
+                          class="admin-panel--container__input"
+                          type="text"
+                          maxlength="160"
+                          placeholder="Vacaciones, baja, recuperación..."
+                          [value]="getEmployeeTrackingNote(user.email)"
+                          (input)="onEmployeeTrackingNoteInput(user.email, $event)"
+                        />
+                      </label>
+                    </div>
+                  }
+
+                  @if (isEmployeeDetailTab('movimientos')) {
+                    <div class="admin-panel--container__employee-tab-panel">
+                      <div class="admin-panel--container__employee-filters">
+                        <label class="admin-panel--container__label">
+                          Desde
+                          <input
+                            class="admin-panel--container__input"
+                            type="date"
+                            [value]="employeeHistoryStartDateIso()"
+                            (input)="onEmployeeHistoryStartDateInput($event)"
+                          />
+                        </label>
+
+                        <label class="admin-panel--container__label">
+                          Hasta
+                          <input
+                            class="admin-panel--container__input"
+                            type="date"
+                            [value]="employeeHistoryEndDateIso()"
+                            (input)="onEmployeeHistoryEndDateInput($event)"
+                          />
+                        </label>
+                      </div>
+
+                      <div
+                        class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact"
+                      >
+                        <button
+                          type="button"
+                          class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                          (click)="resetEmployeeHistoryRangeToCurrentMonth()"
+                        >
+                          Este mes
+                        </button>
+                        <button
+                          type="button"
+                          class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                          (click)="setEmployeeHistoryLast30Days()"
+                        >
+                          Últimos 30 días
+                        </button>
+                      </div>
+
+                      @let stats = getEmployeeTrackingStats(user);
+                      <div class="admin-panel--container__employee-stats-grid">
+                        <span class="admin-panel--container__employee-stat-chip"
+                          >Entradas: {{ stats.checkIns }}</span
+                        >
+                        <span class="admin-panel--container__employee-stat-chip"
+                          >Salidas: {{ stats.checkOuts }}</span
+                        >
+                        <span class="admin-panel--container__employee-stat-chip"
+                          >Vacaciones: {{ stats.vacations }}</span
+                        >
+                        <span class="admin-panel--container__employee-stat-chip"
+                          >Bajas: {{ stats.sickLeaves }}</span
+                        >
+                        <span class="admin-panel--container__employee-stat-chip"
+                          >Horas: {{ formatDuration(getEmployeeWorkedMinutes(user)) }}</span
+                        >
+                      </div>
+
+                      @if (getFilteredEmployeeHistory(user).length > 0) {
+                        <div class="admin-panel--container__employee-history">
+                          <p class="admin-panel--container__employee-history-title">Historial</p>
+                          <div
+                            class="admin-panel--container__employee-history-list admin-panel--container__employee-history-list--compact"
+                          >
+                            @for (
+                              item of getFilteredEmployeeHistory(user);
+                              track item.createdAtIso + item.action
+                            ) {
+                              <article class="admin-panel--container__employee-history-item">
+                                <p class="admin-panel--container__employee-history-text">
+                                  <strong>{{
+                                    getEmployeeTrackingHistoryLabel(item.action)
+                                  }}</strong>
+                                  · {{ formatDateTime(item.createdAtIso) }}
+                                </p>
+                                @if (item.note) {
+                                  <p class="admin-panel--container__employee-history-note">
+                                    {{ item.note }}
+                                  </p>
+                                }
+                              </article>
+                            }
+                          </div>
+                        </div>
+                      } @else {
+                        <p class="admin-panel--container__hint">
+                          Sin movimientos en el periodo seleccionado.
+                        </p>
+                      }
+                    </div>
+                  }
+                }
+              </div>
+            </div>
+          }
+
+          <app-employee-tracking-calendar-modal
+            [open]="showEmployeeTrackingCalendarModal()"
+            [title]="getEmployeeTrackingCalendarTitle()"
+            [startDateIso]="employeeTrackingCalendarStartDateIso()"
+            [endDateIso]="employeeTrackingCalendarEndDateIso()"
+            [endLabel]="getEmployeeTrackingCalendarEndLabel()"
+            (startDateInput)="onEmployeeTrackingCalendarStartDateInput($event)"
+            (endDateInput)="onEmployeeTrackingCalendarEndDateInput($event)"
+            (confirm)="confirmEmployeeTrackingCalendar()"
+            (close)="closeEmployeeTrackingCalendarModal()"
+          />
+
+          <app-role-change-confirm-modal
+            [open]="showRoleChangeConfirmModal()"
+            [employeeName]="getRoleChangeTargetName()"
+            [summaryText]="getRoleChangeSummaryText()"
+            (accept)="confirmRoleChangeConfirm()"
+            (cancel)="cancelRoleChangeConfirm()"
+          />
+        }
+      }
+
+      <app-payment-flow-modal
+        [showTreatmentPicker]="paymentSelectTreatmentOpen()"
+        [showMethodPicker]="paymentModalOpen()"
+        [treatments]="getSelectedClientCard()?.treatments ?? []"
+        [paymentError]="paymentError()"
+        [paymentLoading]="paymentLoading()"
+        [selectedTreatment]="selectedTreatmentForPayment()"
+        [selectedMethod]="paymentMethod()"
+        [paymentAmount]="paymentAmount()"
+        (close)="closePaymentModal()"
+        (pickTreatment)="selectTreatmentForPayment($event)"
+        (back)="backToPaymentTreatments()"
+        (methodChange)="paymentMethod.set($event)"
+        (amountChange)="onPaymentAmountInput($event)"
+        (confirm)="submitPayment()"
+      />
+
       <div class="admin-panel--container__actions">
         <button
           type="button"
@@ -472,4 +3630,184 @@
       </div>
     }
   </div>
+
+  @if (showClientTypePickerModal()) {
+    <div class="admin-panel--container__modal-backdrop" (click)="closeClientTypePickerModal()">
+      <div
+        class="admin-panel--container__modal admin-panel--container__modal--client-type-picker"
+        (click)="$event.stopPropagation()"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Tipo de clienta"
+      >
+        <div class="admin-panel--container__modal-head">
+          <h2 class="admin-panel--container__modal-title">¿Cómo quieres registrar el pago?</h2>
+          <button
+            type="button"
+            class="admin-panel--container__modal-close"
+            (click)="closeClientTypePickerModal()"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+        <p class="admin-panel--container__modal-subtitle">
+          Selecciona si la clienta ya tiene ficha o es nueva para vincular el cobro correctamente.
+        </p>
+        <div class="admin-panel--container__client-type-options">
+          <button
+            type="button"
+            class="admin-panel--container__client-type-btn"
+            (click)="onClientTypePickerExistingClient()"
+          >
+            <span class="admin-panel--container__client-type-icon">👤</span>
+            <span class="admin-panel--container__client-type-label">Clienta existente</span>
+            <span class="admin-panel--container__client-type-desc">
+              Abre su ficha si está registrada o muestra el listado para elegirla
+            </span>
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__client-type-btn admin-panel--container__client-type-btn--new"
+            (click)="onClientTypePickerNewClient()"
+          >
+            <span class="admin-panel--container__client-type-icon">✨</span>
+            <span class="admin-panel--container__client-type-label">Nueva clienta</span>
+            <span class="admin-panel--container__client-type-desc">
+              Crea una ficha nueva con los datos de la reserva
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showPaymentMethodModal()) {
+    <div class="admin-panel--container__modal-backdrop" (click)="closePaymentMethodModal()">
+      <section
+        class="admin-panel--container__modal admin-panel--container__modal--compact"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Seleccionar método de pago"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="admin-panel--container__modal-head">
+          <h2 class="admin-panel--container__modal-title">Seleccionar método de pago</h2>
+          <button
+            type="button"
+            class="admin-panel--container__modal-close"
+            (click)="closePaymentMethodModal()"
+            aria-label="Cerrar"
+          >
+            ✕
+          </button>
+        </div>
+
+        @if (paymentMethodReservation(); as reservation) {
+          <p class="admin-panel--container__modal-subtitle">
+            {{ reservation.appointmentTypeName }}
+          </p>
+          @if (paymentMethodReservationPriceEuro() > 0) {
+            <p class="admin-panel--container__payment-modal-price">
+              Precio: {{ paymentMethodReservationPriceEuro() | number: '1.2-2' }} €
+            </p>
+          } @else {
+            <p class="admin-panel--container__payment-modal-price">Precio: no configurado</p>
+          }
+        }
+
+        <div class="admin-panel--container__payment-method-grid">
+          <button
+            type="button"
+            class="admin-panel--container__payment-method-btn"
+            [class.admin-panel--container__payment-method-btn--active]="
+              selectedPaymentMethod() === 'efectivo'
+            "
+            (click)="selectedPaymentMethod.set('efectivo')"
+          >
+            💵 Efectivo
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__payment-method-btn"
+            [class.admin-panel--container__payment-method-btn--active]="
+              selectedPaymentMethod() === 'tarjeta'
+            "
+            (click)="selectedPaymentMethod.set('tarjeta')"
+          >
+            💳 Tarjeta
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__payment-method-btn"
+            [class.admin-panel--container__payment-method-btn--active]="
+              selectedPaymentMethod() === 'bizum'
+            "
+            (click)="selectedPaymentMethod.set('bizum')"
+          >
+            📱 Bizum
+          </button>
+        </div>
+
+        <div class="admin-panel--container__modal-actions">
+          <button
+            type="button"
+            class="admin-panel--container__button admin-panel--container__button--secondary"
+            (click)="closePaymentMethodModal()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__button admin-panel--container__button--primary"
+            [disabled]="!selectedPaymentMethod() || actionLoadingId() !== ''"
+            (click)="confirmPaymentMethod()"
+          >
+            {{ actionLoadingId() !== '' ? 'Guardando...' : 'Confirmar' }}
+          </button>
+        </div>
+      </section>
+    </div>
+  }
+
+  <!-- Forced check-in modal (non-dismissable) -->
+  @if (showForcedCheckInModal()) {
+    <div class="admin-panel--container__modal-backdrop admin-panel--container__modal-backdrop--forced">
+      <div
+        class="admin-panel--container__modal admin-panel--container__modal--forced-checkin"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="forced-checkin-title"
+      >
+        <div class="admin-panel--container__forced-checkin-icon">🕐</div>
+        <h2 class="admin-panel--container__modal-title" id="forced-checkin-title">
+          Ficha tu entrada
+        </h2>
+        <p class="admin-panel--container__modal-subtitle">
+          Es tu primer acceso del día. Registra tu entrada para continuar.
+        </p>
+        @if (forcedCheckInError()) {
+          <p class="admin-panel--container__action-error">{{ forcedCheckInError() }}</p>
+        }
+        <button
+          type="button"
+          class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--checkin"
+          [disabled]="forcedCheckInLoading()"
+          (click)="performForcedCheckIn()"
+        >
+          {{ forcedCheckInLoading() ? 'Fichando...' : '✅ Fichar entrada' }}
+        </button>
+      </div>
+    </div>
+  }
+
+  <!-- Inactivity warning banner -->
+  @if (showInactivityWarning()) {
+    <div class="admin-panel--inactivity-warning" role="alert">
+      ⚠️ Tu sesión se cerrará en breve por inactividad.
+      <button type="button" class="admin-panel--inactivity-warning__dismiss" (click)="$event.stopPropagation()">
+        Seguir aquí
+      </button>
+    </div>
+  }
 </section>

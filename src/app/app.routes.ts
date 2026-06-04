@@ -4,6 +4,8 @@ import { AdminPanelComponent } from './admin-panel/admin-panel';
 import { adminRoleGuard } from './admin-role.guard';
 import { DondeEstamosComponent } from './donde-estamos/donde-estamos';
 import { CitasComponent } from './citas/citas';
+import { ClienteAreaComponent } from './cliente-area/cliente-area';
+import { ClienteRegistroComponent } from './cliente-registro/cliente-registro';
 import { HistoriaComponent } from './historia/historia';
 import { InicioComponent } from './inicio/inicio';
 import { ReservaCalendarioComponent } from './reserva-calendario/reserva-calendario';
@@ -16,7 +18,7 @@ export const routes: Routes = [
     component: InicioComponent,
   },
   {
-    path: 'tratamientos',
+    path: 'packs',
     component: TratamientosComponent,
   },
   {
@@ -46,6 +48,21 @@ export const routes: Routes = [
   {
     path: 'registro',
     component: AdminAccesoComponent,
+  },
+  {
+    path: 'cliente/registro',
+    component: ClienteRegistroComponent,
+  },
+  {
+    path: 'cliente/area',
+    component: ClienteAreaComponent,
+  },
+  {
+    path: 'cliente/recuperar',
+    loadComponent: () =>
+      import('./recuperar-contraseña/recuperar-contraseña').then(
+        (m) => m.RecuperarContraseñaComponent,
+      ),
   },
   {
     path: 'admin/acceso',

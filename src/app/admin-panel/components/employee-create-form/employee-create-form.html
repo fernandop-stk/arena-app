@@ -1,0 +1,69 @@
+<div class="admin-panel--container__block-form">
+  <p class="admin-panel--container__hint">Crear empleado</p>
+
+  <div class="admin-panel--container__time-range">
+    <label class="admin-panel--container__label">
+      Usuario
+      <input
+        class="admin-panel--container__input"
+        type="text"
+        maxlength="40"
+        placeholder="usuario"
+        [value]="username"
+        (input)="usernameInput.emit($event)"
+      />
+    </label>
+
+    <label class="admin-panel--container__label">
+      Email
+      <input
+        class="admin-panel--container__input"
+        type="email"
+        maxlength="120"
+        placeholder="empleado@arena.local"
+        [value]="email"
+        (input)="emailInput.emit($event)"
+      />
+    </label>
+  </div>
+
+  <div class="admin-panel--container__time-range">
+    <label class="admin-panel--container__label">
+      Contraseña
+      <input
+        class="admin-panel--container__input"
+        type="password"
+        maxlength="64"
+        autocomplete="new-password"
+        placeholder="Mín. 8, mayúscula y especial"
+        [value]="password"
+        (input)="passwordInput.emit($event)"
+      />
+    </label>
+
+    <label class="admin-panel--container__label">
+      Rol inicial
+      <div class="admin-panel--container__time-select-wrap">
+        <select
+          class="admin-panel--container__input admin-panel--container__time-select"
+          [value]="role"
+          (change)="roleChange.emit($event)"
+        >
+          <option value="admin">Admin</option>
+          <option value="client">Empleado</option>
+        </select>
+      </div>
+    </label>
+  </div>
+
+  <div class="admin-panel--container__actionbtn">
+    <button
+      type="button"
+      class="admin-panel--container__button admin-panel--container__button--primary"
+      [disabled]="loading"
+      (click)="submitCreate.emit()"
+    >
+      Crear empleado
+    </button>
+  </div>
+</div>

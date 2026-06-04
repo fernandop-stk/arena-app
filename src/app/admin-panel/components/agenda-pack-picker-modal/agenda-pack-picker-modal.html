@@ -1,0 +1,93 @@
+@if (visible) {
+  <div class="agenda-pack-modal__backdrop" (click)="close.emit()">
+    <div class="agenda-pack-modal__card" (click)="$event.stopPropagation()">
+      <div class="agenda-pack-modal__head">
+        <div>
+          <h3 class="agenda-pack-modal__title">Crear reserva</h3>
+          <p class="agenda-pack-modal__subtitle">
+            Elige un pack o tratamiento para continuar al calendario.
+          </p>
+        </div>
+        <button
+          type="button"
+          class="agenda-pack-modal__close"
+          (click)="close.emit()"
+          aria-label="Cerrar"
+        >
+          ×
+        </button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="agenda-pack-modal__tabs">
+        <button
+          type="button"
+          class="agenda-pack-modal__tab"
+          [class.agenda-pack-modal__tab--active]="selectedTab() === 'packs'"
+          (click)="setSelectedTab('packs')"
+        >
+          Packs
+        </button>
+        <button
+          type="button"
+          class="agenda-pack-modal__tab"
+          [class.agenda-pack-modal__tab--active]="selectedTab() === 'treatments'"
+          (click)="setSelectedTab('treatments')"
+        >
+          Tratamientos
+        </button>
+      </div>
+
+      <!-- Packs tab -->
+      @if (selectedTab() === 'packs') {
+        <label class="agenda-pack-modal__label" for="agendaPackTypeModal">
+          Pack
+          <select
+            id="agendaPackTypeModal"
+            class="agenda-pack-modal__select"
+            [value]="selectedTypeId"
+            (change)="onSelectChange($event, 'pack')"
+          >
+            @for (type of packOptions; track type.id) {
+              <option [value]="type.id">{{ type.nombre }}</option>
+            }
+          </select>
+        </label>
+      }
+
+      <!-- Treatments tab -->
+      @if (selectedTab() === 'treatments') {
+        <label class="agenda-pack-modal__label" for="agendaTreatmentTypeModal">
+          Tratamiento
+          <select
+            id="agendaTreatmentTypeModal"
+            class="agenda-pack-modal__select"
+            [value]="selectedTypeId"
+            (change)="onSelectChange($event, 'treatment')"
+          >
+            @for (type of treatmentOptions; track type.id) {
+              <option [value]="type.id">{{ type.nombre }}</option>
+            }
+          </select>
+        </label>
+      }
+
+      <div class="agenda-pack-modal__actions">
+        <button
+          type="button"
+          class="agenda-pack-modal__btn agenda-pack-modal__btn--soft"
+          (click)="close.emit()"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          class="agenda-pack-modal__btn agenda-pack-modal__btn--primary"
+          (click)="confirm.emit()"
+        >
+          Continuar al calendario
+        </button>
+      </div>
+    </div>
+  </div>
+}

@@ -29,6 +29,60 @@
       color: colors.$color-text-soft;
     }
 
+    &__controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+      gap: layout.$space-2;
+      width: 100%;
+    }
+
+    &__tabs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.35rem;
+      padding: 0.3rem;
+      border: 1px solid colors.$color-border;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.8);
+      margin: 0.2rem 0;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      flex: 0 1 auto;
+    }
+
+    &__back-row {
+      flex: 0 0 auto;
+      margin-left: 0;
+    }
+
+    &__tab {
+      min-height: 2.1rem;
+      border-radius: 999px;
+      border: none;
+      background: transparent;
+      color: colors.$color-text-soft;
+      font-size: 0.88rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition:
+        background 0.2s ease,
+        color 0.2s ease,
+        transform 0.2s ease;
+
+      &--active {
+        background: colors.$color-primary;
+        color: #fff;
+        box-shadow: 0 8px 16px rgba(183, 107, 84, 0.25);
+      }
+
+      &:hover {
+        transform: translateY(-1px);
+      }
+    }
+
     &__back {
       display: inline-flex;
       align-items: center;
@@ -57,6 +111,51 @@
     &__list {
       display: grid;
       gap: layout.$space-2;
+
+      &--group {
+        margin-top: layout.$space-1;
+      }
+    }
+
+    &__groups {
+      display: grid;
+      gap: layout.$space-3;
+    }
+
+    &__group {
+      display: grid;
+      gap: layout.$space-1;
+    }
+
+    &__group-title {
+      margin: 0;
+      color: colors.$color-primary-dark;
+      font-size: 0.92rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    &__section-label {
+      margin: 0 0 layout.$space-2;
+      color: colors.$color-primary-dark;
+      font-size: 0.84rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    &__notice {
+      margin: 0 0 layout.$space-2;
+      padding: 0.8rem 0.95rem;
+      border: 1px solid rgba(217, 164, 65, 0.35);
+      border-left: 3px solid colors.$color-secondary;
+      border-radius: layout.$radius-sm;
+      background: linear-gradient(135deg, rgba(217, 164, 65, 0.1), rgba(255, 249, 244, 0.95));
+      color: colors.$color-text;
+      font-size: 0.9rem;
+      line-height: 1.45;
+      font-weight: 600;
     }
 
     &__card {
@@ -64,7 +163,7 @@
       border: 1px solid colors.$color-border;
       border-radius: layout.$radius-md;
       background:
-        linear-gradient(rgba(36, 28, 23, 0.22), rgba(36, 28, 23, 0.58)),
+        linear-gradient(rgba(36, 28, 23, 0.26), rgba(36, 28, 23, 0.6)),
         url('/assets/branding/fondo.png') center / cover no-repeat;
       min-height: 14rem;
       position: relative;
@@ -108,14 +207,29 @@
       padding: layout.$space-2;
       display: flex;
       justify-content: center;
-      align-items: flex-end;
       text-align: center;
+    }
+
+    &__card-copy {
+      display: grid;
+      gap: 0.35rem;
+      justify-items: center;
+      text-align: center;
+    }
+
+    &__card-category {
+      margin: 0;
+      color: rgba(255, 248, 242, 0.9);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
     &__card-title {
       margin: auto;
       color: #fff;
-      font-size: 1.35rem;
+      font-size: 1.75rem;
       line-height: 1.2;
       font-weight: 800;
       text-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
@@ -134,6 +248,8 @@
     }
 
     &__modal {
+      position: relative;
+      overflow: hidden;
       width: min(34rem, 100%);
       background: colors.$color-surface;
       border: 1px solid colors.$color-border;
@@ -141,6 +257,64 @@
       box-shadow: layout.$shadow-card;
       padding: layout.$space-3;
       animation: tratamientos-modal-in 0.2s ease;
+
+      &::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        background-size: cover;
+        background-position: center;
+        opacity: 0.15;
+        filter: saturate(0.85);
+        pointer-events: none;
+      }
+
+      &--packs::before {
+        background-image: url('/assets/conocenos/espejos.jpeg');
+      }
+
+      &--tratamientos::before {
+        background-image: url('/assets/conocenos/cabezas.jpeg');
+      }
+
+      > * {
+        position: relative;
+        z-index: 1;
+      }
+    }
+
+    &__modal-title-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.55rem;
+      margin-bottom: layout.$space-1;
+    }
+
+    &__modal-heading {
+      display: grid;
+      gap: 0.1rem;
+    }
+
+    &__modal-category {
+      margin: 0;
+      color: colors.$color-primary;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    &__modal-title-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      background: rgba(183, 107, 84, 0.1);
+      color: colors.$color-primary;
+      flex-shrink: 0;
     }
 
     &__modal-title {
@@ -149,11 +323,50 @@
       font-size: 1.35rem;
     }
 
-    &__modal-text {
+    &__modal-list {
       margin: layout.$space-2 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+
+    &__modal-list-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
       color: colors.$color-text-soft;
-      line-height: 1.6;
+      line-height: 1.5;
       font-size: 0.95rem;
+    }
+
+    &__modal-check {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.1rem;
+      height: 1.1rem;
+      border-radius: 50%;
+      background: rgba(183, 107, 84, 0.12);
+      color: colors.$color-primary;
+      flex-shrink: 0;
+      margin-top: 0.15rem;
+    }
+
+    &__modal-price-row {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      margin-top: layout.$space-1;
+    }
+
+    &__modal-price-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: colors.$color-primary;
+      flex-shrink: 0;
     }
 
     &__modal-price {
@@ -161,6 +374,50 @@
       color: colors.$color-text;
       font-weight: 800;
       font-size: 1rem;
+    }
+
+    &__invitada-options {
+      margin-top: layout.$space-2;
+      display: grid;
+      gap: 0.6rem;
+    }
+
+    &__invitada-option {
+      border: 1px solid colors.$color-border;
+      border-radius: layout.$radius-sm;
+      background: rgba(255, 255, 255, 0.92);
+      color: colors.$color-text;
+      text-align: left;
+      display: grid;
+      gap: 0.2rem;
+      padding: 0.75rem;
+      cursor: pointer;
+      transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease,
+        transform 0.2s ease;
+
+      strong {
+        font-size: 0.95rem;
+      }
+
+      span {
+        color: colors.$color-text-soft;
+        font-size: 0.9rem;
+        line-height: 1.35;
+      }
+
+      small {
+        color: colors.$color-primary-dark;
+        font-weight: 700;
+        font-size: 0.82rem;
+      }
+
+      &:hover {
+        border-color: colors.$color-primary;
+        box-shadow: 0 8px 18px rgba(183, 107, 84, 0.18);
+        transform: translateY(-1px);
+      }
     }
 
     &__modal-actions {
@@ -175,7 +432,7 @@
       border-radius: 999px;
       border: none;
       padding: 0 1rem;
-      background: linear-gradient(90deg, colors.$color-primary 0%, colors.$color-secondary 100%);
+      background: colors.$color-primary;
       color: #fff;
       font-weight: 700;
       cursor: pointer;
@@ -218,9 +475,44 @@
     &--container {
       padding: layout.$space-4;
 
+      &__controls-row {
+        justify-content: space-between;
+        flex-wrap: nowrap;
+      }
+
+      &__tabs {
+        width: fit-content;
+        min-width: 21rem;
+        max-width: 22rem;
+      }
+
+      &__back-row {
+        margin-left: auto;
+      }
+
       &__list {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
+
+      &__list--group {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+  }
+
+  &--container--packs {
+    .tratamientos--container__card {
+      background:
+        linear-gradient(rgba(36, 28, 23, 0.26), rgba(36, 28, 23, 0.6)),
+        url('/assets/conocenos/espejos.jpeg') center / cover no-repeat;
+    }
+  }
+
+  &--container--tratamientos {
+    .tratamientos--container__card {
+      background:
+        linear-gradient(rgba(36, 28, 23, 0.26), rgba(36, 28, 23, 0.6)),
+        url('/assets/conocenos/espejos3.jpeg') center / cover no-repeat;
     }
   }
 
