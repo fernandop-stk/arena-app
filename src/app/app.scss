@@ -49,10 +49,9 @@ body.app-menu-open {
     &__brand-logo {
       width: 3rem;
       height: 3rem;
-      object-fit: contain;
+      object-fit: cover;
       display: block;
       border-radius: 999px;
-      box-shadow: 0 8px 20px rgba(121, 92, 69, 0.18);
       background: rgba(255, 255, 255, 0.7);
       flex-shrink: 0;
       padding: 0.12rem;

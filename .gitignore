@@ -42,6 +42,18 @@ testem.log
 /typings
 __screenshots__/
 
+# Local runtime artifacts
+.build-check.log
+.dev-*-cache.json
+.runtime-data/
+dev-all.log
+ssr-out*.log
+ssr-err*.log
+
+# E2E artifacts
+playwright-report/
+test-results/
+
 # System files
 .DS_Store
 Thumbs.db
