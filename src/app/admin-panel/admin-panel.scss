@@ -736,6 +736,12 @@
       color: colors.$color-text;
       padding: 0 0.75rem;
       font-size: 0.9rem;
+
+      &:focus {
+        outline: none;
+        border-color: rgba(201, 123, 99, 0.62);
+        box-shadow: 0 0 0 2px rgba(201, 123, 99, 0.16);
+      }
     }
 
     &__time-select-wrap {

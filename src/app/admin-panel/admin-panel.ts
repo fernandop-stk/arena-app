@@ -4742,23 +4742,92 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
-    const popup = window.open('', '_blank', 'noopener,noreferrer,width=960,height=720');
+    this.cierreError.set('');
+    this.cierreMessage.set('Generando PDF...');
+    void this.generateCierrePdf(latestCierre);
+  }
 
-    if (!popup) {
-      this.cierreError.set('No se pudo abrir la ventana de impresión del PDF.');
-      return;
+  private async generateCierrePdf(cierre: CierreCajaItem): Promise<void> {
+    try {
+      const { jsPDF } = await import('jspdf');
+      const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+      const marginX = 46;
+      let y = 58;
+      const contentWidth = pdf.internal.pageSize.getWidth() - marginX * 2;
+
+      const formatCurrency = (amount: number): string =>
+        new Intl.NumberFormat('es-ES', {
+          style: 'currency',
+          currency: 'EUR',
+          minimumFractionDigits: 2,
+        }).format(amount);
+
+      const fiscalStatus = cierre.enviadoAlServicioFiscal ? 'Enviado' : 'Pendiente';
+      const notes = cierre.notas?.trim() || 'Sin observaciones.';
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(20);
+      pdf.text('Cierre de caja', marginX, y);
+      y += 24;
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(11);
+      pdf.setTextColor(90, 73, 63);
+      pdf.text(
+        `Fecha: ${cierre.fechaIso}  |  Registrado por: ${cierre.registradoPorEmail}`,
+        marginX,
+        y,
+      );
+      y += 28;
+
+      pdf.setDrawColor(232, 216, 201);
+      pdf.roundedRect(marginX, y, contentWidth, 120, 10, 10);
+
+      const drawRow = (label: string, value: string, topY: number, isTotal = false): void => {
+        pdf.setFont('helvetica', isTotal ? 'bold' : 'normal');
+        pdf.setFontSize(isTotal ? 13 : 11);
+        pdf.setTextColor(isTotal ? 183 : 47, isTotal ? 107 : 36, isTotal ? 84 : 29);
+        pdf.text(label, marginX + 14, topY);
+        pdf.text(value, marginX + contentWidth - 14, topY, { align: 'right' });
+      };
+
+      drawRow('Efectivo', formatCurrency(cierre.efectivo), y + 24);
+      drawRow('Tarjeta', formatCurrency(cierre.tarjeta), y + 48);
+      drawRow('Bizum', formatCurrency(cierre.bizum), y + 72);
+      drawRow('Total', formatCurrency(cierre.total), y + 100, true);
+      y += 150;
+
+      pdf.setDrawColor(232, 216, 201);
+      pdf.roundedRect(marginX, y, contentWidth, 78, 10, 10);
+      pdf.setTextColor(47, 36, 29);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(11);
+      pdf.text(`Estado fiscal: ${fiscalStatus}`, marginX + 14, y + 24);
+      pdf.text(
+        `ID servicio fiscal: ${cierre.idServicioFiscal || 'Pendiente'}`,
+        marginX + 14,
+        y + 44,
+      );
+      pdf.text(`Creado: ${this.formatDateTime(cierre.createdAtIso)}`, marginX + 14, y + 64);
+      y += 102;
+
+      const wrappedNotes = pdf.splitTextToSize(notes, contentWidth - 28) as string[];
+      const notesHeight = Math.max(80, 38 + wrappedNotes.length * 16);
+      pdf.setDrawColor(232, 216, 201);
+      pdf.roundedRect(marginX, y, contentWidth, notesHeight, 10, 10);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Notas', marginX + 14, y + 24);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(wrappedNotes, marginX + 14, y + 46);
+
+      const safeDate = (cierre.fechaIso || 'sin-fecha').replace(/[^\w-]/g, '-');
+      pdf.save(`cierre-caja-${safeDate}.pdf`);
+      this.cierreMessage.set('PDF exportado correctamente.');
+    } catch (error) {
+      console.error('[cierre-caja] Error generating PDF:', error);
+      this.cierreError.set('No se pudo generar el PDF en este navegador.');
+      this.cierreMessage.set('');
     }
-
-    popup.document.open();
-    popup.document.write(this.buildCierrePdfHtml(latestCierre));
-    popup.document.close();
-    popup.focus();
-
-    window.setTimeout(() => {
-      popup.print();
-    }, 250);
-
-    this.cierreMessage.set('PDF preparado. Usa “Guardar como PDF” en la ventana de impresión.');
   }
 
   protected registrarCierre(): void {
