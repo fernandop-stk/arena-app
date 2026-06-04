@@ -4825,9 +4825,44 @@ export class AdminPanelComponent implements OnDestroy {
       this.cierreMessage.set('PDF exportado correctamente.');
     } catch (error) {
       console.error('[cierre-caja] Error generating PDF:', error);
+      const openedPrintPreview = this.openCierrePrintPreview(cierre);
+
+      if (openedPrintPreview) {
+        this.cierreError.set('');
+        this.cierreMessage.set('Se abrió una vista imprimible para guardar en PDF.');
+        return;
+      }
+
       this.cierreError.set('No se pudo generar el PDF en este navegador.');
       this.cierreMessage.set('');
     }
+  }
+
+  private openCierrePrintPreview(cierre: CierreCajaItem): boolean {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+    if (!printWindow) {
+      return false;
+    }
+
+    const html = this.buildCierrePdfHtml(cierre);
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+
+    setTimeout(() => {
+      try {
+        printWindow.print();
+      } catch {
+        // If print fails, the user can still save manually from the opened tab.
+      }
+    }, 250);
+
+    return true;
   }
 
   protected registrarCierre(): void {
