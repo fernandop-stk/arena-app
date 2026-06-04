@@ -835,7 +835,7 @@
 
       &--agenda-week-schedule {
         width: min(95vw, 1200px);
-        max-height: 90vh;
+        max-height: 80vh;
       }
 
       &--quick-reserve {
@@ -1672,6 +1672,7 @@
       border-radius: layout.$radius-md;
       padding: layout.$space-2;
       background: #fff;
+      align-items: center;
     }
 
     &__cierre-card {

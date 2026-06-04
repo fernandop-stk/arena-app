@@ -3772,7 +3772,9 @@
 
   <!-- Forced check-in modal (non-dismissable) -->
   @if (showForcedCheckInModal()) {
-    <div class="admin-panel--container__modal-backdrop admin-panel--container__modal-backdrop--forced">
+    <div
+      class="admin-panel--container__modal-backdrop admin-panel--container__modal-backdrop--forced"
+    >
       <div
         class="admin-panel--container__modal admin-panel--container__modal--forced-checkin"
         role="dialog"
@@ -3805,7 +3807,11 @@
   @if (showInactivityWarning()) {
     <div class="admin-panel--inactivity-warning" role="alert">
       ⚠️ Tu sesión se cerrará en breve por inactividad.
-      <button type="button" class="admin-panel--inactivity-warning__dismiss" (click)="$event.stopPropagation()">
+      <button
+        type="button"
+        class="admin-panel--inactivity-warning__dismiss"
+        (click)="dismissInactivityWarning()"
+      >
         Seguir aquí
       </button>
     </div>
