@@ -13,7 +13,7 @@ body.app-menu-open {
   flex-direction: column;
   background:
     linear-gradient(rgba(252, 243, 234, 0.82), rgba(252, 243, 234, 0.9)),
-    url('/assets/branding/fondo-real.png') center / cover fixed no-repeat;
+    url('/assets/branding/fondo.jpeg.png') center / cover fixed no-repeat;
 
   &--header {
     border-bottom: 1px solid colors.$color-border;
@@ -66,6 +66,26 @@ body.app-menu-open {
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    @media (max-width: 36rem) {
+      &__brand {
+        gap: 0.6rem;
+      }
+
+      &__brand-logo {
+        width: 2.65rem;
+        height: 2.65rem;
+      }
+
+      &__brand-text {
+        font-size: 0.98rem;
+        line-height: 1.12;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        text-wrap: balance;
+      }
     }
 
     &__menu {

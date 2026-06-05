@@ -1,11 +1,16 @@
-<div class="admin-panel--container__block-form">
-  <p class="admin-panel--container__hint">Crear empleado</p>
+<section class="employee-create-form">
+  <header class="employee-create-form__header">
+    <h3 class="employee-create-form__title">Crear empleado</h3>
+    <p class="employee-create-form__description">
+      Alta rápida para personal interno con rol inicial y credenciales.
+    </p>
+  </header>
 
-  <div class="admin-panel--container__time-range">
-    <label class="admin-panel--container__label">
+  <div class="employee-create-form__grid">
+    <label class="employee-create-form__field">
       Usuario
       <input
-        class="admin-panel--container__input"
+        class="employee-create-form__input"
         type="text"
         maxlength="40"
         placeholder="usuario"
@@ -14,10 +19,10 @@
       />
     </label>
 
-    <label class="admin-panel--container__label">
+    <label class="employee-create-form__field">
       Email
       <input
-        class="admin-panel--container__input"
+        class="employee-create-form__input"
         type="email"
         maxlength="120"
         placeholder="empleado@arena.local"
@@ -27,11 +32,11 @@
     </label>
   </div>
 
-  <div class="admin-panel--container__time-range">
-    <label class="admin-panel--container__label">
+  <div class="employee-create-form__grid">
+    <label class="employee-create-form__field">
       Contraseña
       <input
-        class="admin-panel--container__input"
+        class="employee-create-form__input"
         type="password"
         maxlength="64"
         autocomplete="new-password"
@@ -41,11 +46,11 @@
       />
     </label>
 
-    <label class="admin-panel--container__label">
+    <label class="employee-create-form__field">
       Rol inicial
-      <div class="admin-panel--container__time-select-wrap">
+      <div class="employee-create-form__select-wrap">
         <select
-          class="admin-panel--container__input admin-panel--container__time-select"
+          class="employee-create-form__input employee-create-form__select"
           [value]="role"
           (change)="roleChange.emit($event)"
         >
@@ -56,14 +61,18 @@
     </label>
   </div>
 
-  <div class="admin-panel--container__actionbtn">
+  <div class="employee-create-form__actions">
     <button
       type="button"
-      class="admin-panel--container__button admin-panel--container__button--primary"
+      class="employee-create-form__submit"
       [disabled]="loading"
       (click)="submitCreate.emit()"
     >
-      Crear empleado
+      @if (loading) {
+        Creando...
+      } @else {
+        Crear empleado
+      }
     </button>
   </div>
-</div>
+</section>

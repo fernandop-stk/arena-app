@@ -81,6 +81,9 @@
       font-family: typography.$font-heading;
       font-weight: 600;
       letter-spacing: -0.02em;
+      text-wrap: balance;
+      overflow-wrap: anywhere;
+      line-height: 1.18;
     }
 
     &__title--static {
@@ -387,6 +390,23 @@
 
       &__client-cta-actions {
         justify-content: flex-end;
+      }
+    }
+  }
+
+  @media (max-width: 36rem) {
+    &--container {
+      &__hero {
+        justify-items: start;
+        text-align: left;
+      }
+
+      &__title {
+        font-size: clamp(1.62rem, 8vw, 2.05rem);
+      }
+
+      &__subtitle {
+        font-size: 1rem;
       }
     }
   }
