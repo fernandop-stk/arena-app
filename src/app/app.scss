@@ -13,7 +13,7 @@ body.app-menu-open {
   flex-direction: column;
   background:
     linear-gradient(rgba(252, 243, 234, 0.82), rgba(252, 243, 234, 0.9)),
-    url('/assets/branding/fondo.jpeg.png') center / cover fixed no-repeat;
+    url('/assets/branding/fondo.jpeg') center / cover fixed no-repeat;
 
   &--header {
     border-bottom: 1px solid colors.$color-border;
