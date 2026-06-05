@@ -483,6 +483,7 @@ export class AdminPanelComponent implements OnDestroy {
     () => this.reservationListRangeTab() !== 'none',
   );
   protected readonly reservationsInSelectedListRange = computed(() => {
+    const visibleReservations = this.getReservationListVisibleReservations();
     const rangeTab = this.reservationListRangeTab();
 
     if (rangeTab === 'none') {
@@ -490,13 +491,13 @@ export class AdminPanelComponent implements OnDestroy {
     }
 
     if (rangeTab === 'total') {
-      return this.reservations();
+      return visibleReservations;
     }
 
     const baseDateIso = this.agendaSelectedDateIso() || this.getTodayIso();
 
     if (rangeTab === 'dia') {
-      return this.reservations().filter((reservation) => reservation.dateIso === baseDateIso);
+      return visibleReservations.filter((reservation) => reservation.dateIso === baseDateIso);
     }
 
     if (rangeTab === 'semana') {
@@ -510,7 +511,7 @@ export class AdminPanelComponent implements OnDestroy {
       const startIso = this.toDateIso(weekStart);
       const endIso = this.toDateIso(weekEnd);
 
-      return this.reservations().filter(
+      return visibleReservations.filter(
         (reservation) => reservation.dateIso >= startIso && reservation.dateIso <= endIso,
       );
     }
@@ -526,7 +527,7 @@ export class AdminPanelComponent implements OnDestroy {
     const monthStartIso = `${year}-${`${month}`.padStart(2, '0')}-01`;
     const monthEndIso = this.toDateIso(new Date(year, month, 0));
 
-    return this.reservations().filter(
+    return visibleReservations.filter(
       (reservation) => reservation.dateIso >= monthStartIso && reservation.dateIso <= monthEndIso,
     );
   });
@@ -759,7 +760,7 @@ export class AdminPanelComponent implements OnDestroy {
     this.employeeRoleFilter.set('all');
 
     if (tab === 'empleados' && this.isSuperadmin()) {
-      this.employeeManagementTab.set('listado');
+      this.employeeManagementTab.set('crear');
       this.loadEmployeeUsers();
     } else if (tab === 'agenda') {
       this.agendaManagementTab.set('listado');
@@ -935,7 +936,7 @@ export class AdminPanelComponent implements OnDestroy {
     const reservationsByDate = new Map<string, number>();
     const alertsByDate = new Map<string, { total: number; pending: number }>();
 
-    this.reservations().forEach((reservation) => {
+    this.getAgendaVisibleReservations().forEach((reservation) => {
       const current = reservationsByDate.get(reservation.dateIso) ?? 0;
       reservationsByDate.set(reservation.dateIso, current + 1);
     });
@@ -1024,7 +1025,7 @@ export class AdminPanelComponent implements OnDestroy {
     const todayIso = this.getTodayIso();
     const reservationsByDate = new Map<string, number>();
 
-    this.reservations().forEach((reservation) => {
+    this.getAgendaVisibleReservations().forEach((reservation) => {
       const current = reservationsByDate.get(reservation.dateIso) ?? 0;
       reservationsByDate.set(reservation.dateIso, current + 1);
     });
@@ -1070,7 +1071,7 @@ export class AdminPanelComponent implements OnDestroy {
       return [];
     }
 
-    return this.reservations()
+    return this.getAgendaVisibleReservations()
       .filter((reservation) => reservation.dateIso === dateIso)
       .sort((a, b) => a.startTime.localeCompare(b.startTime));
   }
@@ -1085,11 +1086,19 @@ export class AdminPanelComponent implements OnDestroy {
     dateIso: string,
     startTime: string,
   ): AdminReservationItem[] {
-    return this.reservations()
+    return this.getAgendaVisibleReservations()
       .filter(
         (reservation) => reservation.dateIso === dateIso && reservation.startTime === startTime,
       )
       .sort((a, b) => a.startTime.localeCompare(b.startTime));
+  }
+
+  private getAgendaVisibleReservations(): AdminReservationItem[] {
+    return this.reservations().filter((reservation) => reservation.adminStatus !== 'rejected');
+  }
+
+  private getReservationListVisibleReservations(): AdminReservationItem[] {
+    return this.reservations().filter((reservation) => reservation.adminStatus !== 'rejected');
   }
 
   protected getAgendaAlertsByDateAndStartTime(
