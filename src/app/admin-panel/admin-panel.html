@@ -3251,7 +3251,10 @@
 
         @if (isLoadingEmployees()) {
           <p class="admin-panel--container__hint">Cargando usuarios...</p>
-        } @else if (employeeUsers().length === 0 || getEmployeeSummaryUsers().length === 0) {
+        } @else if (
+          employeeManagementTab() !== 'crear' &&
+          (employeeUsers().length === 0 || getEmployeeSummaryUsers().length === 0)
+        ) {
           <p class="admin-panel--container__hint">No hay usuarios registrados.</p>
         } @else {
           @if (employeeManagementTab() === 'crear') {
