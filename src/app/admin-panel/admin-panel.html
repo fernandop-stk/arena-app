@@ -1,145 +1,140 @@
 ﻿<section class="admin-panel">
   <div class="admin-panel--container">
-          <div class="admin-panel--container__cierre-layout">
-            <div class="admin-panel--container__cierre-stack">
-              <div class="admin-panel--container__cierre-summary admin-panel--container__cierre-summary--auto">
-                @if (cierreAutoDiario(); as auto) {
-                  <div class="admin-panel--container__cierre-summary-row admin-panel--container__cierre-summary-row--meta">
-                    <span class="admin-panel--container__cierre-summary-label"
-                      >🧾 Acumulado automático ({{ auto.dateIso }})</span
-                    >
-                    <span class="admin-panel--container__cierre-summary-value"
-                      >Actualizado: {{ formatDateTime(auto.updatedAtIso) }}</span
-                    >
-                  </div>
-                  <div class="admin-panel--container__cierre-summary-row">
-                    <span class="admin-panel--container__cierre-summary-label">💵 Efectivo</span>
-                    <span class="admin-panel--container__cierre-summary-value"
-                      >{{ auto.efectivo | number: '1.2-2' }} €</span
-                    >
-                  </div>
-                  <div class="admin-panel--container__cierre-summary-row">
-                    <span class="admin-panel--container__cierre-summary-label">💳 Tarjeta</span>
-                    <span class="admin-panel--container__cierre-summary-value"
-                      >{{ auto.tarjeta | number: '1.2-2' }} €</span
-                    >
-                  </div>
-                  <div class="admin-panel--container__cierre-summary-row">
-                    <span class="admin-panel--container__cierre-summary-label">📱 Bizum</span>
-                    <span class="admin-panel--container__cierre-summary-value"
-                      >{{ auto.bizum | number: '1.2-2' }} €</span
-                    >
-                  </div>
-                  <div
-                    class="admin-panel--container__cierre-summary-row admin-panel--container__cierre-summary-row--total"
-                  >
-                    <span class="admin-panel--container__cierre-summary-label">TOTAL AUTO</span>
-                    <span class="admin-panel--container__cierre-summary-value"
-                      >{{ auto.total | number: '1.2-2' }} €</span
-                    >
-                  </div>
-                  <button
-                    type="button"
-                    class="admin-panel--container__action-button admin-panel--container__action-button--soft"
-                    (click)="applyCierreAutoDiarioToForm()"
-                  >
-                    Usar acumulado automático en formulario
-                  </button>
-                } @else {
-                  <div class="admin-panel--container__cierre-summary-row">
-                    <span class="admin-panel--container__cierre-summary-label"
-                      >Aún no hay cobros automáticos registrados hoy.</span
-                    >
-                  </div>
-                }
-              </div>
+    @if (isChecking()) {
+      <p class="admin-panel--container__hint">Comprobando acceso...</p>
+    } @else {
+      <header class="admin-panel--container__hero">
+        <div class="admin-panel--container__hero-left">
+          <h1 class="admin-panel--container__title admin-panel--container__title--static">
+            Panel de administración
+          </h1>
+          <p class="admin-panel--container__description admin-panel--container__description--hero">
+            Acceso activo como {{ ownerEmail() || 'propietaria' }}
+          </p>
+        </div>
+        <div class="admin-panel--container__hero-right">
+          <app-notification-badge></app-notification-badge>
+        </div>
+      </header>
 
-              <div class="admin-panel--container__cierre-summary admin-panel--container__cierre-summary--totals">
-                <div class="admin-panel--container__cierre-summary-row">
-                  <span class="admin-panel--container__cierre-summary-label">💵 Efectivo</span>
-                  <span class="admin-panel--container__cierre-summary-value"
-                    >{{ cierreEfectivoNum() | number: '1.2-2' }} €</span
-                  >
-                </div>
-                <div class="admin-panel--container__cierre-summary-row">
-                  <span class="admin-panel--container__cierre-summary-label">💳 Tarjeta</span>
-                  <span class="admin-panel--container__cierre-summary-value"
-                    >{{ cierreTarjetaNum() | number: '1.2-2' }} €</span
-                  >
-                </div>
-                <div class="admin-panel--container__cierre-summary-row">
-                  <span class="admin-panel--container__cierre-summary-label">📱 Bizum</span>
-                  <span class="admin-panel--container__cierre-summary-value"
-                    >{{ cierreBizumNum() | number: '1.2-2' }} €</span
-                  >
-                </div>
-                <div
-                  class="admin-panel--container__cierre-summary-row admin-panel--container__cierre-summary-row--total"
-                >
-                  <span class="admin-panel--container__cierre-summary-label">TOTAL</span>
-                  <span class="admin-panel--container__cierre-summary-value"
-                    >{{ cierreTotal() | number: '1.2-2' }} €</span
-                  >
-                </div>
-              </div>
+      @if (activeTab() === 'home') {
+        <div class="admin-panel--container__module-grid">
+          <button
+            type="button"
+            class="admin-panel--container__module-card"
+            [style.--card-index]="0"
+            (click)="openAdminCard('packs')"
+          >
+            <div class="admin-panel--container__module-card-head">
+              <span class="admin-panel--container__module-card-icon" aria-hidden="true">✂️</span>
             </div>
+            <h2 class="admin-panel--container__module-card-title">Packs</h2>
+          </button>
 
-            <div class="admin-panel--container__cierre-form">
-              <div class="admin-panel--container__form-row admin-panel--container__form-row--cierre">
-                <div class="admin-panel--container__form-group">
-                  <label class="admin-panel--container__label" for="cierreEfectivo">Efectivo (€)</label>
-                  <input
-                    id="cierreEfectivo"
-                    class="admin-panel--container__input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    [value]="cierreEfectivo()"
-                    (input)="onCierreEfectivoInput($event)"
-                  />
-                </div>
-                <div class="admin-panel--container__form-group">
-                  <label class="admin-panel--container__label" for="cierreTarjeta">Tarjeta (€)</label>
-                  <input
-                    id="cierreTarjeta"
-                    class="admin-panel--container__input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    [value]="cierreTarjeta()"
-                    (input)="onCierreTarjetaInput($event)"
-                  />
-                </div>
-                <div class="admin-panel--container__form-group">
-                  <label class="admin-panel--container__label" for="cierreBizum">Bizum (€)</label>
-                  <input
-                    id="cierreBizum"
-                    class="admin-panel--container__input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    [value]="cierreBizum()"
-                    (input)="onCierreBizumInput($event)"
-                  />
-                </div>
-              </div>
-
-              <div class="admin-panel--container__form-group admin-panel--container__form-group--cierre-notes">
-                <label class="admin-panel--container__label" for="cierreNotas">Notas (opcional)</label>
-                <textarea
-                  id="cierreNotas"
-                  class="admin-panel--container__textarea"
-                  rows="3"
-                  placeholder="Observaciones del cierre..."
-                  [value]="cierreNotas()"
-                  (input)="onCierreNotasInput($event)"
-                ></textarea>
-              </div>
+          <button
+            type="button"
+            class="admin-panel--container__module-card"
+            [style.--card-index]="1"
+            (click)="openAdminCard('reservas')"
+          >
+            <div class="admin-panel--container__module-card-head">
+              <span class="admin-panel--container__module-card-icon" aria-hidden="true">🗓️</span>
             </div>
-          </div>
+            <h2 class="admin-panel--container__module-card-title">Reservas</h2>
+          </button>
+
+          <button
+            type="button"
+            class="admin-panel--container__module-card"
+            [style.--card-index]="2"
+            (click)="openAdminCard('agenda')"
+          >
+            <div class="admin-panel--container__module-card-head">
+              <span class="admin-panel--container__module-card-icon" aria-hidden="true">📌</span>
+            </div>
+            <h2 class="admin-panel--container__module-card-title">Agenda</h2>
+          </button>
+
+          <button
+            type="button"
+            class="admin-panel--container__module-card"
+            [style.--card-index]="3"
+            (click)="openAdminCard('clientes')"
+          >
+            <div class="admin-panel--container__module-card-head">
+              <span class="admin-panel--container__module-card-icon" aria-hidden="true">👤</span>
+            </div>
+            <h2 class="admin-panel--container__module-card-title">Ficha de cliente</h2>
+          </button>
+
+          <button
+            type="button"
+            class="admin-panel--container__module-card"
+            [style.--card-index]="4"
+            (click)="openAdminCard('almacen')"
+          >
+            <div class="admin-panel--container__module-card-head">
+              <span class="admin-panel--container__module-card-icon" aria-hidden="true">📦</span>
+            </div>
+            <h2 class="admin-panel--container__module-card-title">Almacén</h2>
+          </button>
+
+          <button
+            type="button"
+            class="admin-panel--container__module-card"
+            [style.--card-index]="5"
+            (click)="openAdminCard('cierre')"
+          >
+            <div class="admin-panel--container__module-card-head">
+              <span class="admin-panel--container__module-card-icon" aria-hidden="true">💶</span>
+            </div>
+            <h2 class="admin-panel--container__module-card-title">Cierre de caja</h2>
+          </button>
+        </div>
+
+        <div class="admin-panel--container__tabs">
+          <button
+            type="button"
+            class="admin-panel--container__tab"
+            [class.admin-panel--container__tab--active]="activeTab() === 'estadisticas'"
+            (click)="setActiveTab('estadisticas')"
+          >
+            Estadísticas
+          </button>
+          @if (isSuperadmin()) {
+            <button
+              type="button"
+              class="admin-panel--container__tab"
+              [class.admin-panel--container__tab--active]="activeTab() === 'empleados'"
+              (click)="setActiveTab('empleados')"
+            >
+              Gestión de empleados
+            </button>
+          }
+        </div>
+      } @else {
+        <div class="admin-panel--container__tabs">
+          <button type="button" class="admin-panel--container__tab" (click)="setActiveTab('home')">
+            ← Volver al panel
+          </button>
+          @if (activeTab() !== 'agenda') {
+            <button
+              type="button"
+              class="admin-panel--container__tab"
+              [class.admin-panel--container__tab--active]="activeTab() === 'agenda'"
+              (click)="setActiveTab('agenda')"
+            >
+              Agenda
+            </button>
+          }
+        </div>
+      }
+
+      @if (activeTab() === 'agenda') {
+        <h2 class="admin-panel--container__subtitle">Agenda</h2>
+        <p class="admin-panel--container__hint">
+          Gestiona reservas, bloqueos y consulta rápida de citas por hoy, semana o mes.
+        </p>
 
         <div class="admin-panel--container__employee-subtabs">
           <button
@@ -897,7 +892,7 @@
             </div>
           </div>
         }
-      }
+
 
       @if (activeTab() === 'agenda' && agendaManagementTab() === 'listado') {
         <h2 class="admin-panel--container__subtitle">Listado de reservas</h2>
