@@ -76,22 +76,26 @@
     &__module-card {
       border: 1px solid rgba(201, 123, 99, 0.3);
       border-radius: layout.$radius-lg;
-      background: #f4f1ef;
+      background:
+        linear-gradient(rgba(252, 243, 234, 0.82), rgba(252, 243, 234, 0.9)),
+        url('/assets/branding/fondo.jpeg') center / cover no-repeat;
       min-height: 11.5rem;
       padding: layout.$space-3;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 0.8rem;
+      gap: 0.35rem;
       text-align: center;
       cursor: pointer;
       transition:
         transform 0.2s ease,
-        box-shadow 0.2s ease;
+        box-shadow 0.2s ease,
+        border-color 0.2s ease;
 
       &:hover {
         transform: translateY(-2px);
+        border-color: rgba(201, 123, 99, 0.5);
         box-shadow: 0 10px 20px rgba(121, 92, 69, 0.12);
       }
     }
@@ -111,8 +115,11 @@
       margin: 0;
       color: colors.$color-primary-dark;
       font-family: typography.$font-heading;
-      font-size: 1.05rem;
-      font-weight: 800;
+      font-size: clamp(1.35rem, 3.1vw, 1.9rem);
+      font-weight: 900;
+      line-height: 1.15;
+      letter-spacing: 0.01em;
+      text-wrap: balance;
     }
 
     &__subtitle {
@@ -197,6 +204,155 @@
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: layout.$space-1;
+    }
+
+    &__help-grid {
+      margin-top: layout.$space-2;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: layout.$space-2;
+    }
+
+    &__help-highlight {
+      margin-top: layout.$space-2;
+      border: 1px solid rgba(217, 164, 65, 0.42);
+      border-radius: layout.$radius-md;
+      background: linear-gradient(120deg, rgba(217, 164, 65, 0.16), rgba(201, 123, 99, 0.08));
+      padding: layout.$space-2;
+      display: grid;
+      gap: 0.25rem;
+    }
+
+    &__help-highlight-title {
+      margin: 0;
+      color: colors.$color-primary-dark;
+      font-weight: 800;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    &__help-highlight-text {
+      margin: 0;
+      color: colors.$color-text;
+      line-height: 1.45;
+      font-size: 0.9rem;
+    }
+
+    &__help-search {
+      margin-top: layout.$space-2;
+      max-width: 34rem;
+    }
+
+    &__help-card {
+      border: 1px solid rgba(201, 123, 99, 0.28);
+      border-radius: layout.$radius-md;
+      background: linear-gradient(
+        180deg,
+        rgba(201, 123, 99, 0.08) 0%,
+        rgba(255, 255, 255, 0.92) 100%
+      );
+      padding: layout.$space-2;
+      display: grid;
+      gap: 0.7rem;
+    }
+
+    &__help-title {
+      margin: 0;
+      color: colors.$color-primary-dark;
+      font-family: typography.$font-heading;
+      font-size: 1rem;
+    }
+
+    &__help-text {
+      margin: 0;
+      color: colors.$color-text-soft;
+      line-height: 1.45;
+      font-size: 0.9rem;
+    }
+
+    &__help-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+    }
+
+    &__help-checklist {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 0.35rem;
+
+      li {
+        position: relative;
+        padding-left: 1.25rem;
+        color: colors.$color-text;
+        font-size: 0.86rem;
+        line-height: 1.42;
+
+        &::before {
+          content: '✓';
+          position: absolute;
+          left: 0;
+          top: 0;
+          color: colors.$color-primary;
+          font-weight: 800;
+        }
+      }
+    }
+
+    &__faq {
+      margin-top: layout.$space-3;
+      border-top: 1px dashed rgba(201, 123, 99, 0.45);
+      padding-top: layout.$space-2;
+      display: grid;
+      gap: layout.$space-2;
+    }
+
+    &__faq-title {
+      margin: 0;
+      color: colors.$color-primary-dark;
+      font-family: typography.$font-heading;
+      font-size: 1.05rem;
+    }
+
+    &__faq-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: layout.$space-2;
+    }
+
+    &__faq-item {
+      border: 1px solid rgba(93, 64, 48, 0.16);
+      border-radius: layout.$radius-md;
+      background: #fff;
+      padding: layout.$space-2;
+      display: grid;
+      gap: 0.6rem;
+    }
+
+    &__faq-question {
+      margin: 0;
+      color: colors.$color-text;
+      font-size: 0.92rem;
+      font-weight: 800;
+      line-height: 1.3;
+    }
+
+    &__faq-answer {
+      margin: 0;
+      color: colors.$color-text-soft;
+      font-size: 0.86rem;
+      line-height: 1.42;
+    }
+
+    &__help-empty {
+      margin-top: layout.$space-2;
+      border: 1px dashed rgba(201, 123, 99, 0.45);
+      border-radius: layout.$radius-md;
+      background: rgba(201, 123, 99, 0.06);
+      padding: layout.$space-2;
     }
 
     &__error {
@@ -1819,8 +1975,67 @@
       word-break: break-word;
     }
 
+    &__cierre-row-actions {
+      display: flex;
+      gap: 0.35rem;
+      white-space: nowrap;
+    }
+
     &__hint--compact {
       font-size: 0.78rem;
+    }
+
+    &__permissions-editor {
+      margin-top: layout.$space-1;
+      border: 1px solid rgba(201, 123, 99, 0.25);
+      border-radius: layout.$radius-sm;
+      background: rgba(201, 123, 99, 0.04);
+      padding: 0.8rem 1rem;
+      display: grid;
+      gap: 0.65rem;
+    }
+
+    &__permissions-editor-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    &__permissions-editor-title {
+      color: colors.$color-primary-dark;
+      font-size: 0.85rem;
+      font-weight: 800;
+    }
+
+    &__permissions-read {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+
+    &__permissions-checklist {
+      display: grid;
+      gap: 0.4rem;
+    }
+
+    &__permission-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.86rem;
+      font-weight: 500;
+      color: colors.$color-text;
+      cursor: pointer;
+
+      input[type='checkbox'] {
+        width: 1rem;
+        height: 1rem;
+        accent-color: colors.$color-primary;
+        flex-shrink: 0;
+        cursor: pointer;
+      }
     }
 
     &__reservation-actions--saved-view-row {
@@ -1852,10 +2067,37 @@
       align-items: end;
     }
 
+    &__client-stats-filters {
+      grid-template-columns: minmax(170px, 0.9fr) minmax(260px, 1.2fr) minmax(220px, 1fr) auto;
+
+      > * {
+        min-width: 0;
+      }
+    }
+
     &__client-stats-range {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: layout.$space-1;
+
+      &--stats {
+        min-width: 0;
+      }
+    }
+
+    &__client-stats-actions {
+      margin-top: 0;
+      justify-content: flex-end;
+      align-self: end;
+
+      .admin-panel--container__action-button {
+        white-space: nowrap;
+      }
+    }
+
+    &__label--stats-period,
+    &__label--stats-employee {
+      min-width: 0;
     }
 
     &__employee-stat-chip {
@@ -2384,6 +2626,14 @@
         grid-template-columns: 1fr;
       }
 
+      &__client-stats-filters {
+        grid-template-columns: 1fr;
+      }
+
+      &__client-stats-actions {
+        margin-top: 0;
+      }
+
       &__client-chart-row {
         align-items: start;
       }
@@ -2426,6 +2676,25 @@
         padding: 0.85rem;
       }
 
+      @media (max-width: 1120px) {
+        &__client-stats-filters {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        &__label--stats-period,
+        &__label--stats-employee,
+        &__client-stats-actions {
+          grid-column: span 1;
+        }
+
+        &__client-stats-range--stats {
+          grid-column: 1 / -1;
+        }
+
+        &__client-stats-actions {
+          justify-content: flex-start;
+        }
+      }
       &__textarea {
         min-height: 4.4rem;
       }

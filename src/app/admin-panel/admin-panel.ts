@@ -11,7 +11,12 @@ import { ClientManagementTabsComponent } from './components/client-management-ta
 import { ClientSummaryListComponent } from './components/client-summary-list/client-summary-list';
 import { EmployeeManagementTabsComponent } from './components/employee-management-tabs/employee-management-tabs';
 import { EmployeeSummaryListComponent } from './components/employee-summary-list/employee-summary-list';
-import { EmployeeCreateFormComponent } from './components/employee-create-form/employee-create-form';
+import {
+  EmployeeCreateFormComponent,
+  type EmployeePermission,
+  ALL_PERMISSIONS,
+  PERMISSION_LABELS,
+} from './components/employee-create-form/employee-create-form';
 import { EmployeeSearchFiltersComponent } from './components/employee-search-filters/employee-search-filters';
 import { EmployeeTrackingCalendarModalComponent } from './components/employee-tracking-calendar-modal/employee-tracking-calendar-modal';
 import { RoleChangeConfirmModalComponent } from './components/role-change-confirm-modal/role-change-confirm-modal';
@@ -25,7 +30,8 @@ type AdminTab =
   | 'clientes'
   | 'estadisticas'
   | 'almacen'
-  | 'cierre';
+  | 'cierre'
+  | 'ayuda';
 type AgendaManagementTab = 'listado' | 'gestion' | 'bloqueos';
 type AgendaRange = 'hoy' | 'semana' | 'mes';
 type ReservationListRangeTab = 'none' | 'dia' | 'semana' | 'mes' | 'total';
@@ -137,6 +143,7 @@ interface AdminEmployeeUser {
   username: string;
   role: AdminUserRole;
   createdAtIso: string;
+  permissions: EmployeePermission[];
   tracking: {
     workStatus: EmployeeWorkStatus;
     lastCheckInIso: string;
@@ -429,6 +436,7 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly agendaDetailError = signal('');
   protected readonly agendaDetailCancelling = signal(false);
   protected readonly showQuickReserveModal = signal(false);
+  protected readonly helpSearch = signal('');
   protected readonly isLoadingBlockedPeriods = signal(false);
   protected readonly ownerEmail = signal('');
   protected readonly stockManagementTab = signal<StockManagementTab>('crear');
@@ -464,6 +472,17 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly isLoadingCierreAutoDiario = signal(false);
   protected readonly cierreStatsRange = signal<CierreStatsRange>('mes');
   protected readonly cierreStatsMetric = signal<CierreStatsMetric>('total');
+  // Edición de cierre
+  protected readonly editingCierre = signal<CierreCajaItem | null>(null);
+  protected readonly editCierreEfectivo = signal('');
+  protected readonly editCierreTarjeta = signal('');
+  protected readonly editCierreBizum = signal('');
+  protected readonly editCierreNotas = signal('');
+  protected readonly editCierreLoading = signal(false);
+  protected readonly editCierreError = signal('');
+  // Borrado de cierre
+  protected readonly deletingCierreId = signal('');
+  protected readonly deleteCierreLoading = signal(false);
   protected readonly cierreTotal = computed(() => {
     const ef = parseFloat(this.cierreEfectivo()) || 0;
     const ta = parseFloat(this.cierreTarjeta()) || 0;
@@ -590,6 +609,13 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly dayReservationsDateIso = signal('');
   protected readonly dayReservations = signal<AdminReservationItem[]>([]);
   protected readonly isSuperadmin = signal(false);
+  protected readonly myPermissions = signal<EmployeePermission[]>([]);
+  protected readonly showNoPermissionModal = signal(false);
+  protected readonly noPermissionActionLabel = signal('');
+  protected readonly employeeCreatePermissions = signal<EmployeePermission[]>([...ALL_PERMISSIONS]);
+  protected readonly editingPermissionsEmail = signal('');
+  protected readonly editingPermissions = signal<EmployeePermission[]>([]);
+  protected readonly savingPermissions = signal(false);
   protected readonly employeeUsers = signal<AdminEmployeeUser[]>([]);
   protected readonly isLoadingEmployees = signal(false);
   protected readonly employeeActionLoadingEmail = signal('');
@@ -663,6 +689,22 @@ export class AdminPanelComponent implements OnDestroy {
     signal<GlobalTreatmentTimelineGroupingOption>('auto');
   protected readonly globalTreatmentSavedViewName = signal('');
   protected readonly globalTreatmentSavedViews = signal<GlobalTreatmentSavedView[]>([]);
+  protected readonly hasHelpResults = computed(() => {
+    const matches: boolean[] = [
+      this.matchesHelpQuery('agenda citas reserva bloquear horas calendario cancelar modificar'),
+      this.matchesHelpQuery('clientes clienta ficha alta buscar editar tratamiento pagos'),
+      this.matchesHelpQuery('cierre caja importe historico editar eliminar pdf'),
+      this.matchesHelpQuery('almacen productos stock inventario precio marca cantidad'),
+      this.matchesHelpQuery('packs servicios tratamiento precio'),
+      this.matchesHelpQuery('problemas frecuentes cita cancelada permisos cierre clienta'),
+    ];
+
+    if (this.isSuperadmin()) {
+      matches.push(this.matchesHelpQuery('empleados permisos rol superadmin admin estado laboral'));
+    }
+
+    return matches.some(Boolean);
+  });
 
   constructor() {
     this.resetEmployeeHistoryRangeToCurrentMonth();
@@ -681,6 +723,7 @@ export class AdminPanelComponent implements OnDestroy {
           role?: AdminUserRole;
           email?: string;
           username?: string;
+          permissions?: EmployeePermission[];
         }>('/api/auth/session')
         .subscribe({
           next: (response) => {
@@ -691,6 +734,7 @@ export class AdminPanelComponent implements OnDestroy {
 
             this.ownerEmail.set(response.email ?? '');
             this.isSuperadmin.set(response.role === 'superadmin');
+            this.myPermissions.set(response.permissions ?? []);
             this.loadReservations();
             this.loadAgendaAlerts();
             this.loadBlockedPeriods();
@@ -870,6 +914,7 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected openAgendaCalendarModal(): void {
+    if (!this.requirePermission('agenda_ver', 'Ver agenda')) return;
     if (!this.agendaCalendarMonthIso()) {
       const today = new Date();
       this.agendaCalendarMonthIso.set(
@@ -883,6 +928,7 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected openAgendaWeekScheduleModal(anchorDateIso?: string): void {
+    if (!this.requirePermission('agenda_ver', 'Ver agenda')) return;
     const baseDateIso = anchorDateIso || this.agendaSelectedDateIso() || this.getTodayIso();
     this.agendaWeekStartIso.set(this.getWeekStartIso(baseDateIso));
     this.persistAgendaPreferredView('week');
@@ -1402,6 +1448,25 @@ export class AdminPanelComponent implements OnDestroy {
   protected onAgendaSelectedDateInput(event: Event): void {
     const target = event.target as HTMLInputElement;
     this.agendaSelectedDateIso.set(target.value);
+  }
+
+  protected onHelpSearchInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.helpSearch.set(target.value);
+  }
+
+  protected clearHelpSearch(): void {
+    this.helpSearch.set('');
+  }
+
+  protected matchesHelpQuery(keywords: string): boolean {
+    const query = this.normalizeSearchText(this.helpSearch());
+
+    if (!query) {
+      return true;
+    }
+
+    return this.normalizeSearchText(keywords).includes(query);
   }
 
   protected setReservationListRangeTab(tab: ReservationListRangeTab): void {
@@ -2618,6 +2683,14 @@ export class AdminPanelComponent implements OnDestroy {
     return `${slug || 'vista'}-${Date.now()}`;
   }
 
+  private normalizeSearchText(value: string): string {
+    return value
+      .trim()
+      .toLocaleLowerCase('es')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  }
+
   private persistGlobalTreatmentSavedViews(): void {
     if (!this.canUseLocalStorage()) {
       return;
@@ -3313,6 +3386,7 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected createClientCard(): void {
+    if (!this.requirePermission('clientes_gestionar', 'Gestionar fichas de clientes')) return;
     const fullName = this.clientFullName().trim();
     const email = this.clientEmail().trim();
     const phone = this.clientPhone().trim();
@@ -3887,6 +3961,7 @@ export class AdminPanelComponent implements OnDestroy {
     const email = this.employeeCreateEmail().trim();
     const password = this.employeeCreatePassword();
     const role = this.employeeCreateRole();
+    const permissions = this.employeeCreatePermissions();
 
     this.employeeError.set('');
     this.employeeMessage.set('');
@@ -3904,6 +3979,7 @@ export class AdminPanelComponent implements OnDestroy {
         email,
         password,
         role,
+        permissions,
       })
       .subscribe({
         next: (response) => {
@@ -3917,6 +3993,7 @@ export class AdminPanelComponent implements OnDestroy {
           this.employeeCreateEmail.set('');
           this.employeeCreatePassword.set('');
           this.employeeCreateRole.set('admin');
+          this.employeeCreatePermissions.set([...ALL_PERMISSIONS]);
           this.loadEmployeeUsers();
         },
         error: (error) => {
@@ -4390,6 +4467,7 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected setReservationStatus(reservationId: string, status: 'accepted' | 'rejected'): void {
+    if (!this.requirePermission('reservas_gestionar', 'Aceptar / rechazar reservas')) return;
     this.actionError.set('');
     this.actionLoadingId.set(reservationId);
 
@@ -4509,6 +4587,7 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected createBlockedPeriod(): void {
+    if (!this.requirePermission('bloqueos_gestionar', 'Bloquear horas y días')) return;
     this.blockError.set('');
     this.blockMessage.set('');
 
@@ -4875,6 +4954,7 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected registrarCierre(): void {
+    if (!this.requirePermission('cierre_registrar', 'Registrar cierre de caja')) return;
     this.cierreError.set('');
     this.cierreMessage.set('');
 
@@ -5096,6 +5176,113 @@ export class AdminPanelComponent implements OnDestroy {
     }
 
     return 'Meses';
+  }
+
+  // ── Editar / borrar cierre ─────────────────────────────────────────────────
+
+  protected openEditCierre(cierre: CierreCajaItem): void {
+    this.editingCierre.set(cierre);
+    this.editCierreEfectivo.set(`${cierre.efectivo}`);
+    this.editCierreTarjeta.set(`${cierre.tarjeta}`);
+    this.editCierreBizum.set(`${cierre.bizum}`);
+    this.editCierreNotas.set(cierre.notas ?? '');
+    this.editCierreError.set('');
+  }
+
+  protected closeEditCierre(): void {
+    this.editingCierre.set(null);
+    this.editCierreError.set('');
+  }
+
+  protected saveEditCierre(): void {
+    const cierre = this.editingCierre();
+    if (!cierre) return;
+
+    const ef = parseFloat(this.editCierreEfectivo().replace(',', '.'));
+    const ta = parseFloat(this.editCierreTarjeta().replace(',', '.'));
+    const bi = parseFloat(this.editCierreBizum().replace(',', '.'));
+
+    if (!Number.isFinite(ef) || !Number.isFinite(ta) || !Number.isFinite(bi)) {
+      this.editCierreError.set('Los importes deben ser números válidos.');
+      return;
+    }
+    if (ef < 0 || ta < 0 || bi < 0) {
+      this.editCierreError.set('Los importes no pueden ser negativos.');
+      return;
+    }
+
+    this.editCierreLoading.set(true);
+    this.editCierreError.set('');
+
+    this.http
+      .patch<{ ok: boolean; cierre?: CierreCajaItem; error?: string }>(
+        `/api/admin/cierre-caja/${encodeURIComponent(cierre.id)}`,
+        {
+          efectivo: ef,
+          tarjeta: ta,
+          bizum: bi,
+          notas: this.editCierreNotas().trim(),
+        },
+      )
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.editCierreError.set(response.error ?? 'No se pudo guardar el cierre.');
+            return;
+          }
+          this.cierreMessage.set('Cierre actualizado correctamente.');
+          this.closeEditCierre();
+          this.loadCierres();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.editCierreError.set(
+            typeof apiError === 'string' && apiError ? apiError : 'No se pudo guardar el cierre.',
+          );
+        },
+        complete: () => {
+          this.editCierreLoading.set(false);
+        },
+      });
+  }
+
+  protected confirmDeleteCierre(cierreId: string): void {
+    this.deletingCierreId.set(cierreId);
+  }
+
+  protected cancelDeleteCierre(): void {
+    this.deletingCierreId.set('');
+  }
+
+  protected executeDeleteCierre(): void {
+    const id = this.deletingCierreId();
+    if (!id) return;
+
+    this.deleteCierreLoading.set(true);
+
+    this.http
+      .delete<{ ok: boolean; error?: string }>(`/api/admin/cierre-caja/${encodeURIComponent(id)}`)
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.cierreError.set(response.error ?? 'No se pudo eliminar el cierre.');
+            return;
+          }
+          this.cierreMessage.set('Cierre eliminado correctamente.');
+          this.deletingCierreId.set('');
+          this.loadCierres();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.cierreError.set(
+            typeof apiError === 'string' && apiError ? apiError : 'No se pudo eliminar el cierre.',
+          );
+          this.deletingCierreId.set('');
+        },
+        complete: () => {
+          this.deleteCierreLoading.set(false);
+        },
+      });
   }
 
   private loadCierres(): void {
@@ -5426,6 +5613,94 @@ export class AdminPanelComponent implements OnDestroy {
       },
     });
   }
+
+  // ── Permisos ───────────────────────────────────────────────────────────────
+
+  protected hasPermission(perm: EmployeePermission): boolean {
+    if (this.isSuperadmin()) return true;
+    return this.myPermissions().includes(perm);
+  }
+
+  protected requirePermission(perm: EmployeePermission, label: string): boolean {
+    if (this.hasPermission(perm)) return true;
+    this.noPermissionActionLabel.set(label);
+    this.showNoPermissionModal.set(true);
+    return false;
+  }
+
+  protected closeNoPermissionModal(): void {
+    this.showNoPermissionModal.set(false);
+    this.noPermissionActionLabel.set('');
+  }
+
+  protected onEmployeeCreatePermissionsChange(perms: EmployeePermission[]): void {
+    this.employeeCreatePermissions.set(perms);
+  }
+
+  protected openEditPermissions(user: AdminEmployeeUser): void {
+    this.editingPermissionsEmail.set(user.email);
+    this.editingPermissions.set([...(user.permissions ?? [])]);
+  }
+
+  protected closeEditPermissions(): void {
+    this.editingPermissionsEmail.set('');
+    this.editingPermissions.set([]);
+  }
+
+  protected toggleEditPermission(perm: EmployeePermission): void {
+    const current = this.editingPermissions();
+    const next = current.includes(perm) ? current.filter((p) => p !== perm) : [...current, perm];
+    this.editingPermissions.set(next);
+  }
+
+  protected selectAllEditPermissions(): void {
+    this.editingPermissions.set([...ALL_PERMISSIONS]);
+  }
+
+  protected clearAllEditPermissions(): void {
+    this.editingPermissions.set([]);
+  }
+
+  protected saveEmployeePermissions(): void {
+    const email = this.editingPermissionsEmail();
+    const permissions = this.editingPermissions();
+
+    if (!email) return;
+
+    this.savingPermissions.set(true);
+    this.employeeError.set('');
+
+    this.http
+      .patch<{
+        ok: boolean;
+        error?: string;
+      }>(`/api/admin/empleados/${encodeURIComponent(email)}/permissions`, { permissions })
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.employeeError.set(response.error ?? 'No se pudieron guardar los permisos.');
+            return;
+          }
+          this.employeeMessage.set('Permisos actualizados correctamente.');
+          this.closeEditPermissions();
+          this.loadEmployeeUsers();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.employeeError.set(
+            typeof apiError === 'string' && apiError
+              ? apiError
+              : 'No se pudieron guardar los permisos.',
+          );
+        },
+        complete: () => {
+          this.savingPermissions.set(false);
+        },
+      });
+  }
+
+  protected readonly allPermissionsList = ALL_PERMISSIONS;
+  protected readonly permissionLabels = PERMISSION_LABELS;
 
   private loadEmployeeUsers(): void {
     if (!this.isSuperadmin()) {

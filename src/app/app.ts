@@ -186,6 +186,60 @@ import { AppService } from './app.service';
       <main class="app-shell--main">
         <router-outlet />
       </main>
+
+      @if (!isSuperadmin()) {
+        <footer class="app-shell--footer">
+          <div class="app-shell--footer__container">
+            <div class="app-shell--footer__top">
+              <a class="app-shell--footer__brand" routerLink="/" aria-label="Arena Hair Studio">
+                <img
+                  class="app-shell--footer__logo"
+                  src="assets/branding/logo-real.png"
+                  alt="Arena Hair Studio"
+                />
+                <span class="app-shell--footer__brand-name">Arena Hair Studio</span>
+              </a>
+
+              <nav class="app-shell--footer__nav" aria-label="Navegación del pie de página">
+                <a class="app-shell--footer__link" routerLink="/conocenos">Conócenos</a>
+                <a class="app-shell--footer__link" routerLink="/reservas">Reservar cita</a>
+                <a class="app-shell--footer__link" routerLink="/packs">Packs y tratamientos</a>
+                <a class="app-shell--footer__link" routerLink="/donde-estamos">Dónde estamos</a>
+              </nav>
+
+              <a
+                class="app-shell--footer__instagram"
+                href="https://www.instagram.com/arenahairstudio"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Arena Hair Studio en Instagram"
+              >
+                <svg
+                  class="app-shell--footer__instagram-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+                  <circle cx="12" cy="12" r="4" />
+                  <circle cx="17.5" cy="6.5" r="0.8" fill="currentColor" stroke="none" />
+                </svg>
+                <span>Instagram</span>
+              </a>
+            </div>
+
+            <div class="app-shell--footer__bottom">
+              <p class="app-shell--footer__copy">
+                © {{ currentYear }} Arena Hair Studio · Todos los derechos reservados
+              </p>
+            </div>
+          </div>
+        </footer>
+      }
     </div>
   `,
   styleUrl: './app.scss',
@@ -211,6 +265,7 @@ export class App {
   protected readonly employeeTrackingError = signal('');
 
   protected readonly appName = this.appService.getAppName();
+  protected readonly currentYear = new Date().getFullYear();
 
   constructor() {
     effect(() => {

@@ -17,9 +17,24 @@ export class InicioComponent {
   protected readonly title = this.inicioService.getTitle();
   protected readonly subtitle = this.inicioService.getSubtitle();
   protected readonly options = this.inicioService.getOptions();
-  protected readonly titleChars = Array.from(this.title);
+  protected readonly titleWords = this.title.split(' ');
+  private readonly titleWordStartIndexes = this.titleWords.reduce<number[]>((acc, word, index) => {
+    if (index === 0) {
+      acc.push(0);
+      return acc;
+    }
+
+    const previousWord = this.titleWords[index - 1] ?? '';
+    const previousStart = acc[index - 1] ?? 0;
+    acc.push(previousStart + previousWord.length + 1);
+    return acc;
+  }, []);
   protected readonly showIntro = signal(false);
   protected readonly showContent = signal(true);
+
+  protected getIntroCharIndex(wordIndex: number, charIndex: number): number {
+    return (this.titleWordStartIndexes[wordIndex] ?? 0) + charIndex;
+  }
 
   constructor() {
     if (typeof window === 'undefined') {

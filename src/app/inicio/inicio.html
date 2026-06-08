@@ -1,12 +1,15 @@
 @if (showIntro()) {
   <section class="inicio--intro-screen" [attr.aria-label]="title">
     <h1 class="inicio--intro-title" [attr.aria-label]="title">
-      @for (char of titleChars; track $index) {
-        <span class="inicio--intro-char" [style.--char-index]="$index">
-          @if (char === ' ') {
-            &nbsp;
-          } @else {
-            {{ char }}
+      @for (word of titleWords; track $index; let wordIndex = $index) {
+        <span class="inicio--intro-word">
+          @for (char of word; track $index; let charIndex = $index) {
+            <span
+              class="inicio--intro-char"
+              [style.--char-index]="getIntroCharIndex(wordIndex, charIndex)"
+            >
+              {{ char }}
+            </span>
           }
         </span>
       }

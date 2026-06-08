@@ -337,48 +337,115 @@ body.app-menu-open {
   &--footer {
     margin-top: auto;
     border-top: 1px solid colors.$color-border;
-    background: rgba(colors.$color-surface, 0.92);
-    backdrop-filter: blur(8px);
+    background: colors.$color-primary-dark;
     position: relative;
     z-index: 1;
 
     &__container {
       max-width: layout.$max-content-width;
       margin: 0 auto;
-      padding: layout.$space-2;
+      padding: layout.$space-3 layout.$space-2;
+      display: grid;
+      gap: layout.$space-2;
     }
 
-    &__client-links {
+    &__top {
       display: flex;
       flex-wrap: wrap;
-      justify-content: center;
-      gap: 0.65rem;
-      margin-bottom: 0.75rem;
+      align-items: center;
+      justify-content: space-between;
+      gap: layout.$space-2;
     }
 
-    &__client-link {
-      display: inline-flex;
+    &__brand {
+      display: flex;
       align-items: center;
-      justify-content: center;
-      min-height: 2.25rem;
-      padding: 0 0.9rem;
-      border-radius: 999px;
+      gap: 0.7rem;
       text-decoration: none;
-      color: colors.$color-primary-dark;
-      font-size: 0.82rem;
+      flex-shrink: 0;
+    }
+
+    &__logo {
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 999px;
+      object-fit: cover;
+      background: rgba(255, 255, 255, 0.12);
+      padding: 0.1rem;
+      flex-shrink: 0;
+    }
+
+    &__brand-name {
+      font-family: typography.$font-display;
       font-weight: 700;
-      border: 1px solid rgba(201, 123, 99, 0.22);
-      background: rgba(201, 123, 99, 0.08);
+      font-size: 1.05rem;
+      color: rgba(255, 255, 255, 0.92);
+      letter-spacing: 0.01em;
+    }
+
+    &__nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.2rem 0.25rem;
+      align-items: center;
+    }
+
+    &__link {
+      text-decoration: none;
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 0.84rem;
+      font-weight: 600;
+      padding: 0.35rem 0.65rem;
+      border-radius: 999px;
+      transition:
+        color 0.18s ease,
+        background 0.18s ease;
 
       &:hover {
-        background: rgba(201, 123, 99, 0.14);
+        color: #fff;
+        background: rgba(255, 255, 255, 0.1);
       }
     }
 
-    &__text {
+    &__instagram {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      text-decoration: none;
+      color: rgba(255, 255, 255, 0.75);
+      font-size: 0.84rem;
+      font-weight: 700;
+      padding: 0.45rem 0.9rem;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      transition:
+        color 0.18s ease,
+        border-color 0.18s ease,
+        background 0.18s ease;
+      flex-shrink: 0;
+
+      &:hover {
+        color: #fff;
+        border-color: rgba(255, 255, 255, 0.5);
+        background: rgba(255, 255, 255, 0.08);
+      }
+    }
+
+    &__instagram-icon {
+      width: 1.15rem;
+      height: 1.15rem;
+      flex-shrink: 0;
+    }
+
+    &__bottom {
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      padding-top: layout.$space-1;
+    }
+
+    &__copy {
       margin: 0;
-      color: colors.$color-text-soft;
-      font-size: 0.86rem;
+      color: rgba(255, 255, 255, 0.45);
+      font-size: 0.78rem;
       text-align: center;
     }
   }
@@ -444,6 +511,20 @@ body.app-menu-open {
 
       &__client-links {
         margin-bottom: 0.9rem;
+      }
+    }
+
+    &--footer {
+      &__container {
+        padding: layout.$space-3 layout.$space-3;
+      }
+
+      &__top {
+        flex-wrap: nowrap;
+      }
+
+      &__nav {
+        gap: 0.1rem 0;
       }
     }
 

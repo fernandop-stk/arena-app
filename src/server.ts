@@ -254,6 +254,31 @@ interface EmployeeTrackingInfo {
   history: EmployeeTrackingHistoryItem[];
 }
 
+type EmployeePermission =
+  | 'agenda_ver'
+  | 'agenda_gestionar'
+  | 'bloqueos_gestionar'
+  | 'reservas_ver'
+  | 'reservas_gestionar'
+  | 'cierre_registrar'
+  | 'estadisticas_ver'
+  | 'clientes_gestionar'
+  | 'almacen_gestionar'
+  | 'cobros_gestionar';
+
+const ALL_EMPLOYEE_PERMISSIONS: EmployeePermission[] = [
+  'agenda_ver',
+  'agenda_gestionar',
+  'bloqueos_gestionar',
+  'reservas_ver',
+  'reservas_gestionar',
+  'cierre_registrar',
+  'estadisticas_ver',
+  'clientes_gestionar',
+  'almacen_gestionar',
+  'cobros_gestionar',
+];
+
 interface AppUser {
   id: string;
   email: string;
@@ -263,6 +288,7 @@ interface AppUser {
   role: AppUserRole;
   createdAtIso: string;
   tracking: EmployeeTrackingInfo;
+  permissions?: EmployeePermission[];
 }
 
 interface AppSession {
@@ -279,6 +305,7 @@ interface AdminEmployeeItem {
   role: AppUserRole;
   createdAtIso: string;
   tracking: EmployeeTrackingInfo;
+  permissions: EmployeePermission[];
 }
 
 interface ClientTreatmentItem {
@@ -1558,6 +1585,7 @@ const listUsersForSuperadmin = (): AdminEmployeeItem[] =>
       role: user.role,
       createdAtIso: user.createdAtIso,
       tracking: normalizeTrackingInfo(user.tracking),
+      permissions: user.permissions ?? [],
     }))
     .sort((a, b) => {
       if (a.role === b.role) {
@@ -1726,6 +1754,7 @@ app.post('/api/auth/login', (req, res) => {
 
 app.get('/api/auth/session', (req, res) => {
   const session = getAuthSession(req.headers.cookie);
+  const user = session.email ? usersByEmail.get(session.email) : undefined;
 
   return res.status(200).json({
     ok: true,
@@ -1734,6 +1763,7 @@ app.get('/api/auth/session', (req, res) => {
     email: session.email,
     username: session.username,
     role: session.role,
+    permissions: user?.permissions ?? [],
   });
 });
 
@@ -2830,6 +2860,82 @@ app.post('/api/admin/cierre-caja', (req, res) => {
   }
 });
 
+app.patch('/api/admin/cierre-caja/:id', (req, res) => {
+  seedAuthUsers();
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const id = `${req.params['id'] ?? ''}`.trim();
+
+  if (!id) {
+    return res.status(400).json({ ok: false, error: 'ID de cierre inválido.' });
+  }
+
+  const existing = cierreCajaById.get(id);
+
+  if (!existing) {
+    return res.status(404).json({ ok: false, error: 'Cierre no encontrado.' });
+  }
+
+  const body =
+    req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+      ? (req.body as { efectivo?: unknown; tarjeta?: unknown; bizum?: unknown; notas?: unknown })
+      : {};
+
+  const ef = parseCierreAmount(body.efectivo);
+  const ta = parseCierreAmount(body.tarjeta);
+  const bi = parseCierreAmount(body.bizum);
+
+  if (ef === null || ta === null || bi === null) {
+    return res.status(400).json({ ok: false, error: 'Los importes deben ser números válidos.' });
+  }
+
+  if (ef < 0 || ta < 0 || bi < 0) {
+    return res.status(400).json({ ok: false, error: 'Los importes no pueden ser negativos.' });
+  }
+
+  const updated = normalizeCierre({
+    ...existing,
+    efectivo: ef,
+    tarjeta: ta,
+    bizum: bi,
+    total: ef + ta + bi,
+    notas: typeof body.notas === 'string' ? body.notas.trim().slice(0, 500) : existing.notas,
+  });
+
+  cierreCajaById.set(id, updated);
+  void persistCierreCajaToDisk();
+
+  return res.status(200).json({ ok: true, cierre: updated });
+});
+
+app.delete('/api/admin/cierre-caja/:id', (req, res) => {
+  seedAuthUsers();
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const id = `${req.params['id'] ?? ''}`.trim();
+
+  if (!id) {
+    return res.status(400).json({ ok: false, error: 'ID de cierre inválido.' });
+  }
+
+  if (!cierreCajaById.has(id)) {
+    return res.status(404).json({ ok: false, error: 'Cierre no encontrado.' });
+  }
+
+  cierreCajaById.delete(id);
+  void persistCierreCajaToDisk();
+
+  return res.status(200).json({ ok: true });
+});
+
 app.get('/api/admin/clientes', (req, res) => {
   seedAuthUsers();
   const session = isAdminRequest(req.headers.cookie);
@@ -3120,6 +3226,12 @@ app.post('/api/admin/empleados', (req, res) => {
   const password = `${req.body?.password ?? ''}`;
   const role = `${req.body?.role ?? 'admin'}`.trim() as AppUserRole;
   const usernameLower = username.toLowerCase();
+  const rawPermissions: unknown = req.body?.permissions;
+  const permissions: EmployeePermission[] = Array.isArray(rawPermissions)
+    ? rawPermissions.filter((p): p is EmployeePermission =>
+        ALL_EMPLOYEE_PERMISSIONS.includes(p as EmployeePermission),
+      )
+    : [];
 
   if (!email || !username || !password) {
     return res
@@ -3177,6 +3289,7 @@ app.post('/api/admin/empleados', (req, res) => {
     role,
     createdAtIso: new Date().toISOString(),
     tracking: createDefaultTrackingInfo(),
+    permissions,
   });
 
   return res.status(200).json({ ok: true });
@@ -3249,6 +3362,44 @@ app.patch('/api/admin/empleados/:email/rol', (req, res) => {
   });
 
   return res.status(200).json({ ok: true });
+});
+
+app.patch('/api/admin/empleados/:email/permissions', (req, res) => {
+  seedAuthUsers();
+  const session = isSuperadminRequest(req.headers.cookie);
+
+  if (!session.isSuperadmin) {
+    return res.status(403).json({ ok: false, error: 'Solo superadmin puede gestionar empleados.' });
+  }
+
+  const email = `${req.params['email'] ?? ''}`.trim().toLowerCase();
+  const rawPermissions: unknown = req.body?.permissions;
+
+  if (!email) {
+    return res.status(400).json({ ok: false, error: 'Email inválido.' });
+  }
+
+  const targetUser = usersByEmail.get(email);
+
+  if (!targetUser) {
+    return res.status(404).json({ ok: false, error: 'Usuario no encontrado.' });
+  }
+
+  if (targetUser.role === 'superadmin') {
+    return res
+      .status(409)
+      .json({ ok: false, error: 'El superadmin siempre tiene todos los permisos.' });
+  }
+
+  const permissions: EmployeePermission[] = Array.isArray(rawPermissions)
+    ? rawPermissions.filter((p): p is EmployeePermission =>
+        ALL_EMPLOYEE_PERMISSIONS.includes(p as EmployeePermission),
+      )
+    : [];
+
+  upsertUser({ ...targetUser, permissions });
+
+  return res.status(200).json({ ok: true, permissions });
 });
 
 app.patch('/api/admin/empleados/:email/tracking', (req, res) => {

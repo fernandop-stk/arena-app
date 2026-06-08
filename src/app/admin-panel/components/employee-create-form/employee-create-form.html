@@ -61,6 +61,40 @@
     </label>
   </div>
 
+  <div class="employee-create-form__permissions">
+    <div class="employee-create-form__permissions-header">
+      <span class="employee-create-form__permissions-title">Permisos</span>
+      <div class="employee-create-form__permissions-actions">
+        <button
+          type="button"
+          class="employee-create-form__permissions-toggle"
+          (click)="selectAll()"
+        >
+          Todos
+        </button>
+        <button type="button" class="employee-create-form__permissions-toggle" (click)="clearAll()">
+          Ninguno
+        </button>
+      </div>
+    </div>
+
+    <div class="employee-create-form__permissions-list">
+      @for (perm of allPermissions; track perm) {
+        <label class="employee-create-form__permission-item">
+          <input
+            type="checkbox"
+            class="employee-create-form__permission-checkbox"
+            [checked]="isChecked(perm)"
+            (change)="togglePermission(perm)"
+          />
+          <span class="employee-create-form__permission-label">
+            {{ permissionLabels[perm] }}
+          </span>
+        </label>
+      }
+    </div>
+  </div>
+
   <div class="employee-create-form__actions">
     <button
       type="button"
