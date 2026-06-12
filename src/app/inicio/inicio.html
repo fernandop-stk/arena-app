@@ -29,9 +29,7 @@
         @for (option of options; track option.id; let idx = $index) {
           <a class="inicio--container__card" [routerLink]="option.ruta" [style.--card-index]="idx">
             <div class="inicio--container__card-head">
-              <span class="inicio--container__card-icon" aria-hidden="true">{{
-                option.icono
-              }}</span>
+              <span class="inicio--container__card-icon" aria-hidden="true"></span>
               <span class="inicio--container__card-tag">{{ option.etiqueta }}</span>
             </div>
             <h2 class="inicio--container__card-title">{{ option.titulo }}</h2>

@@ -14,7 +14,6 @@
             type="email"
             formControlName="email"
             placeholder="tu@email.com"
-            [disabled]="isSubmitting()"
           />
           @if (solicitudForm.get('email')?.invalid && solicitudForm.get('email')?.touched) {
             <span class="recuperar--error">
@@ -71,7 +70,6 @@
               [type]="showPassword() ? 'text' : 'password'"
               formControlName="password"
               placeholder="Mínimo 8 caracteres con mayúscula y símbolo"
-              [disabled]="isSubmitting()"
             />
             <button
               type="button"
@@ -128,7 +126,6 @@
               [type]="showConfirmPassword() ? 'text' : 'password'"
               formControlName="confirmPassword"
               placeholder="Repite tu contraseña"
-              [disabled]="isSubmitting()"
             />
             <button
               type="button"

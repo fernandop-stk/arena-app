@@ -125,7 +125,7 @@ export class RecuperarContraseñaComponent {
       return;
     }
 
-    this.isSubmitting.set(true);
+    this.setSubmittingState(true);
     this.errorMessage.set('');
     this.message.set('');
 
@@ -145,13 +145,13 @@ export class RecuperarContraseñaComponent {
             }, 4000);
           } else {
             this.errorMessage.set(response.error ?? 'Error desconocido.');
-            this.isSubmitting.set(false);
+            this.setSubmittingState(false);
           }
         },
         error: (err: unknown) => {
           const errorMessage = (err as any)?.error?.error ?? 'Error de conexión. Intenta de nuevo.';
           this.errorMessage.set(errorMessage);
-          this.isSubmitting.set(false);
+          this.setSubmittingState(false);
         },
       });
   }
@@ -161,7 +161,7 @@ export class RecuperarContraseñaComponent {
       return;
     }
 
-    this.isSubmitting.set(true);
+    this.setSubmittingState(true);
     this.errorMessage.set('');
     this.message.set('');
 
@@ -181,15 +181,28 @@ export class RecuperarContraseñaComponent {
             }, 2000);
           } else {
             this.errorMessage.set(response.error ?? 'Error desconocido.');
-            this.isSubmitting.set(false);
+            this.setSubmittingState(false);
           }
         },
         error: (err: unknown) => {
           const errorMessage = (err as any)?.error?.error ?? 'Error de conexión. Intenta de nuevo.';
           this.errorMessage.set(errorMessage);
-          this.isSubmitting.set(false);
+          this.setSubmittingState(false);
         },
       });
+  }
+
+  private setSubmittingState(isSubmitting: boolean): void {
+    this.isSubmitting.set(isSubmitting);
+
+    const activeForm = this.currentStep() === 'solicitud' ? this.solicitudForm : this.resetForm;
+
+    if (isSubmitting) {
+      activeForm.disable({ emitEvent: false });
+      return;
+    }
+
+    activeForm.enable({ emitEvent: false });
   }
 
   private passwordMatchValidator(): ValidatorFn {

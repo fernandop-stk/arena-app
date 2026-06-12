@@ -9,11 +9,27 @@ export class DondeEstamosService {
   }
 
   getAddress(): string {
-    return 'C. de Castilla, 4, 28320 Pinto, Madrid';
+    return 'C. Asturias, 2, 28320 Pinto, Madrid';
   }
 
   getPhone(): string {
-    return '618 787 878';
+    return '91 952 16 11';
+  }
+
+  getWhatsApp(): string {
+    return '614 716 238';
+  }
+
+  getHours(): string {
+    return 'Horario · L-V 10:30-14:00 y 15:00-19:00 · Sáb 09:00-14:00';
+  }
+
+  getInstagramUrl(): string {
+    return 'https://www.instagram.com/arenahairstudio';
+  }
+
+  getInstagramLabel(): string {
+    return '@arenahairstudio';
   }
 
   getMapUrl(): string {

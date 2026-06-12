@@ -46,8 +46,8 @@ const buildReservationEmailHtml = (data: {
     <div style="background:#fcf3ea;padding:24px;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;color:#3b2f2a;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;margin:0 auto;background:#fff9f4;border-radius:16px;overflow:hidden;border:1px solid #e8d8c9;">
         <tr>
-          <td style="background:linear-gradient(135deg,#c97b63 0%,#d9a441 100%);padding:24px;">
-            <p style="margin:0 0 6px;color:#fff6ee;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Arena Studio</p>
+          <td style="background:#c3b6a3;padding:24px;">
+            <p style="margin:0 0 6px;color:#fff6ee;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Arena Hair Studio</p>
             <h1 style="margin:0;color:#ffffff;font-size:22px;line-height:1.25;">Confirmación de tu cita</h1>
           </td>
         </tr>

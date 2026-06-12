@@ -26,6 +26,10 @@ export class DondeEstamosComponent implements AfterViewInit, OnDestroy {
   protected readonly title = this.dondeEstamosService.getTitle();
   protected readonly address = this.dondeEstamosService.getAddress();
   protected readonly phone = this.dondeEstamosService.getPhone();
+  protected readonly whatsapp = this.dondeEstamosService.getWhatsApp();
+  protected readonly hours = this.dondeEstamosService.getHours();
+  protected readonly instagramUrl = this.dondeEstamosService.getInstagramUrl();
+  protected readonly instagramLabel = this.dondeEstamosService.getInstagramLabel();
   protected readonly visibleKeys = signal<string[]>([]);
   protected readonly mapUrl: SafeResourceUrl = this.sanitizer.bypassSecurityTrustResourceUrl(
     this.dondeEstamosService.getMapUrl(),

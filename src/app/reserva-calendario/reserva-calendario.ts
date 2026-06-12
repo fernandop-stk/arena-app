@@ -10,6 +10,8 @@ interface TimeSlotItem {
   time: string;
   disabled: boolean;
   past: boolean;
+  reason: 'available' | 'past' | 'occupied' | 'closed';
+  statusLabel: string;
 }
 
 @Component({
@@ -218,6 +220,10 @@ export class ReservaCalendarioComponent {
     return availability === false;
   }
 
+  protected getDayStatusLabel(dateIso: string): string {
+    return this.reservaCalendarioService.isRecurringClosedDay(dateIso) ? 'Cerrado' : 'Completo';
+  }
+
   protected createAlert(slotTime: string): void {
     if (this.isCreatingAlert() || !this.selectedDateIso() || !this.selectedTypeId()) {
       return;
@@ -320,7 +326,10 @@ export class ReservaCalendarioComponent {
     }
 
     const duration = this.selectedDurationMinutes();
-    const allSlots = this.reservaCalendarioService.getAvailableTimeSlots(duration);
+    const allSlots = this.reservaCalendarioService.getAvailableTimeSlots(
+      this.selectedDateIso(),
+      duration,
+    );
 
     this.isLoadingSlots.set(true);
     this.slotsError.set('');
@@ -342,10 +351,35 @@ export class ReservaCalendarioComponent {
           const availableSet = new Set(availableSlots);
           const mappedSlots = allSlots.map((time) => {
             const isPast = this.isSlotInPast(time, selectedIso);
+            const isClosed = this.reservaCalendarioService.isRecurringClosedSlot(
+              selectedIso,
+              time,
+              duration,
+            );
+
+            let reason: TimeSlotItem['reason'] = 'available';
+
+            if (isClosed) {
+              reason = 'closed';
+            } else if (isPast) {
+              reason = 'past';
+            } else if (!availableSet.has(time)) {
+              reason = 'occupied';
+            }
+
             return {
               time,
-              disabled: !availableSet.has(time) || isPast,
+              disabled: reason !== 'available',
               past: isPast,
+              reason,
+              statusLabel:
+                reason === 'closed'
+                  ? 'Cerrado'
+                  : reason === 'past'
+                    ? 'No disponible'
+                    : reason === 'occupied'
+                      ? 'Ocupada'
+                      : '',
             };
           });
 

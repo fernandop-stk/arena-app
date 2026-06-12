@@ -44,7 +44,7 @@ export class HistoriaService {
     {
       title: 'Especialistas en color y transformación',
       text: 'Nos especializamos en coloración, tratamientos capilares y extensiones, trabajando con precisión, delicadeza y sentido estético.',
-      imageSrc: '/assets/conocenos/espejos.jpeg',
+      imageSrc: '/assets/conocenos/especialistas-en-color.jpeg',
       imageAlt: 'Zona de trabajo con espejos en Arena Hair Studio.',
       badge: 'Técnica',
       caption:
@@ -53,7 +53,7 @@ export class HistoriaService {
     {
       title: 'Cuidar la belleza y la salud del cabello',
       text: 'Cada detalle se trabaja con atención para potenciar la belleza de tu melena sin perder de vista su salud y su equilibrio.',
-      imageSrc: '/assets/conocenos/productos.jpeg',
+      imageSrc: '/assets/conocenos/posicion-5.png',
       imageAlt: 'Detalle del interior del salón con zona de productos.',
       badge: 'Cuidado',
       caption:
@@ -71,7 +71,7 @@ export class HistoriaService {
     {
       title: 'Un espacio con identidad propia',
       text: 'Arena Hair Studio es un espacio sofisticado y acogedor, pensado para envolverte en una experiencia estética completa.',
-      imageSrc: '/assets/conocenos/calle.jpeg',
+      imageSrc: '/assets/conocenos/identidad-propia.jpeg',
       imageAlt: 'Vista exterior del local Arena Hair Studio.',
       badge: 'Espacio',
       caption:

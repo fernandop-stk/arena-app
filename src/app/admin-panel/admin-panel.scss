@@ -410,6 +410,11 @@
       &--role-confirm {
         margin-top: 0.2rem;
       }
+
+      &--client-confirmation {
+        color: colors.$color-primary-dark;
+        font-weight: 800;
+      }
     }
 
     &__role-confirm-employee {
@@ -981,6 +986,8 @@
       padding: 1rem;
       display: grid;
       gap: 0.85rem;
+      position: relative;
+      top: 40px;
 
       &--compact {
         width: min(36rem, 100%);
@@ -1011,6 +1018,8 @@
       &--agenda-week-schedule {
         width: min(95vw, 1200px);
         max-height: 80vh;
+        position: relative;
+        top: 40px;
       }
 
       &--quick-reserve {
@@ -1139,6 +1148,20 @@
       letter-spacing: 0.02em;
     }
 
+    &__agenda-closed-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: fit-content;
+      padding: 0.12rem 0.45rem;
+      border-radius: 999px;
+      background: rgba(184, 92, 92, 0.12);
+      color: colors.$color-error;
+      font-size: 0.64rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+
     &__agenda-week-hour-list {
       padding: 0.35rem;
       display: grid;
@@ -1166,6 +1189,21 @@
       padding: 0.28rem;
       display: grid;
       gap: 0.3rem;
+    }
+
+    &__agenda-slot-closed {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 1.9rem;
+      border-radius: 0.45rem;
+      border: 1px dashed rgba(184, 92, 92, 0.36);
+      background: rgba(184, 92, 92, 0.08);
+      color: colors.$color-error;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-align: center;
+      padding: 0.2rem 0.35rem;
     }
 
     &__agenda-alert-list {
@@ -1294,6 +1332,11 @@
       justify-self: start;
     }
 
+    &__agenda-manual-form {
+      display: grid;
+      gap: 0.75rem;
+    }
+
     &__agenda-reservation-card {
       --appointment-color: #{colors.$color-primary};
       border: 1px solid color-mix(in srgb, var(--appointment-color) 48%, white);
@@ -1380,6 +1423,12 @@
 
     &__modal--agenda-detail {
       max-width: min(34rem, 100%);
+      display: grid;
+      gap: 1rem;
+    }
+
+    &__modal--manual-reserve {
+      max-width: min(38rem, 100%);
       display: grid;
       gap: 1rem;
     }
@@ -1655,6 +1704,11 @@
       color: colors.$color-text-soft;
       font-size: 0.82rem;
       font-weight: 600;
+
+      &--client-confirmation {
+        color: colors.$color-primary-dark;
+        font-weight: 800;
+      }
     }
 
     &__table-wrapper {
@@ -2536,6 +2590,101 @@
       font-weight: 800;
     }
 
+    &__employee-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    &__employee-detail-tabs {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 0.2rem;
+      padding: 0.2rem;
+      border-radius: layout.$radius-sm;
+      background: rgba(201, 123, 99, 0.08);
+      width: fit-content;
+    }
+
+    &__employee-detail-tab {
+      min-height: 2rem;
+      border: 1px solid rgba(201, 123, 99, 0.25);
+      border-radius: 0.45rem;
+      background: rgba(255, 255, 255, 0.9);
+      color: colors.$color-primary-dark;
+      padding: 0 0.9rem;
+      font-size: 0.82rem;
+      font-weight: 800;
+      cursor: pointer;
+      transition:
+        background 0.2s ease,
+        border-color 0.2s ease,
+        box-shadow 0.2s ease,
+        transform 0.15s ease;
+
+      &:hover {
+        border-color: rgba(201, 123, 99, 0.45);
+        background: rgba(201, 123, 99, 0.12);
+      }
+
+      &--active {
+        background: #fff;
+        border-color: rgba(201, 123, 99, 0.55);
+        box-shadow: 0 6px 16px rgba(121, 92, 69, 0.08);
+      }
+    }
+
+    &__employee-tab-panel {
+      display: grid;
+      gap: 1rem;
+
+      &--actions {
+        padding-top: 0.2rem;
+      }
+    }
+
+    &__employee-action-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.8rem;
+      align-items: stretch;
+    }
+
+    &__employee-action-tile {
+      min-height: 3.35rem;
+      padding: 0.8rem 1rem;
+      border-radius: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 0.65rem;
+      text-align: left;
+      line-height: 1.25;
+      box-shadow: 0 8px 20px rgba(84, 55, 39, 0.06);
+
+      &:hover:not(:disabled) {
+        transform: translateY(-1px);
+      }
+
+      &:disabled {
+        box-shadow: none;
+      }
+    }
+
+    &__employee-action-icon {
+      width: 1.5rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 1rem;
+      line-height: 1;
+    }
+
+    &__employee-note-label {
+      gap: 0.45rem;
+    }
+
     @media (max-width: 640px) {
       padding: layout.$space-2;
 
@@ -2703,6 +2852,15 @@
       &__employee-specialty-head {
         flex-direction: column;
         align-items: flex-start;
+      }
+
+      &__employee-action-grid {
+        grid-template-columns: 1fr;
+        gap: 0.7rem;
+      }
+
+      &__employee-detail-tabs {
+        width: 100%;
       }
     }
   }

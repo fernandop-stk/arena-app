@@ -23,11 +23,18 @@
         animation: donde-estamos-in 0.62s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
       }
     }
-
+    &__info {
+      display: flex;
+      flex-direction: column;
+    }
     &__title {
       margin: 0;
       color: colors.$color-text;
       font-size: 1.7rem;
+    }
+    &__divider {
+      display: flex;
+      justify-content: space-between;
     }
 
     &__address,
@@ -35,6 +42,104 @@
       margin: layout.$space-1 0 0;
       color: colors.$color-text-soft;
       font-size: 0.95rem;
+    }
+
+    &__contact-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: layout.$space-1;
+      justify-content: space-between;
+    }
+
+    &__contact-pill {
+      display: inline-flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      min-width: 11rem;
+      padding: 0.85rem 1rem;
+      border: 1px solid rgba(201, 123, 99, 0.16);
+      border-radius: layout.$radius-md;
+      background: linear-gradient(135deg, rgba(255, 248, 242, 0.98), rgba(250, 239, 231, 0.92));
+      text-decoration: none;
+      box-shadow: 0 12px 30px rgba(84, 55, 39, 0.08);
+      transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        border-color 0.2s ease;
+
+      &:hover {
+        transform: translateY(-1px);
+        border-color: rgba(201, 123, 99, 0.38);
+        box-shadow: 0 16px 34px rgba(84, 55, 39, 0.12);
+      }
+
+      &--whatsapp {
+        background: linear-gradient(135deg, rgba(236, 255, 245, 0.98), rgba(214, 248, 228, 0.95));
+        border-color: rgba(37, 211, 102, 0.26);
+      }
+    }
+
+    &__contact-label {
+      color: colors.$color-text-soft;
+      font-size: 0.76rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    &__contact-value {
+      color: colors.$color-text;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    &__hours {
+      margin: layout.$space-1 0 0;
+      color: colors.$color-primary-dark;
+      font-size: 0.9rem;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+
+    &__instagram {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-top: layout.$space-1;
+      padding: 0.85rem 1rem;
+      border-radius: layout.$radius-md;
+      border: 1px solid rgba(84, 55, 39, 0.12);
+      background: linear-gradient(120deg, rgba(255, 244, 236, 0.98), rgba(250, 228, 226, 0.96));
+      color: colors.$color-text;
+      text-decoration: none;
+      transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        border-color 0.2s ease;
+
+      &:hover {
+        transform: translateY(-1px);
+        border-color: rgba(201, 123, 99, 0.32);
+        box-shadow: 0 16px 34px rgba(84, 55, 39, 0.1);
+      }
+    }
+
+    &__instagram-icon {
+      width: 1.35rem;
+      height: 1.35rem;
+      color: #9f4c68;
+      flex-shrink: 0;
+    }
+
+    &__instagram-name,
+    &__instagram-handle {
+      font-size: 0.95rem;
+      font-weight: 700;
+    }
+
+    &__instagram-handle {
+      color: colors.$color-primary-dark;
     }
 
     &__back {

@@ -4,6 +4,10 @@
     <header class="reserva-calendario--container__hero">
       <h1 class="reserva-calendario--container__title">{{ title }}</h1>
       <p class="reserva-calendario--container__description">{{ description }}</p>
+      <p class="reserva-calendario--container__schedule-note">
+        Horario de citas: lunes cerrado · martes a viernes 10:30 a 18:00 con cierre de 14:00 a 15:00
+        · sábados 09:00 a 14:00.
+      </p>
     </header>
 
     <!-- Step progress indicator -->
@@ -197,7 +201,9 @@
                 <span class="reserva-calendario--container__day-number">{{ day.dayNumber }}</span>
                 <span class="reserva-calendario--container__day-month">{{ day.monthName }}</span>
                 @if (isDayUnavailable(day.iso)) {
-                  <span class="reserva-calendario--container__day-status">Completo</span>
+                  <span class="reserva-calendario--container__day-status">
+                    {{ getDayStatusLabel(day.iso) }}
+                  </span>
                 }
               </button>
             }
@@ -291,9 +297,9 @@
                 </button>
                 @if (slot.disabled) {
                   <p class="reserva-calendario--container__time-status">
-                    {{ slot.past ? 'No disponible' : 'Ocupada' }}
+                    {{ slot.statusLabel }}
                   </p>
-                  @if (!slot.past) {
+                  @if (slot.reason === 'occupied') {
                     <button
                       type="button"
                       class="reserva-calendario--container__alert-btn"

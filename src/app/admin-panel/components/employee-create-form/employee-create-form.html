@@ -7,43 +7,67 @@
   </header>
 
   <div class="employee-create-form__grid">
-    <label class="employee-create-form__field">
+    <label
+      class="employee-create-form__field"
+      [class.employee-create-form__field--invalid]="hasError(usernameError)"
+    >
       Usuario
       <input
         class="employee-create-form__input"
+        [class.employee-create-form__input--invalid]="hasError(usernameError)"
         type="text"
         maxlength="40"
         placeholder="usuario"
         [value]="username"
+        [attr.aria-invalid]="hasError(usernameError)"
         (input)="usernameInput.emit($event)"
       />
+      @if (usernameError) {
+        <span class="employee-create-form__field-error">{{ usernameError }}</span>
+      }
     </label>
 
-    <label class="employee-create-form__field">
+    <label
+      class="employee-create-form__field"
+      [class.employee-create-form__field--invalid]="hasError(emailError)"
+    >
       Email
       <input
         class="employee-create-form__input"
+        [class.employee-create-form__input--invalid]="hasError(emailError)"
         type="email"
         maxlength="120"
         placeholder="empleado@arena.local"
         [value]="email"
+        [attr.aria-invalid]="hasError(emailError)"
         (input)="emailInput.emit($event)"
       />
+      @if (emailError) {
+        <span class="employee-create-form__field-error">{{ emailError }}</span>
+      }
     </label>
   </div>
 
   <div class="employee-create-form__grid">
-    <label class="employee-create-form__field">
+    <label
+      class="employee-create-form__field"
+      [class.employee-create-form__field--invalid]="hasError(passwordError)"
+    >
       Contraseña
       <input
         class="employee-create-form__input"
+        [class.employee-create-form__input--invalid]="hasError(passwordError)"
         type="password"
         maxlength="64"
         autocomplete="new-password"
         placeholder="Mín. 8, mayúscula y especial"
         [value]="password"
+        [attr.aria-invalid]="hasError(passwordError)"
         (input)="passwordInput.emit($event)"
       />
+      @if (passwordError) {
+        <span class="employee-create-form__field-error">{{ passwordError }}</span>
+      }
     </label>
 
     <label class="employee-create-form__field">

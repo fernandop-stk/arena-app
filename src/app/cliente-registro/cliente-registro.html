@@ -16,7 +16,6 @@
             type="text"
             formControlName="nombre"
             placeholder="Tu nombre"
-            [disabled]="isSubmitting()"
           />
           @if (registerForm.get('nombre')?.invalid && registerForm.get('nombre')?.touched) {
             <span class="cliente-registro--error">
@@ -36,7 +35,6 @@
             type="text"
             formControlName="apellidos"
             placeholder="Tus apellidos"
-            [disabled]="isSubmitting()"
           />
           @if (registerForm.get('apellidos')?.invalid && registerForm.get('apellidos')?.touched) {
             <span class="cliente-registro--error">
@@ -58,7 +56,6 @@
             type="tel"
             formControlName="telefono"
             placeholder="Ej. 912345678"
-            [disabled]="isSubmitting()"
           />
           @if (registerForm.get('telefono')?.invalid && registerForm.get('telefono')?.touched) {
             <span class="cliente-registro--error">
@@ -73,12 +70,7 @@
 
         <label class="cliente-registro--label">
           Fecha de nacimiento
-          <input
-            class="cliente-registro--input"
-            type="date"
-            formControlName="fechaNacimiento"
-            [disabled]="isSubmitting()"
-          />
+          <input class="cliente-registro--input" type="date" formControlName="fechaNacimiento" />
           @if (
             registerForm.get('fechaNacimiento')?.invalid &&
             registerForm.get('fechaNacimiento')?.touched
@@ -96,7 +88,6 @@
             type="email"
             formControlName="email"
             placeholder="tu@email.com"
-            [disabled]="isSubmitting()"
           />
           @if (registerForm.get('email')?.invalid && registerForm.get('email')?.touched) {
             <span class="cliente-registro--error">
@@ -118,7 +109,6 @@
             [type]="showPassword() ? 'text' : 'password'"
             formControlName="password"
             placeholder="Mínimo 8 caracteres con mayúscula y símbolo"
-            [disabled]="isSubmitting()"
           />
           <button
             type="button"
@@ -179,7 +169,6 @@
             [type]="showConfirmPassword() ? 'text' : 'password'"
             formControlName="confirmPassword"
             placeholder="Repite tu contraseña"
-            [disabled]="isSubmitting()"
           />
           <button
             type="button"

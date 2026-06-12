@@ -2,9 +2,9 @@ import { DecimalPipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Component, OnDestroy, afterNextRender, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { CitasService } from '../citas/citas.service';
+import { CitasService, type AppointmentType } from '../citas/citas.service';
 import { getPackPriceByName } from '../../shared/pack-prices';
-import { TratamientosService } from '../tratamientos/tratamientos.service';
+import { TratamientosService, type TratamientoItem } from '../tratamientos/tratamientos.service';
 import { AgendaPackPickerModalComponent } from './components/agenda-pack-picker-modal/agenda-pack-picker-modal';
 import { PaymentFlowModalComponent } from './components/payment-flow-modal/payment-flow-modal';
 import { ClientManagementTabsComponent } from './components/client-management-tabs/client-management-tabs';
@@ -83,6 +83,8 @@ interface AdminReservationItem {
   appointmentTypeName: string;
   paymentReceived: boolean;
   adminStatus: 'pending' | 'accepted' | 'rejected';
+  clientConfirmationStatus: 'pending' | 'confirmed';
+  clientConfirmationReminderSentAtIso?: string | null;
   createdAtIso: string;
 }
 
@@ -112,6 +114,7 @@ interface AgendaMonthCalendarDay {
   isCurrentMonth: boolean;
   isToday: boolean;
   reservationCount: number;
+  isClosedDay: boolean;
 }
 
 interface AgendaWeekDay {
@@ -122,6 +125,7 @@ interface AgendaWeekDay {
   reservationCount: number;
   alertCount: number;
   pendingAlertCount: number;
+  isClosedDay: boolean;
 }
 
 interface AgendaAlertItem {
@@ -314,6 +318,12 @@ interface GlobalTreatmentSavedView {
   preferences: GlobalTreatmentPreferencesStorage;
 }
 
+interface EmployeeCreateFieldErrors {
+  username: string;
+  email: string;
+  password: string;
+}
+
 interface ClientTreatmentCatalogOption {
   name: string;
   priceEuro?: number;
@@ -397,12 +407,11 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly agendaSelectedDateIso = signal('');
   protected readonly showAgendaPackPicker = signal(false);
   protected readonly agendaPackOptions = this.citasService.getAppointmentTypes();
-  protected readonly agendaTreatmentOptions = this.tratamientosService
-    .getTratamientos()
-    .map((t) => ({
-      id: t.id,
-      nombre: t.nombre,
-    }));
+  protected readonly agendaTreatmentCatalog = this.tratamientosService.getTratamientos();
+  protected readonly agendaTreatmentOptions = this.agendaTreatmentCatalog.map((t) => ({
+    id: t.id,
+    nombre: t.nombre,
+  }));
   protected readonly agendaSelectedPackTypeId = signal<number>(
     this.citasService.getAppointmentTypes()[0]?.id ?? 1,
   );
@@ -421,7 +430,7 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly agendaDayScheduleError = signal('');
   protected readonly agendaDayScheduleLoadingReservationId = signal('');
   protected readonly agendaDraggedReservationId = signal('');
-  protected readonly agendaTimeSlotOptions = this.buildHalfHourOptions('09:00', '19:30');
+  protected readonly agendaTimeSlotOptions = this.buildHalfHourOptions('09:00', '18:00');
   protected readonly agendaDurationOptions = Array.from(
     { length: 12 },
     (_, index) => (index + 1) * 30,
@@ -436,6 +445,21 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly agendaDetailError = signal('');
   protected readonly agendaDetailCancelling = signal(false);
   protected readonly showQuickReserveModal = signal(false);
+  protected readonly showAgendaManualReserveModal = signal(false);
+  protected readonly agendaManualReserveLoading = signal(false);
+  protected readonly agendaManualReserveError = signal('');
+  protected readonly agendaManualReserveDateIso = signal('');
+  protected readonly agendaManualReserveTime = signal('');
+  protected readonly agendaManualReserveCustomerName = signal('');
+  protected readonly agendaManualReserveCustomerPhone = signal('');
+  protected readonly agendaManualReserveCustomerEmail = signal('');
+  protected readonly agendaManualReserveServiceType = signal<'pack' | 'treatment'>('pack');
+  protected readonly agendaManualReserveServiceId = signal<number>(
+    this.agendaPackOptions[0]?.id ?? 1,
+  );
+  protected readonly agendaManualReserveDuration = signal<number>(
+    this.agendaPackOptions[0]?.duracionMinutos ?? 60,
+  );
   protected readonly helpSearch = signal('');
   protected readonly isLoadingBlockedPeriods = signal(false);
   protected readonly ownerEmail = signal('');
@@ -596,10 +620,10 @@ export class AdminPanelComponent implements OnDestroy {
   });
   protected readonly blockDateIso = signal('');
   protected readonly calendarMonthIso = signal('');
-  protected readonly blockStartTime = signal('09:00');
-  protected readonly blockEndTime = signal('20:00');
-  protected readonly blockStartOptions = this.buildHalfHourOptions('09:00', '19:30');
-  protected readonly blockEndOptions = this.buildHalfHourOptions('09:30', '20:00');
+  protected readonly blockStartTime = signal('10:30');
+  protected readonly blockEndTime = signal('18:30');
+  protected readonly blockStartOptions = this.buildHalfHourOptions('09:00', '18:00');
+  protected readonly blockEndOptions = this.buildHalfHourOptions('09:30', '18:30');
   protected readonly blockReason = signal('');
   protected readonly isFullDayBlock = signal(true);
   protected readonly blockMessage = signal('');
@@ -644,6 +668,11 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly employeeCreatePassword = signal('');
   protected readonly employeeCreateRole = signal<'admin' | 'client'>('admin');
   protected readonly employeeCreateLoading = signal(false);
+  protected readonly employeeCreateFieldErrors = signal<EmployeeCreateFieldErrors>({
+    username: '',
+    email: '',
+    password: '',
+  });
   protected readonly clientCards = signal<ClientCardItem[]>([]);
   protected readonly isLoadingClientCards = signal(false);
   protected readonly clientCardsError = signal('');
@@ -1009,6 +1038,7 @@ export class AdminPanelComponent implements OnDestroy {
         reservationCount: reservationsByDate.get(dateIso) ?? 0,
         alertCount: alertsByDate.get(dateIso)?.total ?? 0,
         pendingAlertCount: alertsByDate.get(dateIso)?.pending ?? 0,
+        isClosedDay: this.isAgendaRecurringClosedDay(dateIso),
       };
     });
   }
@@ -1089,6 +1119,7 @@ export class AdminPanelComponent implements OnDestroy {
         isCurrentMonth: dayDate >= monthStart && dayDate <= monthEnd,
         isToday: dateIso === todayIso,
         reservationCount: reservationsByDate.get(dateIso) ?? 0,
+        isClosedDay: this.isAgendaRecurringClosedDay(dateIso),
       });
     }
 
@@ -3678,16 +3709,19 @@ export class AdminPanelComponent implements OnDestroy {
   protected onEmployeeCreateUsernameInput(event: Event): void {
     const target = event.target as HTMLInputElement;
     this.employeeCreateUsername.set(target.value);
+    this.updateEmployeeCreateFieldError('username', target.value);
   }
 
   protected onEmployeeCreateEmailInput(event: Event): void {
     const target = event.target as HTMLInputElement;
     this.employeeCreateEmail.set(target.value);
+    this.updateEmployeeCreateFieldError('email', target.value);
   }
 
   protected onEmployeeCreatePasswordInput(event: Event): void {
     const target = event.target as HTMLInputElement;
     this.employeeCreatePassword.set(target.value);
+    this.updateEmployeeCreateFieldError('password', target.value);
   }
 
   protected onEmployeeCreateRoleChange(event: Event): void {
@@ -3966,8 +4000,11 @@ export class AdminPanelComponent implements OnDestroy {
     this.employeeError.set('');
     this.employeeMessage.set('');
 
-    if (!username || !email || !password) {
-      this.employeeError.set('Usuario, email y contraseña son obligatorios.');
+    const fieldErrors = this.getEmployeeCreateFieldErrors(username, email, password);
+    this.employeeCreateFieldErrors.set(fieldErrors);
+
+    if (Object.values(fieldErrors).some(Boolean)) {
+      this.employeeError.set('Revisa los campos marcados antes de crear el empleado.');
       return;
     }
 
@@ -3985,6 +4022,7 @@ export class AdminPanelComponent implements OnDestroy {
         next: (response) => {
           if (!response.ok) {
             this.employeeError.set(response.error ?? 'No se pudo crear el empleado.');
+            this.employeeCreateLoading.set(false);
             return;
           }
 
@@ -3994,18 +4032,23 @@ export class AdminPanelComponent implements OnDestroy {
           this.employeeCreatePassword.set('');
           this.employeeCreateRole.set('admin');
           this.employeeCreatePermissions.set([...ALL_PERMISSIONS]);
+          this.resetEmployeeCreateFieldErrors();
           this.loadEmployeeUsers();
+          this.employeeCreateLoading.set(false);
         },
         error: (error) => {
           const apiError = error?.error?.error;
-          this.employeeError.set(
-            typeof apiError === 'string' && apiError ? apiError : 'No se pudo crear el empleado.',
-          );
-        },
-        complete: () => {
+          const errorMessage =
+            typeof apiError === 'string' && apiError ? apiError : 'No se pudo crear el empleado.';
+          this.employeeError.set(errorMessage);
+          this.applyEmployeeCreateApiError(errorMessage);
           this.employeeCreateLoading.set(false);
         },
       });
+  }
+
+  protected getEmployeeCreateFieldError(field: keyof EmployeeCreateFieldErrors): string {
+    return this.employeeCreateFieldErrors()[field];
   }
 
   protected deleteEmployee(email: string): void {
@@ -4170,17 +4213,24 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected selectFullDayMode(): void {
+    const fullDayRange = this.getFullDayBlockRange(this.blockDateIso() || this.getTodayIso());
     this.isFullDayBlock.set(true);
-    this.blockStartTime.set('09:00');
-    this.blockEndTime.set('20:00');
+    this.blockStartTime.set(fullDayRange.startTime);
+    this.blockEndTime.set(fullDayRange.endTime);
   }
 
   protected selectHourlyMode(): void {
     this.isFullDayBlock.set(false);
+    const fullDayRange = this.getFullDayBlockRange(this.blockDateIso() || this.getTodayIso());
 
-    if (this.blockStartTime() === '09:00' && this.blockEndTime() === '20:00') {
-      this.blockStartTime.set('09:00');
-      this.blockEndTime.set('10:00');
+    if (
+      this.blockStartTime() === fullDayRange.startTime &&
+      this.blockEndTime() === fullDayRange.endTime
+    ) {
+      this.blockStartTime.set(fullDayRange.startTime);
+      this.blockEndTime.set(
+        this.formatMinutesToTime(this.parseTimeToMinutes(fullDayRange.startTime) + 60),
+      );
     }
   }
 
@@ -4189,8 +4239,9 @@ export class AdminPanelComponent implements OnDestroy {
     this.isFullDayBlock.set(target.checked);
 
     if (target.checked) {
-      this.blockStartTime.set('09:00');
-      this.blockEndTime.set('20:00');
+      const fullDayRange = this.getFullDayBlockRange(this.blockDateIso() || this.getTodayIso());
+      this.blockStartTime.set(fullDayRange.startTime);
+      this.blockEndTime.set(fullDayRange.endTime);
     }
   }
 
@@ -4231,7 +4282,10 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected formatTimeRange(startTime: string, endTime: string): string {
-    if (startTime === '09:00' && endTime === '20:00') {
+    if (
+      (startTime === '10:30' && endTime === '18:30') ||
+      (startTime === '09:00' && endTime === '14:30')
+    ) {
       return 'Día completo';
     }
 
@@ -4299,8 +4353,11 @@ export class AdminPanelComponent implements OnDestroy {
       const dayValue = `${dayDate.getDate()}`.padStart(2, '0');
       const dateIso = `${yearValue}-${monthValue}-${dayValue}`;
       const periods = blockedPeriodsByDate.get(dateIso) ?? [];
+      const fullDayRange = this.getFullDayBlockRange(dateIso);
       const isFullBlocked = periods.some(
-        (blockedPeriod) => blockedPeriod.startTime === '09:00' && blockedPeriod.endTime === '20:00',
+        (blockedPeriod) =>
+          blockedPeriod.startTime === fullDayRange.startTime &&
+          blockedPeriod.endTime === fullDayRange.endTime,
       );
 
       days.push({
@@ -4498,6 +4555,41 @@ export class AdminPanelComponent implements OnDestroy {
       });
   }
 
+  protected confirmReservationBySuperadmin(reservationId: string): void {
+    if (!this.isSuperadmin()) {
+      this.actionError.set('Solo superadmin puede confirmar directamente una cita.');
+      return;
+    }
+
+    this.actionError.set('');
+    this.actionLoadingId.set(reservationId);
+
+    this.http
+      .patch<{
+        ok: boolean;
+        error?: string;
+      }>(`/api/admin/reservas/${reservationId}/client-confirmation`, {})
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.actionError.set(response.error ?? 'No se pudo confirmar la cita.');
+            return;
+          }
+
+          this.loadReservations();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.actionError.set(
+            typeof apiError === 'string' && apiError ? apiError : 'No se pudo confirmar la cita.',
+          );
+        },
+        complete: () => {
+          this.actionLoadingId.set('');
+        },
+      });
+  }
+
   protected editReservation(reservation: AdminReservationItem): void {
     if (typeof window === 'undefined') {
       return;
@@ -4586,14 +4678,37 @@ export class AdminPanelComponent implements OnDestroy {
     return 'Pendiente';
   }
 
+  protected getReservationAgendaStatusLabel(reservation: AdminReservationItem): string {
+    if (reservation.clientConfirmationStatus === 'confirmed') {
+      return 'Confirmada';
+    }
+
+    return this.getStatusLabel(reservation.adminStatus);
+  }
+
+  protected isReservationAgendaStatusAccepted(reservation: AdminReservationItem): boolean {
+    return (
+      reservation.clientConfirmationStatus === 'confirmed' || reservation.adminStatus === 'accepted'
+    );
+  }
+
+  protected getClientConfirmationLabel(reservation: AdminReservationItem): string {
+    if (reservation.adminStatus === 'rejected') {
+      return 'No aplica';
+    }
+
+    return reservation.clientConfirmationStatus === 'confirmed' ? 'Confirmada' : 'Pendiente';
+  }
+
   protected createBlockedPeriod(): void {
     if (!this.requirePermission('bloqueos_gestionar', 'Bloquear horas y días')) return;
     this.blockError.set('');
     this.blockMessage.set('');
 
     const dateIso = this.blockDateIso();
-    const startTime = this.isFullDayBlock() ? '09:00' : this.blockStartTime();
-    const endTime = this.isFullDayBlock() ? '20:00' : this.blockEndTime();
+    const fullDayRange = this.getFullDayBlockRange(dateIso || this.getTodayIso());
+    const startTime = this.isFullDayBlock() ? fullDayRange.startTime : this.blockStartTime();
+    const endTime = this.isFullDayBlock() ? fullDayRange.endTime : this.blockEndTime();
     const reason = this.blockReason();
 
     if (!dateIso) {
@@ -5637,6 +5752,98 @@ export class AdminPanelComponent implements OnDestroy {
     this.employeeCreatePermissions.set(perms);
   }
 
+  private getEmployeeCreateFieldErrors(
+    username: string,
+    email: string,
+    password: string,
+  ): EmployeeCreateFieldErrors {
+    const usernameError = !username
+      ? 'El usuario es obligatorio.'
+      : username.length < 3 || username.length > 40
+        ? 'El usuario debe tener entre 3 y 40 caracteres.'
+        : '';
+
+    const emailError = !email
+      ? 'El email es obligatorio.'
+      : !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
+        ? 'Introduce un email con formato válido.'
+        : '';
+
+    const passwordError = !password
+      ? 'La contraseña es obligatoria.'
+      : password.length < 8
+        ? 'La contraseña debe tener al menos 8 caracteres.'
+        : !/[A-Z]/.test(password) || !/[^A-Za-z0-9]/.test(password)
+          ? 'Debe incluir una mayúscula y un carácter especial.'
+          : '';
+
+    return {
+      username: usernameError,
+      email: emailError,
+      password: passwordError,
+    };
+  }
+
+  private updateEmployeeCreateFieldError(
+    field: keyof EmployeeCreateFieldErrors,
+    rawValue: string,
+  ): void {
+    const nextValue = rawValue.trim();
+    const errors = this.employeeCreateFieldErrors();
+
+    if (!errors[field] && !this.employeeError()) {
+      return;
+    }
+
+    const nextErrors = this.getEmployeeCreateFieldErrors(
+      field === 'username' ? nextValue : this.employeeCreateUsername().trim(),
+      field === 'email' ? nextValue : this.employeeCreateEmail().trim(),
+      field === 'password' ? rawValue : this.employeeCreatePassword(),
+    );
+
+    this.employeeCreateFieldErrors.set(nextErrors);
+
+    if (!Object.values(nextErrors).some(Boolean) && this.employeeError()) {
+      this.employeeError.set('');
+    }
+  }
+
+  private resetEmployeeCreateFieldErrors(): void {
+    this.employeeCreateFieldErrors.set({
+      username: '',
+      email: '',
+      password: '',
+    });
+  }
+
+  private applyEmployeeCreateApiError(errorMessage: string): void {
+    const normalized = errorMessage.toLocaleLowerCase('es');
+    const current = this.employeeCreateFieldErrors();
+
+    if (normalized.includes('email')) {
+      this.employeeCreateFieldErrors.set({
+        ...current,
+        email: errorMessage,
+      });
+      return;
+    }
+
+    if (normalized.includes('usuario')) {
+      this.employeeCreateFieldErrors.set({
+        ...current,
+        username: errorMessage,
+      });
+      return;
+    }
+
+    if (normalized.includes('contraseña')) {
+      this.employeeCreateFieldErrors.set({
+        ...current,
+        password: errorMessage,
+      });
+    }
+  }
+
   protected openEditPermissions(user: AdminEmployeeUser): void {
     this.editingPermissionsEmail.set(user.email);
     this.editingPermissions.set([...(user.permissions ?? [])]);
@@ -6207,6 +6414,195 @@ export class AdminPanelComponent implements OnDestroy {
     this.showQuickReserveModal.set(true);
   }
 
+  protected openAgendaManualReserveModal(dateIso?: string, time = ''): void {
+    if (!this.isSuperadmin()) {
+      this.actionError.set('Solo superadmin puede crear reservas manuales desde agenda.');
+      return;
+    }
+
+    const resolvedDateIso = dateIso || this.agendaSelectedDateIso() || this.getTodayIso();
+    const defaultPack = this.agendaPackOptions[0];
+
+    this.agendaManualReserveError.set('');
+    this.agendaManualReserveDateIso.set(resolvedDateIso);
+    this.agendaManualReserveTime.set(
+      time || this.getDefaultAgendaManualReserveTime(resolvedDateIso),
+    );
+    this.agendaManualReserveCustomerName.set('');
+    this.agendaManualReserveCustomerPhone.set('');
+    this.agendaManualReserveCustomerEmail.set('');
+    this.agendaManualReserveServiceType.set('pack');
+    this.agendaManualReserveServiceId.set(defaultPack?.id ?? 1);
+    this.agendaManualReserveDuration.set(defaultPack?.duracionMinutos ?? 60);
+    this.showAgendaManualReserveModal.set(true);
+  }
+
+  protected closeAgendaManualReserveModal(): void {
+    this.showAgendaManualReserveModal.set(false);
+    this.agendaManualReserveLoading.set(false);
+    this.agendaManualReserveError.set('');
+  }
+
+  protected onAgendaManualReserveServiceTypeChange(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    const nextType = target.value === 'treatment' ? 'treatment' : 'pack';
+    const nextDefault =
+      nextType === 'pack' ? this.agendaPackOptions[0] : this.agendaTreatmentCatalog[0];
+
+    this.agendaManualReserveServiceType.set(nextType);
+    this.agendaManualReserveServiceId.set(nextDefault?.id ?? 1);
+    this.syncAgendaManualReserveDurationFromSelectedService();
+  }
+
+  protected onAgendaManualReserveServiceIdChange(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    const nextId = Number(target.value);
+
+    if (!Number.isFinite(nextId) || nextId <= 0) {
+      return;
+    }
+
+    this.agendaManualReserveServiceId.set(nextId);
+    this.syncAgendaManualReserveDurationFromSelectedService();
+  }
+
+  protected onAgendaManualReserveDurationChange(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    const nextDuration = Number(target.value);
+
+    if (!Number.isFinite(nextDuration) || nextDuration <= 0) {
+      return;
+    }
+
+    this.agendaManualReserveDuration.set(nextDuration);
+  }
+
+  protected submitAgendaManualReserve(): void {
+    if (!this.isSuperadmin()) {
+      this.agendaManualReserveError.set('Solo superadmin puede crear reservas manuales.');
+      return;
+    }
+
+    const selectedService = this.getAgendaManualReserveSelectedService();
+    const dateIso = this.agendaManualReserveDateIso().trim();
+    const time = this.agendaManualReserveTime().trim();
+    const customerName = this.agendaManualReserveCustomerName().trim();
+    const customerPhone = this.agendaManualReserveCustomerPhone().trim();
+    const customerEmail = this.agendaManualReserveCustomerEmail().trim().toLowerCase();
+    const durationMinutes = this.agendaManualReserveDuration();
+
+    if (!selectedService) {
+      this.agendaManualReserveError.set('Selecciona un servicio válido.');
+      return;
+    }
+
+    if (!dateIso || !time || !customerName || !customerPhone || !customerEmail) {
+      this.agendaManualReserveError.set('Completa todos los datos de la reserva.');
+      return;
+    }
+
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(customerEmail)) {
+      this.agendaManualReserveError.set('Introduce un email válido.');
+      return;
+    }
+
+    this.agendaManualReserveLoading.set(true);
+    this.agendaManualReserveError.set('');
+
+    this.http
+      .post<{ ok: boolean; reservationId?: string; error?: string }>('/api/admin/reservas', {
+        dateIso,
+        time,
+        durationMinutes,
+        customerName,
+        customerPhone,
+        customerEmail,
+        appointmentTypeName: selectedService.nombre,
+        requiresReservationSignal:
+          this.agendaManualReserveServiceType() === 'pack' &&
+          Boolean((selectedService as AppointmentType).requiresReservationSignal),
+      })
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.agendaManualReserveError.set(response.error ?? 'No se pudo crear la reserva.');
+            return;
+          }
+
+          this.closeAgendaManualReserveModal();
+          this.loadReservations();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.agendaManualReserveError.set(
+            typeof apiError === 'string' && apiError ? apiError : 'No se pudo crear la reserva.',
+          );
+        },
+        complete: () => {
+          this.agendaManualReserveLoading.set(false);
+        },
+      });
+  }
+
+  protected handleAgendaEmptySlotClick(dateIso: string, slot: string): void {
+    if (this.isSuperadmin()) {
+      this.openAgendaManualReserveModal(dateIso, slot);
+      return;
+    }
+
+    if (this.isAgendaRecurringClosedSlot(dateIso, slot)) {
+      return;
+    }
+
+    this.openQuickReserveModal();
+  }
+
+  protected isAgendaRecurringClosedDay(dateIso: string): boolean {
+    const date = new Date(`${dateIso}T00:00:00`);
+
+    if (Number.isNaN(date.getTime())) {
+      return false;
+    }
+
+    const weekDay = date.getDay();
+    return weekDay === 0 || weekDay === 1;
+  }
+
+  protected isAgendaRecurringClosedSlot(dateIso: string, time: string): boolean {
+    if (this.isAgendaRecurringClosedDay(dateIso)) {
+      return true;
+    }
+
+    const date = new Date(`${dateIso}T00:00:00`);
+
+    if (!Number.isNaN(date.getTime()) && date.getDay() === 6) {
+      return false;
+    }
+
+    const [hoursRaw, minutesRaw] = time.split(':');
+    const hours = Number(hoursRaw);
+    const minutes = Number(minutesRaw);
+
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+      return false;
+    }
+
+    const totalMinutes = hours * 60 + minutes;
+    return totalMinutes >= 14 * 60 && totalMinutes < 15 * 60;
+  }
+
+  protected getAgendaClosedSlotLabel(dateIso: string, time: string): string {
+    if (this.isAgendaRecurringClosedDay(dateIso)) {
+      return 'Cerrado';
+    }
+
+    if (this.isAgendaRecurringClosedSlot(dateIso, time)) {
+      return 'Cerrado · 14:00 a 15:00';
+    }
+
+    return 'Sin citas';
+  }
+
   protected confirmQuickReserve(): void {
     this.showQuickReserveModal.set(false);
     void this.router.navigate(['/reservas']);
@@ -6246,5 +6642,50 @@ export class AdminPanelComponent implements OnDestroy {
     }
 
     return options;
+  }
+
+  private getAgendaManualReserveSelectedService(): AppointmentType | TratamientoItem | null {
+    if (this.agendaManualReserveServiceType() === 'pack') {
+      return (
+        this.agendaPackOptions.find((item) => item.id === this.agendaManualReserveServiceId()) ??
+        null
+      );
+    }
+
+    return (
+      this.agendaTreatmentCatalog.find((item) => item.id === this.agendaManualReserveServiceId()) ??
+      null
+    );
+  }
+
+  private syncAgendaManualReserveDurationFromSelectedService(): void {
+    const selectedService = this.getAgendaManualReserveSelectedService();
+
+    if (!selectedService) {
+      return;
+    }
+
+    this.agendaManualReserveDuration.set(selectedService.duracionMinutos);
+  }
+
+  private getDefaultAgendaManualReserveTime(_dateIso: string): string {
+    return '10:30';
+  }
+
+  private getFullDayBlockRange(dateIso: string): { startTime: string; endTime: string } {
+    const date = new Date(`${dateIso}T00:00:00`);
+    const weekDay = date.getDay();
+
+    if (weekDay === 6) {
+      return {
+        startTime: '09:00',
+        endTime: '14:30',
+      };
+    }
+
+    return {
+      startTime: '10:30',
+      endTime: '18:30',
+    };
   }
 }

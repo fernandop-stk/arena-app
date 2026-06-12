@@ -23,7 +23,7 @@ import { AppService } from './app.service';
           <a class="app-shell--header__brand" routerLink="/">
             <img
               class="app-shell--header__brand-logo"
-              src="assets/branding/logo-real.png"
+              src="assets/branding/logo-header.jpeg"
               alt="Arena Studio"
             />
             <span class="app-shell--header__brand-text">Arena Hair Studio</span>
@@ -194,7 +194,7 @@ import { AppService } from './app.service';
               <a class="app-shell--footer__brand" routerLink="/" aria-label="Arena Hair Studio">
                 <img
                   class="app-shell--footer__logo"
-                  src="assets/branding/logo-real.png"
+                  src="assets/branding/logo-header.jpeg"
                   alt="Arena Hair Studio"
                 />
                 <span class="app-shell--footer__brand-name">Arena Hair Studio</span>
@@ -233,6 +233,7 @@ import { AppService } from './app.service';
             </div>
 
             <div class="app-shell--footer__bottom">
+              <p class="app-shell--footer__hours">Horario · L-V 10:30-18:00 · Sáb 09:00-14:00</p>
               <p class="app-shell--footer__copy">
                 © {{ currentYear }} Arena Hair Studio · Todos los derechos reservados
               </p>

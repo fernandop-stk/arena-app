@@ -122,7 +122,7 @@ export class ClienteRegistroComponent {
       return;
     }
 
-    this.isSubmitting.set(true);
+    this.setSubmittingState(true);
     this.errorMessage.set('');
     this.message.set('');
 
@@ -147,15 +147,26 @@ export class ClienteRegistroComponent {
             }, 2000);
           } else {
             this.errorMessage.set(response.error ?? 'Error desconocido al registrar.');
-            this.isSubmitting.set(false);
+            this.setSubmittingState(false);
           }
         },
         error: (err: unknown) => {
           const errorMessage = (err as any)?.error?.error ?? 'Error de conexión. Intenta de nuevo.';
           this.errorMessage.set(errorMessage);
-          this.isSubmitting.set(false);
+          this.setSubmittingState(false);
         },
       });
+  }
+
+  private setSubmittingState(isSubmitting: boolean): void {
+    this.isSubmitting.set(isSubmitting);
+
+    if (isSubmitting) {
+      this.registerForm.disable({ emitEvent: false });
+      return;
+    }
+
+    this.registerForm.enable({ emitEvent: false });
   }
 
   private passwordMatchValidator(): ValidatorFn {

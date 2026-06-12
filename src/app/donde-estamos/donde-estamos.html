@@ -7,9 +7,55 @@
       [class.donde-estamos--container__hero--visible]="isVisible('hero')"
     >
       <h1 class="donde-estamos--container__title">{{ title }}</h1>
-      <p class="donde-estamos--container__address">{{ address }}</p>
-      <p class="donde-estamos--container__phone">{{ phone }}</p>
-      <a class="donde-estamos--container__back" routerLink="/">Volver al inicio</a>
+      <div class="donde-estamos--container__info">
+        <p class="donde-estamos--container__address">{{ address }}</p>
+        <p class="donde-estamos--container__hours">{{ hours }}</p>
+      </div>
+      <div class="donde-estamos--container__contact-list">
+        <a
+          class="donde-estamos--container__contact-pill"
+          [href]="'tel:' + phone.replaceAll(' ', '')"
+        >
+          <span class="donde-estamos--container__contact-label">Teléfono</span>
+          <span class="donde-estamos--container__contact-value">{{ phone }}</span>
+        </a>
+        <a
+          class="donde-estamos--container__contact-pill donde-estamos--container__contact-pill--whatsapp"
+          [href]="'https://wa.me/34' + whatsapp.replaceAll(' ', '')"
+          target="_blank"
+          rel="noreferrer"
+        >
+          <span class="donde-estamos--container__contact-label">WhatsApp</span>
+          <span class="donde-estamos--container__contact-value">{{ whatsapp }}</span>
+        </a>
+        <a
+          class="donde-estamos--container__instagram"
+          [href]="instagramUrl"
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Arena Hair Studio en Instagram"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            class="donde-estamos--container__instagram-icon"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+            <circle cx="12" cy="12" r="4" />
+            <circle cx="17.5" cy="6.5" r="0.8" fill="currentColor" stroke="none" />
+          </svg>
+          <span class="donde-estamos--container__instagram-name">Arena Hair Studio</span>
+          <span class="donde-estamos--container__instagram-handle">{{ instagramLabel }}</span>
+        </a>
+        <a class="donde-estamos--container__back" routerLink="/">Volver al inicio</a>
+      </div>
+
+      <div class="donde-estamos--container__divider"></div>
     </header>
 
     <div

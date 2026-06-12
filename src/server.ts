@@ -13,6 +13,7 @@ import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypt
 import { Resend } from 'resend';
 import {
   AdminReservationStatus,
+  ClientConfirmationStatus,
   createBlockedPeriodForAdmin,
   createReservationWithSlots,
   deleteBlockedPeriodForAdmin,
@@ -21,11 +22,14 @@ import {
   getAvailableSlotsForDate,
   listBlockedPeriodsForAdmin,
   listReservationsForAdmin,
+  getReservationByIdForAdmin,
   loadAllClientCardsFromDb,
   loadAllUsersFromDb,
+  markReservationClientReminderSentAt,
   saveClientCardToDb,
   saveUserToDb,
   updateReservationAdminStatus,
+  updateReservationClientConfirmationStatus,
   updateReservationPaymentReceived,
   createAlert,
   getAllAlerts,
@@ -74,12 +78,25 @@ const authCookieName = 'arena_auth_session';
 const clientCookieName = 'arena_client_session';
 const authSessionSecret =
   process.env['AUTH_SESSION_SECRET']?.trim() || adminMagicSecret.trim() || 'arena-dev-auth-secret';
+const reservationConfirmationSecret =
+  process.env['RESERVATION_CONFIRMATION_SECRET']?.trim() || authSessionSecret;
 const adminEmployeeEmails = new Set(
   (process.env['ADMIN_EMPLOYEE_EMAILS'] ?? '')
     .split(',')
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean),
 );
+
+const getPublicAppBaseUrl = (): string => {
+  const configured = process.env['APP_BASE_URL']?.trim();
+
+  if (configured) {
+    return configured.replace(/\/$/, '');
+  }
+
+  const port = process.env['PORT']?.trim() || '4000';
+  return `http://localhost:${port}`;
+};
 
 function resolveEmailRecipient(email: string): string {
   const normalizedEmail = email.trim().toLowerCase();
@@ -227,6 +244,260 @@ async function notifyRejectedReservation(reservation: {
     console.error('Error enviando email de reserva rechazada:', error);
   }
 }
+
+type ReservationClientDecision = 'confirm' | 'reject';
+
+interface ReservationConfirmationTokenPayload {
+  reservationId: string;
+  action: ReservationClientDecision;
+  exp: number;
+}
+
+const buildReservationReminderEmailHtml = (data: {
+  customerName: string;
+  appointmentTypeName: string;
+  dateIso: string;
+  startTime: string;
+  confirmUrl: string;
+  rejectUrl: string;
+}): string => {
+  const safeName = escapeHtml(data.customerName || 'Cliente');
+  const safeType = escapeHtml(data.appointmentTypeName);
+  const safeDate = escapeHtml(data.dateIso);
+  const safeStart = escapeHtml(data.startTime);
+  const safeConfirmUrl = escapeHtml(data.confirmUrl);
+  const safeRejectUrl = escapeHtml(data.rejectUrl);
+
+  return `
+    <div style="background:#fcf3ea;padding:24px;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;color:#3b2f2a;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;margin:0 auto;background:#fff9f4;border-radius:16px;overflow:hidden;border:1px solid #e8d8c9;">
+        <tr>
+          <td style="background:linear-gradient(135deg,#c97b63 0%,#d9a441 100%);padding:24px;">
+            <p style="margin:0 0 6px;color:#fff6ee;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Arena Hair Studio</p>
+            <h1 style="margin:0;color:#ffffff;font-size:22px;line-height:1.25;">Confirma tu cita</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px;">
+            <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#5a4a42;">Hola ${safeName}, tu cita es en menos de 48 horas:</p>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#fff;border:1px solid #ecd9ca;border-radius:12px;overflow:hidden;">
+              <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Servicio</strong><br><span style="color:#7a675d;">${safeType}</span></td></tr>
+              <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Fecha</strong><br><span style="color:#7a675d;">${safeDate}</span></td></tr>
+              <tr><td style="padding:14px 16px;font-size:14px;"><strong>Hora</strong><br><span style="color:#7a675d;">${safeStart}</span></td></tr>
+            </table>
+
+            <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;">
+              <a href="${safeConfirmUrl}" style="display:inline-block;background:#3d8c54;color:#fff;text-decoration:none;padding:11px 18px;border-radius:999px;font-weight:700;font-size:14px;">Confirmar cita</a>
+              <a href="${safeRejectUrl}" style="display:inline-block;background:#b74b4b;color:#fff;text-decoration:none;padding:11px 18px;border-radius:999px;font-weight:700;font-size:14px;">Rechazar cita</a>
+            </div>
+
+            <p style="margin:16px 0 0;font-size:12px;line-height:1.55;color:#8f7b6f;">Si rechazas la cita, se eliminará automáticamente de la agenda.</p>
+          </td>
+        </tr>
+      </table>
+    </div>
+  `;
+};
+
+const createReservationConfirmationToken = (
+  payload: ReservationConfirmationTokenPayload,
+): string => {
+  const payloadBase64 = toBase64Url(JSON.stringify(payload));
+  const signature = createHmac('sha256', reservationConfirmationSecret)
+    .update(payloadBase64)
+    .digest('base64url');
+  return `${payloadBase64}.${signature}`;
+};
+
+const verifyReservationConfirmationToken = (
+  token: string,
+): ReservationConfirmationTokenPayload | null => {
+  const [payloadPart, signaturePart] = token.split('.');
+
+  if (!payloadPart || !signaturePart) {
+    return null;
+  }
+
+  try {
+    const expectedSignature = createHmac('sha256', reservationConfirmationSecret)
+      .update(payloadPart)
+      .digest('base64url');
+
+    if (signaturePart !== expectedSignature) {
+      return null;
+    }
+
+    const parsed = JSON.parse(fromBase64Url(payloadPart)) as {
+      reservationId?: unknown;
+      action?: unknown;
+      exp?: unknown;
+    };
+
+    if (
+      typeof parsed.reservationId !== 'string' ||
+      (parsed.action !== 'confirm' && parsed.action !== 'reject') ||
+      typeof parsed.exp !== 'number'
+    ) {
+      return null;
+    }
+
+    if (parsed.exp <= Date.now()) {
+      return null;
+    }
+
+    return {
+      reservationId: parsed.reservationId,
+      action: parsed.action,
+      exp: parsed.exp,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const buildReservationDecisionResultHtml = (
+  title: string,
+  message: string,
+  tone: 'success' | 'danger' | 'neutral' = 'neutral',
+): string => {
+  const badgeColor = tone === 'success' ? '#3d8c54' : tone === 'danger' ? '#b74b4b' : '#6b594f';
+
+  return `
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>${escapeHtml(title)}</title>
+      </head>
+      <body style="margin:0;background:#fcf3ea;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;color:#3b2f2a;">
+        <div style="max-width:640px;margin:0 auto;padding:28px 18px;">
+          <div style="background:#fff9f4;border:1px solid #e8d8c9;border-radius:16px;padding:24px;">
+            <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${badgeColor};">Arena Hair Studio</p>
+            <h1 style="margin:0 0 12px;font-size:24px;line-height:1.25;">${escapeHtml(title)}</h1>
+            <p style="margin:0;font-size:15px;line-height:1.6;color:#5a4a42;">${escapeHtml(message)}</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+};
+
+const getReservationStartMs = (dateIso: string, startTime: string): number | null => {
+  const value = new Date(`${dateIso}T${startTime}:00`).getTime();
+  return Number.isNaN(value) ? null : value;
+};
+
+const shouldSend48hReminder = (reservation: {
+  dateIso: string;
+  startTime: string;
+  adminStatus: AdminReservationStatus;
+  clientConfirmationStatus: ClientConfirmationStatus;
+  clientConfirmationReminderSentAtIso?: string | null;
+}): boolean => {
+  if (reservation.adminStatus === 'rejected') {
+    return false;
+  }
+
+  if (reservation.clientConfirmationStatus === 'confirmed') {
+    return false;
+  }
+
+  if (reservation.clientConfirmationReminderSentAtIso) {
+    return false;
+  }
+
+  const appointmentMs = getReservationStartMs(reservation.dateIso, reservation.startTime);
+
+  if (appointmentMs === null) {
+    return false;
+  }
+
+  const timeUntilMs = appointmentMs - Date.now();
+
+  if (timeUntilMs <= 0) {
+    return false;
+  }
+
+  return timeUntilMs <= 48 * 60 * 60 * 1000;
+};
+
+const send48hReservationReminder = async (reservation: {
+  id: string;
+  customerEmail: string;
+  customerName: string;
+  appointmentTypeName: string;
+  dateIso: string;
+  startTime: string;
+}): Promise<boolean> => {
+  const apiKey = process.env['RESEND_API_KEY'];
+  const fromEmail = process.env['RESEND_FROM_EMAIL'] ?? 'onboarding@resend.dev';
+
+  if (!apiKey) {
+    return false;
+  }
+
+  const expiresAt = Date.now() + 72 * 60 * 60 * 1000;
+  const confirmToken = createReservationConfirmationToken({
+    reservationId: reservation.id,
+    action: 'confirm',
+    exp: expiresAt,
+  });
+  const rejectToken = createReservationConfirmationToken({
+    reservationId: reservation.id,
+    action: 'reject',
+    exp: expiresAt,
+  });
+  const baseUrl = getPublicAppBaseUrl();
+  const confirmUrl = `${baseUrl}/api/reservas/confirmacion?token=${encodeURIComponent(confirmToken)}`;
+  const rejectUrl = `${baseUrl}/api/reservas/confirmacion?token=${encodeURIComponent(rejectToken)}`;
+
+  const resend = new Resend(apiKey);
+  const html = buildReservationReminderEmailHtml({
+    customerName: reservation.customerName,
+    appointmentTypeName: reservation.appointmentTypeName,
+    dateIso: reservation.dateIso,
+    startTime: reservation.startTime,
+    confirmUrl,
+    rejectUrl,
+  });
+
+  const sendResult = await resend.emails.send({
+    from: fromEmail,
+    to: resolveEmailRecipient(reservation.customerEmail),
+    subject: `Confirma tu cita - ${reservation.appointmentTypeName} (${reservation.dateIso} ${reservation.startTime})`,
+    html,
+  });
+
+  return !sendResult.error;
+};
+
+const dispatch48hReservationReminders = async (
+  reservations: Array<{
+    id: string;
+    customerEmail: string;
+    customerName: string;
+    appointmentTypeName: string;
+    dateIso: string;
+    startTime: string;
+    adminStatus: AdminReservationStatus;
+    clientConfirmationStatus: ClientConfirmationStatus;
+    clientConfirmationReminderSentAtIso?: string | null;
+  }>,
+): Promise<void> => {
+  const candidates = reservations.filter((reservation) => shouldSend48hReminder(reservation));
+
+  for (const reservation of candidates) {
+    try {
+      const sent = await send48hReservationReminder(reservation);
+
+      if (sent) {
+        await markReservationClientReminderSentAt(reservation.id, new Date().toISOString());
+      }
+    } catch (error) {
+      console.error('Error enviando recordatorio de confirmación 48h:', error);
+    }
+  }
+};
 
 type AppUserRole = 'superadmin' | 'admin' | 'client';
 type EmployeeWorkStatus = 'idle' | 'working' | 'vacation' | 'sick_leave' | 'recovering_hours';
@@ -3448,10 +3719,48 @@ app.get('/api/admin/reservas', async (req, res) => {
 
   try {
     const reservations = await listReservationsForAdmin();
+    await dispatch48hReservationReminders(reservations);
     return res.status(200).json({ ok: true, reservations });
   } catch (error) {
     console.error('Error listando reservas admin:', error);
     return res.status(500).json({ ok: false, error: 'No se pudieron listar las reservas.' });
+  }
+});
+
+app.patch('/api/admin/reservas/:id/client-confirmation', async (req, res) => {
+  const session = isSuperadminRequest(req.headers.cookie);
+
+  if (!session.isSuperadmin) {
+    return res.status(403).json({ ok: false, error: 'Solo superadmin puede confirmar cita.' });
+  }
+
+  const reservationId = `${req.params['id'] ?? ''}`.trim();
+
+  if (!reservationId) {
+    return res.status(400).json({ ok: false, error: 'ID de reserva inválido.' });
+  }
+
+  try {
+    const reservation = await getReservationByIdForAdmin(reservationId);
+
+    if (!reservation) {
+      return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+    }
+
+    if (reservation.adminStatus === 'rejected') {
+      return res.status(409).json({ ok: false, error: 'La reserva ya está rechazada.' });
+    }
+
+    const updated = await updateReservationClientConfirmationStatus(reservationId, 'confirmed');
+
+    if (!updated.ok) {
+      return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+    }
+
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Error confirmando cita desde superadmin:', error);
+    return res.status(500).json({ ok: false, error: 'No se pudo confirmar la cita.' });
   }
 });
 
@@ -3494,7 +3803,8 @@ app.post('/api/admin/bloqueos', async (req, res) => {
       if (created.reason === 'invalid-time') {
         return res.status(400).json({
           ok: false,
-          error: 'Rango horario inválido. Usa tramos de 30 min entre 09:00 y 20:00.',
+          error:
+            'Rango horario inválido. Usa tramos de 30 min en horario de servicio: L-V 10:30-18:00 y sábados 09:00-14:00.',
         });
       }
 
@@ -3603,6 +3913,7 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
 
 app.patch('/api/admin/reservas/:id', async (req, res) => {
   const session = isAdminRequest(req.headers.cookie);
+  const superadminSession = isSuperadminRequest(req.headers.cookie);
 
   if (!session.isAdmin) {
     return res.status(401).json({ ok: false, error: 'No autorizado.' });
@@ -3647,15 +3958,21 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
   }
 
   try {
-    const updated = await updateReservationByAdmin(reservationId, {
-      dateIso,
-      startTime,
-      durationMinutes,
-      appointmentTypeName,
-      customerName,
-      customerPhone,
-      customerEmail,
-    });
+    const updated = await updateReservationByAdmin(
+      reservationId,
+      {
+        dateIso,
+        startTime,
+        durationMinutes,
+        appointmentTypeName,
+        customerName,
+        customerPhone,
+        customerEmail,
+      },
+      {
+        allowClosedSchedule: superadminSession.isSuperadmin,
+      },
+    );
 
     if (!updated.ok) {
       if (updated.reason === 'not-found') {
@@ -3665,7 +3982,8 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
       if (updated.reason === 'invalid-time') {
         return res.status(400).json({
           ok: false,
-          error: 'Horario inválido. Usa tramos de 30 minutos entre 09:00 y 20:00.',
+          error:
+            'Horario inválido. Usa tramos de 30 min en horario de servicio: martes a viernes 10:30-18:00, sábados 09:00-14:00 y cierre de 14:00 a 15:00.',
         });
       }
 
@@ -3686,6 +4004,81 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
   } catch (error) {
     console.error('Error modificando reserva admin:', error);
     return res.status(500).json({ ok: false, error: 'No se pudo modificar la reserva.' });
+  }
+});
+
+app.post('/api/admin/reservas', async (req, res) => {
+  const session = isAdminRequest(req.headers.cookie);
+  const superadminSession = isSuperadminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const dateIso = `${req.body?.dateIso ?? ''}`.trim();
+  const time = `${req.body?.time ?? ''}`.trim();
+  const durationMinutes = Number(req.body?.durationMinutes ?? NaN);
+  const appointmentTypeName = `${req.body?.appointmentTypeName ?? ''}`.trim();
+  const customerName = `${req.body?.customerName ?? ''}`.trim();
+  const customerPhone = `${req.body?.customerPhone ?? ''}`.trim();
+  const customerEmail = `${req.body?.customerEmail ?? ''}`.trim().toLowerCase();
+  const requiresReservationSignal = Boolean(req.body?.requiresReservationSignal);
+
+  if (
+    !dateIso ||
+    !time ||
+    !Number.isFinite(durationMinutes) ||
+    durationMinutes <= 0 ||
+    !appointmentTypeName ||
+    !customerName ||
+    !customerPhone ||
+    !customerEmail
+  ) {
+    return res.status(400).json({ ok: false, error: 'Faltan datos para crear la reserva.' });
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
+    return res.status(400).json({ ok: false, error: 'Fecha inválida. Usa formato YYYY-MM-DD.' });
+  }
+
+  if (!/^\d{2}:\d{2}$/.test(time)) {
+    return res.status(400).json({ ok: false, error: 'Hora inválida. Usa formato HH:mm.' });
+  }
+
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(customerEmail)) {
+    return res.status(400).json({ ok: false, error: 'Email de cliente inválido.' });
+  }
+
+  try {
+    const created = await createReservationWithSlots(
+      {
+        dateIso,
+        time,
+        durationMinutes,
+        customerEmail,
+        customerName,
+        customerPhone,
+        appointmentTypeName,
+        requiresReservationSignal,
+      },
+      {
+        allowClosedSchedule: superadminSession.isSuperadmin,
+      },
+    );
+
+    if (!created.ok) {
+      return res.status(409).json({
+        ok: false,
+        error: superadminSession.isSuperadmin
+          ? 'No se pudo crear la reserva porque ya existe un conflicto con otra cita o bloqueo manual.'
+          : 'No se pudo crear la reserva porque ese horario está cerrado o ya no está disponible.',
+      });
+    }
+
+    return res.status(200).json({ ok: true, reservationId: created.reservationId });
+  } catch (error) {
+    console.error('Error creando reserva manual admin:', error);
+    return res.status(500).json({ ok: false, error: 'No se pudo crear la reserva.' });
   }
 });
 
@@ -3851,6 +4244,132 @@ app.get('/api/reservas/disponibilidad', async (req, res) => {
       ok: false,
       error: 'No se pudo consultar la disponibilidad.',
     });
+  }
+});
+
+app.get('/api/reservas/confirmacion', async (req, res) => {
+  const token = `${req.query['token'] ?? ''}`.trim();
+  const parsed = verifyReservationConfirmationToken(token);
+
+  if (!parsed) {
+    return res
+      .status(400)
+      .send(
+        buildReservationDecisionResultHtml(
+          'Enlace no válido',
+          'El enlace de confirmación ha caducado o no es correcto. Si lo necesitas, contacta con el salón.',
+          'danger',
+        ),
+      );
+  }
+
+  try {
+    const reservation = await getReservationByIdForAdmin(parsed.reservationId);
+
+    if (!reservation) {
+      return res
+        .status(404)
+        .send(
+          buildReservationDecisionResultHtml(
+            'Cita no disponible',
+            'Esta cita ya no está en agenda o ya fue gestionada previamente.',
+            'neutral',
+          ),
+        );
+    }
+
+    if (parsed.action === 'confirm') {
+      if (reservation.adminStatus === 'rejected') {
+        return res
+          .status(409)
+          .send(
+            buildReservationDecisionResultHtml(
+              'Cita no confirmable',
+              'Esta cita fue rechazada anteriormente y ya no está disponible.',
+              'danger',
+            ),
+          );
+      }
+
+      if (reservation.clientConfirmationStatus === 'confirmed') {
+        return res
+          .status(200)
+          .send(
+            buildReservationDecisionResultHtml(
+              'Cita ya confirmada',
+              'Tu cita ya estaba confirmada. Te esperamos en Arena Hair Studio.',
+              'success',
+            ),
+          );
+      }
+
+      const updated = await updateReservationClientConfirmationStatus(reservation.id, 'confirmed');
+
+      if (!updated.ok) {
+        return res
+          .status(404)
+          .send(
+            buildReservationDecisionResultHtml(
+              'Cita no disponible',
+              'No se ha podido confirmar porque la cita ya no existe en agenda.',
+              'danger',
+            ),
+          );
+      }
+
+      return res
+        .status(200)
+        .send(
+          buildReservationDecisionResultHtml(
+            'Cita confirmada',
+            'Tu cita ha quedado confirmada correctamente. Gracias por confirmarla.',
+            'success',
+          ),
+        );
+    }
+
+    const deletedReservation = {
+      dateIso: reservation.dateIso,
+      startTime: reservation.startTime,
+      endTime: reservation.endTime,
+      appointmentTypeName: reservation.appointmentTypeName,
+    };
+
+    await deleteReservationById(reservation.id);
+    await notifyFreedSlotAlerts(deletedReservation);
+
+    try {
+      await createNotification({
+        type: 'cancelacion_reserva',
+        title: `Cita rechazada por clienta: ${reservation.appointmentTypeName}`,
+        message: `${reservation.customerName} rechazó su cita del ${reservation.dateIso} a las ${reservation.startTime}.`,
+        relatedId: reservation.id,
+        actionUrl: `/admin/reservas?id=${reservation.id}`,
+      });
+    } catch (notifError) {
+      console.error('Error creando notificación tras rechazo de clienta:', notifError);
+    }
+
+    return res
+      .status(200)
+      .send(
+        buildReservationDecisionResultHtml(
+          'Cita rechazada',
+          'Tu cita se ha eliminado de la agenda. Si quieres, puedes volver a reservar desde la web.',
+          'danger',
+        ),
+      );
+  } catch (error) {
+    console.error('Error procesando confirmación/rechazo de cita:', error);
+    return res
+      .status(500)
+      .send(
+        buildReservationDecisionResultHtml(
+          'No se pudo procesar',
+          'Ha ocurrido un error al procesar la acción. Inténtalo de nuevo o contacta con el salón.',
+          'danger',
+        ),
+      );
   }
 });
 
@@ -4319,12 +4838,32 @@ app.delete('/api/notifications/clear-read', async (req, res) => {
   }
 });
 
+const startReservationReminderScheduler = (): void => {
+  const run = async (): Promise<void> => {
+    try {
+      const reservations = await listReservationsForAdmin();
+      await dispatch48hReservationReminders(reservations);
+    } catch (error) {
+      console.error('Error ejecutando scheduler de recordatorios 48h:', error);
+    }
+  };
+
+  void run();
+  setInterval(
+    () => {
+      void run();
+    },
+    15 * 60 * 1000,
+  );
+};
+
 if (isMainModule(import.meta.url) || process.env['pm_id']) {
   const port = process.env['PORT'] || 4000;
   initializeFromDb()
     .catch((error) => console.error('Error en inicialización desde DB:', error))
     .finally(() => {
       seedAuthUsers();
+      startReservationReminderScheduler();
       app.listen(port, (error) => {
         if (error) {
           throw error;

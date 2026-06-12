@@ -38,37 +38,43 @@ export class CitasService {
         id: 1,
         nombre: 'Pack Corte',
         duracionMinutos: 60,
-        descripcion: 'Asesoría personalizada + spa capilar + corte.',
+        descripcion:
+          'Asesoría personalizada + terapia capilar (con tratamiento de hidratación) + corte.',
       },
       {
         id: 2,
         nombre: 'Pack Peinado',
         duracionMinutos: 60,
-        descripcion: 'Asesoría personalizada + spa capilar + peinado.',
+        descripcion:
+          'Asesoría personalizada + terapia capilar (con tratamiento de hidratación) + peinado.',
       },
       {
         id: 3,
         nombre: 'Pack Corte y Peinado',
         duracionMinutos: 90,
-        descripcion: 'Asesoría + spa capilar + corte + peinado.',
+        descripcion:
+          'Asesoría + terapia capilar (con tratamiento de hidratación) + corte + peinado.',
       },
       {
         id: 4,
         nombre: 'Pack Color',
         duracionMinutos: 120,
-        descripcion: 'Asesoría + técnica de color raíz + spa capilar + corte + peinado.',
+        descripcion:
+          'Asesoría + técnica de color raíz + terapia capilar (con tratamiento de hidratación) + corte + peinado.',
       },
       {
         id: 5,
         nombre: 'Pack Color Plus',
         duracionMinutos: 150,
-        descripcion: 'Asesoría + color con matiz o global + spa capilar + corte + peinado.',
+        descripcion:
+          'Asesoría + color con matiz o global + terapia capilar (con tratamiento de hidratación) + corte + peinado.',
       },
       {
         id: 6,
         nombre: 'Pack Ilumina',
         duracionMinutos: 210,
-        descripcion: 'Asesoría + puntos de luz con matiz + spa capilar + corte + peinado.',
+        descripcion:
+          'Asesoría + puntos de luz + matiz + terapia capilar + tratamiento personalizado + corte + peinado.',
         requiresReservationSignal: true,
         provisionalHoldHours: 48,
       },
@@ -77,7 +83,7 @@ export class CitasService {
         nombre: 'Pack Full Color',
         duracionMinutos: 330,
         descripcion:
-          'Asesoría + iluminación a medida + spa capilar + tratamiento reparador + corte + peinado.',
+          'Asesoría + iluminación a medida + matiz + terapia capilar + tratamiento personalizado + corte + peinado.',
         requiresReservationSignal: true,
         provisionalHoldHours: 48,
       },
@@ -85,25 +91,39 @@ export class CitasService {
         id: 8,
         nombre: 'Pack Invitada · Opción 1',
         duracionMinutos: 60,
-        descripcion: 'Asesoría + spa capilar + peinado suelto.',
+        descripcion:
+          'Asesoría + terapia capilar (con tratamiento de hidratación) + peinado suelto.',
       },
       {
         id: 9,
         nombre: 'Pack Invitada · Opción 2',
         duracionMinutos: 90,
-        descripcion: 'Asesoría + spa capilar + semirecogido, coleta o trenza.',
+        descripcion:
+          'Asesoría + terapia capilar (con tratamiento de hidratación) + semirecogido, coleta o trenza.',
       },
       {
         id: 10,
         nombre: 'Pack Invitada · Opción 3',
         duracionMinutos: 120,
-        descripcion: 'Asesoría + spa capilar + recogido.',
+        descripcion: 'Asesoría + terapia capilar (con tratamiento de hidratación) + recogido.',
       },
       {
         id: 11,
         nombre: 'Pack Novia',
         duracionMinutos: 180,
         descripcion: 'Asesoría + prueba + día de la boda.',
+      },
+      {
+        id: 12,
+        nombre: 'Pack Tratamiento',
+        duracionMinutos: 60,
+        descripcion: 'Asesoría + tratamiento + terapia capilar + secado y acabado.',
+      },
+      {
+        id: 13,
+        nombre: 'Pack Extensiones',
+        duracionMinutos: 90,
+        descripcion: 'Subida de extensiones + terapia capilar + secado y acabado.',
       },
     ];
   }

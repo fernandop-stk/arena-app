@@ -345,6 +345,8 @@
                         <span class="admin-panel--container__agenda-day-count">
                           {{ day.reservationCount }}
                         </span>
+                      } @else if (day.isClosedDay) {
+                        <span class="admin-panel--container__agenda-closed-badge">Cerrado</span>
                       }
                     </span>
                   </button>
@@ -411,15 +413,19 @@
                       (drop)="onAgendaReservationDrop($event, slot)"
                       (click)="
                         getAgendaReservationsByStartTime(slot).length === 0 &&
-                          openQuickReserveModal()
+                          handleAgendaEmptySlotClick(agendaDayScheduleDateIso(), slot)
                       "
                     >
                       @if (getAgendaReservationsByStartTime(slot).length === 0) {
                         <span
                           class="admin-panel--container__agenda-hour-empty"
                           style="cursor: pointer"
-                          >Sin citas · Haz clic para reservar</span
                         >
+                          {{ getAgendaClosedSlotLabel(agendaDayScheduleDateIso(), slot) }}
+                          @if (!isAgendaRecurringClosedSlot(agendaDayScheduleDateIso(), slot)) {
+                            · Haz clic para reservar
+                          }
+                        </span>
                       } @else {
                         @for (
                           reservation of getAgendaReservationsByStartTime(slot);
@@ -557,6 +563,9 @@
                     >
                       <div class="admin-panel--container__agenda-week-day-head-copy">
                         <p class="admin-panel--container__agenda-week-day-label">{{ day.label }}</p>
+                        @if (day.isClosedDay) {
+                          <span class="admin-panel--container__agenda-closed-badge">Cerrado</span>
+                        }
                         @if (day.alertCount > 0) {
                           <span class="admin-panel--container__agenda-alert-day-count">
                             Avísame
@@ -583,7 +592,7 @@
                             (drop)="onAgendaReservationDropToDateTime($event, day.dateIso, slot)"
                             (click)="
                               getAgendaReservationsByDateAndStartTime(day.dateIso, slot).length ===
-                                0 && openQuickReserveModal()
+                                0 && handleAgendaEmptySlotClick(day.dateIso, slot)
                             "
                             style="cursor: pointer"
                           >
@@ -677,6 +686,14 @@
                                 </p>
                               </article>
                             }
+                            @if (
+                              getAgendaReservationsByDateAndStartTime(day.dateIso, slot).length ===
+                                0 && isAgendaRecurringClosedSlot(day.dateIso, slot)
+                            ) {
+                              <span class="admin-panel--container__agenda-slot-closed">
+                                {{ getAgendaClosedSlotLabel(day.dateIso, slot) }}
+                              </span>
+                            }
                           </div>
                         </div>
                       }
@@ -737,6 +754,170 @@
                   (click)="confirmQuickReserve()"
                 >
                   Sí, crear reserva
+                </button>
+              </div>
+            </div>
+          </div>
+        }
+
+        @if (showAgendaManualReserveModal()) {
+          <div
+            class="admin-panel--container__modal-backdrop"
+            (click)="closeAgendaManualReserveModal()"
+          >
+            <div
+              class="admin-panel--container__modal admin-panel--container__modal--manual-reserve"
+              (click)="$event.stopPropagation()"
+            >
+              <div class="admin-panel--container__modal-head">
+                <div>
+                  <h3 class="admin-panel--container__modal-title">Crear reserva manual</h3>
+                  <p class="admin-panel--container__modal-subtitle">
+                    Superadmin puede registrar citas incluso en lunes o en el cierre de 14:00 a
+                    15:00.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  class="admin-panel--container__modal-close"
+                  (click)="closeAgendaManualReserveModal()"
+                  aria-label="Cerrar"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div class="admin-panel--container__agenda-manual-form">
+                <label class="admin-panel--container__label">
+                  Tipo de servicio
+                  <select
+                    class="admin-panel--container__input"
+                    [value]="agendaManualReserveServiceType()"
+                    (change)="onAgendaManualReserveServiceTypeChange($event)"
+                  >
+                    <option value="pack">Pack</option>
+                    <option value="treatment">Tratamiento</option>
+                  </select>
+                </label>
+
+                <label class="admin-panel--container__label">
+                  Servicio
+                  <select
+                    class="admin-panel--container__input"
+                    [value]="agendaManualReserveServiceId()"
+                    (change)="onAgendaManualReserveServiceIdChange($event)"
+                  >
+                    @if (agendaManualReserveServiceType() === 'pack') {
+                      @for (option of agendaPackOptions; track option.id) {
+                        <option [value]="option.id">{{ option.nombre }}</option>
+                      }
+                    } @else {
+                      @for (option of agendaTreatmentCatalog; track option.id) {
+                        <option [value]="option.id">{{ option.nombre }}</option>
+                      }
+                    }
+                  </select>
+                </label>
+
+                <div class="admin-panel--container__time-range">
+                  <label class="admin-panel--container__label">
+                    Fecha
+                    <input
+                      class="admin-panel--container__input"
+                      type="date"
+                      [value]="agendaManualReserveDateIso()"
+                      (input)="agendaManualReserveDateIso.set($any($event.target).value)"
+                    />
+                  </label>
+
+                  <label class="admin-panel--container__label">
+                    Hora
+                    <span class="admin-panel--container__time-select-wrap">
+                      <select
+                        class="admin-panel--container__input admin-panel--container__time-select"
+                        [value]="agendaManualReserveTime()"
+                        (change)="agendaManualReserveTime.set($any($event.target).value)"
+                      >
+                        @for (slot of agendaTimeSlotOptions; track slot) {
+                          <option [value]="slot">{{ slot }}</option>
+                        }
+                      </select>
+                    </span>
+                  </label>
+                </div>
+
+                <label class="admin-panel--container__label">
+                  Duración
+                  <span class="admin-panel--container__time-select-wrap">
+                    <select
+                      class="admin-panel--container__input admin-panel--container__time-select"
+                      [value]="agendaManualReserveDuration()"
+                      (change)="onAgendaManualReserveDurationChange($event)"
+                    >
+                      @for (duration of agendaDurationOptions; track duration) {
+                        <option [value]="duration">{{ formatDuration(duration) }}</option>
+                      }
+                    </select>
+                  </span>
+                </label>
+
+                <label class="admin-panel--container__label">
+                  Nombre de la clienta
+                  <input
+                    class="admin-panel--container__input"
+                    type="text"
+                    [value]="agendaManualReserveCustomerName()"
+                    (input)="agendaManualReserveCustomerName.set($any($event.target).value)"
+                  />
+                </label>
+
+                <div class="admin-panel--container__time-range">
+                  <label class="admin-panel--container__label">
+                    Teléfono
+                    <input
+                      class="admin-panel--container__input"
+                      type="tel"
+                      [value]="agendaManualReserveCustomerPhone()"
+                      (input)="agendaManualReserveCustomerPhone.set($any($event.target).value)"
+                    />
+                  </label>
+
+                  <label class="admin-panel--container__label">
+                    Email
+                    <input
+                      class="admin-panel--container__input"
+                      type="email"
+                      [value]="agendaManualReserveCustomerEmail()"
+                      (input)="agendaManualReserveCustomerEmail.set($any($event.target).value)"
+                    />
+                  </label>
+                </div>
+
+                @if (agendaManualReserveError()) {
+                  <p class="admin-panel--container__error">{{ agendaManualReserveError() }}</p>
+                }
+              </div>
+
+              <div class="admin-panel--container__modal-actions">
+                <button
+                  type="button"
+                  class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                  [disabled]="agendaManualReserveLoading()"
+                  (click)="closeAgendaManualReserveModal()"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  class="admin-panel--container__action-button admin-panel--container__action-button--accept"
+                  [disabled]="agendaManualReserveLoading()"
+                  (click)="submitAgendaManualReserve()"
+                >
+                  @if (agendaManualReserveLoading()) {
+                    Guardando…
+                  } @else {
+                    Crear reserva
+                  }
                 </button>
               </div>
             </div>
@@ -808,7 +989,7 @@
                     </p>
                     <p class="admin-panel--container__agenda-detail-row">
                       <span class="admin-panel--container__agenda-detail-label">Estado</span>
-                      <span>{{ agendaDetailReservation()!.adminStatus }}</span>
+                      <span>{{ getReservationAgendaStatusLabel(agendaDetailReservation()!) }}</span>
                     </p>
                   </div>
                 </div>
@@ -906,6 +1087,15 @@
             >
               + Crear reserva desde agenda
             </button>
+            @if (isSuperadmin()) {
+              <button
+                type="button"
+                class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                (click)="openAgendaManualReserveModal(agendaSelectedDateIso() || getTodayIso())"
+              >
+                + Crear reserva manual
+              </button>
+            }
           </div>
 
           @if (listError()) {
@@ -1054,13 +1244,13 @@
                         <span
                           class="admin-panel--container__status"
                           [class.admin-panel--container__status--accepted]="
-                            reservation.adminStatus === 'accepted'
+                            isReservationAgendaStatusAccepted(reservation)
                           "
                           [class.admin-panel--container__status--rejected]="
                             reservation.adminStatus === 'rejected'
                           "
                         >
-                          {{ getStatusLabel(reservation.adminStatus) }}
+                          {{ getReservationAgendaStatusLabel(reservation) }}
                         </span>
                       </div>
 
@@ -1075,6 +1265,11 @@
                       </p>
                       <p class="admin-panel--container__reservation-text">
                         Señal: {{ reservation.paymentReceived ? 'Recibida' : 'Pendiente' }}
+                      </p>
+                      <p
+                        class="admin-panel--container__reservation-text admin-panel--container__reservation-text--client-confirmation"
+                      >
+                        Confirmación clienta: {{ getClientConfirmationLabel(reservation) }}
                       </p>
 
                       <div class="admin-panel--container__reservation-actions">
@@ -1112,6 +1307,21 @@
                         >
                           Aceptar
                         </button>
+
+                        @if (isSuperadmin()) {
+                          <button
+                            type="button"
+                            class="admin-panel--container__action-button admin-panel--container__action-button--accept"
+                            [disabled]="
+                              isActionLoading(reservation.id) ||
+                              reservation.adminStatus === 'rejected' ||
+                              reservation.clientConfirmationStatus === 'confirmed'
+                            "
+                            (click)="confirmReservationBySuperadmin(reservation.id)"
+                          >
+                            Confirmar clienta
+                          </button>
+                        }
 
                         <button
                           type="button"
@@ -1172,13 +1382,13 @@
                     <span
                       class="admin-panel--container__status"
                       [class.admin-panel--container__status--accepted]="
-                        reservation.adminStatus === 'accepted'
+                        isReservationAgendaStatusAccepted(reservation)
                       "
                       [class.admin-panel--container__status--rejected]="
                         reservation.adminStatus === 'rejected'
                       "
                     >
-                      {{ getStatusLabel(reservation.adminStatus) }}
+                      {{ getReservationAgendaStatusLabel(reservation) }}
                     </span>
                   </div>
 
@@ -1189,6 +1399,11 @@
                   <p class="admin-panel--container__reservation-text">
                     {{ formatDate(reservation.dateIso) }} · {{ reservation.startTime }} -
                     {{ reservation.endTime }} · {{ formatDuration(reservation.durationMinutes) }}
+                  </p>
+                  <p
+                    class="admin-panel--container__reservation-text admin-panel--container__reservation-text--client-confirmation"
+                  >
+                    Confirmación clienta: {{ getClientConfirmationLabel(reservation) }}
                   </p>
 
                   <div class="admin-panel--container__reservation-actions">
@@ -1226,6 +1441,21 @@
                     >
                       Aceptar
                     </button>
+
+                    @if (isSuperadmin()) {
+                      <button
+                        type="button"
+                        class="admin-panel--container__action-button admin-panel--container__action-button--accept"
+                        [disabled]="
+                          isActionLoading(reservation.id) ||
+                          reservation.adminStatus === 'rejected' ||
+                          reservation.clientConfirmationStatus === 'confirmed'
+                        "
+                        (click)="confirmReservationBySuperadmin(reservation.id)"
+                      >
+                        Confirmar clienta
+                      </button>
+                    }
 
                     <button
                       type="button"
@@ -1360,7 +1590,7 @@
                   [attr.aria-pressed]="isFullDayBlock()"
                   (click)="selectFullDayMode()"
                 >
-                  Bloquear día completo (09:00 - 20:00)
+                  Bloquear día completo (L-V 10:30-18:00 · Sáb 09:00-14:00)
                 </button>
 
                 <button
@@ -1469,16 +1699,29 @@
                           {{ reservation.customerName }} · {{ reservation.appointmentTypeName }}
                         </p>
                         <span
-                          class="admin-panel--container__modal-status admin-panel--container__modal-status--{{
-                            reservation.adminStatus
-                          }}"
+                          class="admin-panel--container__modal-status"
+                          [class.admin-panel--container__modal-status--accepted]="
+                            isReservationAgendaStatusAccepted(reservation)
+                          "
+                          [class.admin-panel--container__modal-status--rejected]="
+                            reservation.adminStatus === 'rejected'
+                          "
+                          [class.admin-panel--container__modal-status--pending]="
+                            reservation.adminStatus === 'pending' &&
+                            reservation.clientConfirmationStatus !== 'confirmed'
+                          "
                         >
-                          {{ getStatusLabel(reservation.adminStatus) }}
+                          {{ getReservationAgendaStatusLabel(reservation) }}
                         </span>
                       </div>
                       <p class="admin-panel--container__modal-item-text">
                         {{ reservation.startTime }} - {{ reservation.endTime }} ·
                         {{ formatDuration(reservation.durationMinutes) }}
+                      </p>
+                      <p
+                        class="admin-panel--container__modal-item-text admin-panel--container__modal-item-text--client-confirmation"
+                      >
+                        Confirmación clienta: {{ getClientConfirmationLabel(reservation) }}
                       </p>
                     </article>
                   }
@@ -3788,6 +4031,9 @@
               [role]="employeeCreateRole()"
               [loading]="employeeCreateLoading()"
               [permissions]="employeeCreatePermissions()"
+              [usernameError]="getEmployeeCreateFieldError('username')"
+              [emailError]="getEmployeeCreateFieldError('email')"
+              [passwordError]="getEmployeeCreateFieldError('password')"
               (usernameInput)="onEmployeeCreateUsernameInput($event)"
               (emailInput)="onEmployeeCreateEmailInput($event)"
               (passwordInput)="onEmployeeCreatePasswordInput($event)"

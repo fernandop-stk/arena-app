@@ -42,6 +42,9 @@ export class EmployeeCreateFormComponent {
   @Input() role: EmployeeCreateRole = 'client';
   @Input() loading = false;
   @Input() permissions: EmployeePermission[] = [];
+  @Input() usernameError = '';
+  @Input() emailError = '';
+  @Input() passwordError = '';
 
   @Output() usernameInput = new EventEmitter<Event>();
   @Output() emailInput = new EventEmitter<Event>();
@@ -70,5 +73,9 @@ export class EmployeeCreateFormComponent {
 
   protected clearAll(): void {
     this.permissionsChange.emit([]);
+  }
+
+  protected hasError(message: string): boolean {
+    return message.trim().length > 0;
   }
 }
