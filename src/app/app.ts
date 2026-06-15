@@ -233,7 +233,7 @@ import { AppService } from './app.service';
             </div>
 
             <div class="app-shell--footer__bottom">
-              <p class="app-shell--footer__hours">Horario · L-V 10:30-18:00 · Sáb 09:00-14:00</p>
+              <p class="app-shell--footer__hours">Horario · M-V 10:00-18:00 · Sáb 09:00-13:00</p>
               <p class="app-shell--footer__copy">
                 © {{ currentYear }} Arena Hair Studio · Todos los derechos reservados
               </p>

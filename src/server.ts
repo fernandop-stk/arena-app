@@ -3804,7 +3804,7 @@ app.post('/api/admin/bloqueos', async (req, res) => {
         return res.status(400).json({
           ok: false,
           error:
-            'Rango horario inválido. Usa tramos de 30 min en horario de servicio: L-V 10:30-18:00 y sábados 09:00-14:00.',
+            'Rango horario inválido. Usa tramos de 30 min en horario de servicio: martes a viernes 10:00-18:00 y sábados 09:00-13:00.',
         });
       }
 
@@ -3983,7 +3983,7 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
         return res.status(400).json({
           ok: false,
           error:
-            'Horario inválido. Usa tramos de 30 min en horario de servicio: martes a viernes 10:30-18:00, sábados 09:00-14:00 y cierre de 14:00 a 15:00.',
+            'Horario inválido. Usa tramos de 30 min en horario de servicio: martes a viernes 10:00-18:00, sábados 09:00-13:00 y cierre de 14:00 a 15:00.',
         });
       }
 

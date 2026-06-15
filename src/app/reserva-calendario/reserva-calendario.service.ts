@@ -19,10 +19,10 @@ export class ReservaCalendarioService {
   private static readonly MONDAY_WEEKDAY = 1;
   private static readonly SUNDAY_WEEKDAY = 0;
   private static readonly SATURDAY_WEEKDAY = 6;
-  private static readonly WEEKDAY_FIRST_START_MINUTES = 10 * 60 + 30;
+  private static readonly WEEKDAY_FIRST_START_MINUTES = 10 * 60;
   private static readonly WEEKDAY_LAST_START_MINUTES = 18 * 60;
   private static readonly SATURDAY_FIRST_START_MINUTES = 9 * 60;
-  private static readonly SATURDAY_LAST_START_MINUTES = 14 * 60;
+  private static readonly SATURDAY_LAST_START_MINUTES = 13 * 60;
   private static readonly MIDDAY_CLOSED_START_MINUTES = 14 * 60;
   private static readonly MIDDAY_CLOSED_END_MINUTES = 15 * 60;
 

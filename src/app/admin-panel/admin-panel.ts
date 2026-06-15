@@ -620,7 +620,7 @@ export class AdminPanelComponent implements OnDestroy {
   });
   protected readonly blockDateIso = signal('');
   protected readonly calendarMonthIso = signal('');
-  protected readonly blockStartTime = signal('10:30');
+  protected readonly blockStartTime = signal('10:00');
   protected readonly blockEndTime = signal('18:30');
   protected readonly blockStartOptions = this.buildHalfHourOptions('09:00', '18:00');
   protected readonly blockEndOptions = this.buildHalfHourOptions('09:30', '18:30');
@@ -4283,8 +4283,8 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected formatTimeRange(startTime: string, endTime: string): string {
     if (
-      (startTime === '10:30' && endTime === '18:30') ||
-      (startTime === '09:00' && endTime === '14:30')
+      (startTime === '10:00' && endTime === '18:30') ||
+      (startTime === '09:00' && endTime === '13:30')
     ) {
       return 'Día completo';
     }
@@ -6669,7 +6669,7 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   private getDefaultAgendaManualReserveTime(_dateIso: string): string {
-    return '10:30';
+    return '10:00';
   }
 
   private getFullDayBlockRange(dateIso: string): { startTime: string; endTime: string } {
@@ -6679,12 +6679,12 @@ export class AdminPanelComponent implements OnDestroy {
     if (weekDay === 6) {
       return {
         startTime: '09:00',
-        endTime: '14:30',
+        endTime: '13:30',
       };
     }
 
     return {
-      startTime: '10:30',
+      startTime: '10:00',
       endTime: '18:30',
     };
   }
