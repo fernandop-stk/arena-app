@@ -1799,12 +1799,14 @@ const getAuthSession = (cookieHeader: string | undefined): AppSession => {
       const user = usersByEmail.get(verified.email);
 
       if (user) {
+        const effectiveRole = getEffectiveUserRole(user);
+
         return {
           isAuthenticated: true,
-          isAdmin: user.role === 'admin' || user.role === 'superadmin',
+          isAdmin: effectiveRole === 'admin' || effectiveRole === 'superadmin',
           email: user.email,
           username: user.username,
-          role: user.role,
+          role: effectiveRole,
         };
       }
     }
@@ -1873,12 +1875,20 @@ const isSuperadminRequest = (
   return { isSuperadmin: true, email: session.email };
 };
 
+const getEffectiveUserRole = (user: AppUser): AppUserRole => {
+  if (user.role === 'client' && (user.permissions?.length ?? 0) > 0) {
+    return 'admin';
+  }
+
+  return user.role;
+};
+
 const listUsersForSuperadmin = (): AdminEmployeeItem[] =>
   Array.from(usersByEmail.values())
     .map((user) => ({
       email: user.email,
       username: user.username,
-      role: user.role,
+      role: getEffectiveUserRole(user),
       createdAtIso: user.createdAtIso,
       tracking: normalizeTrackingInfo(user.tracking),
       permissions: user.permissions ?? [],
@@ -2926,12 +2936,12 @@ app.get('/api/admin/identificacion-usuarios', (req, res) => {
   }
 
   const users = Array.from(usersByEmail.values())
-    .filter((user) => user.role === 'superadmin' || user.role === 'admin')
     .map((user) => ({
       email: user.email,
       username: user.username,
-      role: user.role,
+      role: getEffectiveUserRole(user),
     }))
+    .filter((user) => user.role === 'superadmin' || user.role === 'admin')
     .sort((a, b) => {
       if (a.role === b.role) {
         return a.username.localeCompare(b.username);
@@ -3750,6 +3760,7 @@ app.patch('/api/admin/empleados/:email/rol', (req, res) => {
   upsertUser({
     ...targetUser,
     role,
+    permissions: role === 'client' ? [] : (targetUser.permissions ?? []),
   });
 
   return res.status(200).json({ ok: true });
