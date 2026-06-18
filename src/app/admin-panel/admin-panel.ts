@@ -668,6 +668,11 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly employeeCreatePassword = signal('');
   protected readonly employeeCreateRole = signal<'admin' | 'client'>('admin');
   protected readonly employeeCreateLoading = signal(false);
+  protected readonly superadminEditUsername = signal('');
+  protected readonly superadminEditEmail = signal('');
+  protected readonly superadminEditPassword = signal('');
+  protected readonly superadminEditLoading = signal(false);
+  protected readonly showSuperadminEditPassword = signal(false);
   protected readonly employeeCreateFieldErrors = signal<EmployeeCreateFieldErrors>({
     username: '',
     email: '',
@@ -4051,6 +4056,111 @@ export class AdminPanelComponent implements OnDestroy {
     return this.employeeCreateFieldErrors()[field];
   }
 
+  protected onSuperadminUsernameInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.superadminEditUsername.set(target.value);
+  }
+
+  protected onSuperadminEmailInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.superadminEditEmail.set(target.value);
+  }
+
+  protected onSuperadminPasswordInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.superadminEditPassword.set(target.value);
+  }
+
+  protected toggleSuperadminPasswordVisibility(): void {
+    this.showSuperadminEditPassword.update((value) => !value);
+  }
+
+  protected saveSuperadminCredentials(): void {
+    if (!this.isSuperadmin()) {
+      this.employeeError.set('Solo superadmin puede actualizar estas credenciales.');
+      return;
+    }
+
+    const username = this.superadminEditUsername().trim();
+    const email = this.superadminEditEmail().trim().toLowerCase();
+    const password = this.superadminEditPassword();
+
+    this.employeeError.set('');
+    this.employeeMessage.set('');
+
+    if (!username || !email) {
+      this.employeeError.set('Usuario y email son obligatorios para la cuenta superadmin.');
+      return;
+    }
+
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      this.employeeError.set('El email superadmin no tiene un formato válido.');
+      return;
+    }
+
+    if (username.length < 3 || username.length > 40) {
+      this.employeeError.set('El usuario superadmin debe tener entre 3 y 40 caracteres.');
+      return;
+    }
+
+    if (password) {
+      if (password.length < 8) {
+        this.employeeError.set('La nueva contraseña debe tener al menos 8 caracteres.');
+        return;
+      }
+
+      if (!/[A-Z]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+        this.employeeError.set('La contraseña debe incluir una mayúscula y un carácter especial.');
+        return;
+      }
+    }
+
+    this.superadminEditLoading.set(true);
+
+    this.http
+      .patch<{
+        ok: boolean;
+        error?: string;
+        user?: { email: string; username: string; role: AdminUserRole };
+      }>('/api/admin/superadmin/credenciales', {
+        username,
+        email,
+        password,
+      })
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.employeeError.set(response.error ?? 'No se pudo actualizar la cuenta superadmin.');
+            return;
+          }
+
+          const updatedUser = response.user;
+
+          if (updatedUser) {
+            this.ownerEmail.set(updatedUser.email);
+            this.superadminEditEmail.set(updatedUser.email);
+            this.superadminEditUsername.set(updatedUser.username);
+          }
+
+          this.superadminEditPassword.set('');
+          this.showSuperadminEditPassword.set(false);
+          this.employeeMessage.set('Credenciales de superadmin actualizadas correctamente.');
+          this.loadEmployeeUsers();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.employeeError.set(
+            typeof apiError === 'string' && apiError
+              ? apiError
+              : 'No se pudo actualizar la cuenta superadmin.',
+          );
+        },
+        complete: () => {
+          this.superadminEditLoading.set(false);
+        },
+      });
+  }
+
   protected deleteEmployee(email: string): void {
     if (typeof window !== 'undefined' && !window.confirm('¿Eliminar este empleado?')) {
       return;
@@ -5928,6 +6038,7 @@ export class AdminPanelComponent implements OnDestroy {
 
           const users = response.users ?? [];
           this.employeeUsers.set(users);
+          this.syncSuperadminCredentialsDraft(users);
 
           const selectableUsers = users.filter((user) => user.role !== 'superadmin');
           const selectedEmail = this.selectedEmployeeEmail();
@@ -5953,6 +6064,21 @@ export class AdminPanelComponent implements OnDestroy {
           this.isLoadingEmployees.set(false);
         },
       });
+  }
+
+  private syncSuperadminCredentialsDraft(users: AdminEmployeeUser[]): void {
+    const superadmin = users.find((user) => user.role === 'superadmin');
+
+    if (!superadmin) {
+      return;
+    }
+
+    this.superadminEditUsername.set(superadmin.username);
+    this.superadminEditEmail.set(superadmin.email);
+
+    if (!this.ownerEmail()) {
+      this.ownerEmail.set(superadmin.email);
+    }
   }
 
   private updateEmployeeRole(email: string, role: 'admin' | 'client'): void {

@@ -21,7 +21,7 @@ export class DondeEstamosService {
   }
 
   getHours(): string {
-    return 'Horario · M-V 10:30-14:00 y 15:00-19:00 · Sáb 09:00-14:00';
+    return 'Horario · M-V 10:00-14:00 y 15:00-19:00 · Sáb 09:00-14:00';
   }
 
   getInstagramUrl(): string {

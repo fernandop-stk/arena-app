@@ -666,13 +666,15 @@
     }
 
     &__month-nav {
-      display: inline-flex;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
       align-items: center;
       gap: 0.5rem;
       border: 1px solid colors.$color-border;
       border-radius: 999px;
       background: #fff;
       padding: 0.25rem;
+      width: min(100%, 24rem);
     }
 
     &__month-nav-button {
@@ -706,13 +708,16 @@
     }
 
     &__month-nav-label {
-      min-width: 8.8rem;
+      min-width: 0;
       text-align: center;
       font-size: 0.86rem;
       font-weight: 800;
       color: colors.$color-primary-dark;
       text-transform: capitalize;
       padding: 0 0.25rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     &__month-input {
@@ -747,18 +752,30 @@
     }
 
     &__calendar-day {
-      min-height: 3.6rem;
-      border-radius: 0.7rem;
+      min-height: 4.1rem;
+      border-radius: 0.95rem;
       border: 1px solid colors.$color-border;
       background: #fff;
       color: colors.$color-text;
       cursor: pointer;
-      padding: 0.25rem;
+      padding: 0.4rem 0.45rem 0.38rem;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 0.1rem;
+      align-items: stretch;
+      justify-content: flex-start;
+      gap: 0.35rem;
+      aspect-ratio: 1 / 1;
+      overflow: hidden;
+      transition:
+        border-color 0.18s ease,
+        transform 0.18s ease,
+        box-shadow 0.18s ease,
+        background 0.18s ease;
+
+      &:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(84, 55, 39, 0.08);
+      }
 
       &:disabled {
         opacity: 0.5;
@@ -787,34 +804,48 @@
         background: rgba(217, 164, 65, 0.15);
         border-color: rgba(217, 164, 65, 0.45);
       }
+
+      &--closed {
+        background: rgba(184, 92, 92, 0.14);
+        border-color: rgba(184, 92, 92, 0.38);
+      }
     }
 
     &__calendar-day-number {
-      font-size: 0.9rem;
-      font-weight: 800;
+      font-size: 0.98rem;
+      font-weight: 900;
       line-height: 1;
     }
 
     &__agenda-day-number-wrap {
-      display: inline-flex;
+      width: 100%;
+      display: flex;
       align-items: center;
-      justify-content: center;
-      gap: 0.28rem;
+      justify-content: space-between;
+      gap: 0.4rem;
     }
 
     &__agenda-day-count {
-      min-width: 1.1rem;
-      height: 1.1rem;
+      min-width: 1.35rem;
+      height: 1.35rem;
       border-radius: 999px;
       background: colors.$color-primary;
       color: #fff;
-      font-size: 0.66rem;
+      font-size: 0.68rem;
       font-weight: 800;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       padding: 0 0.22rem;
       line-height: 1;
+      flex-shrink: 0;
+    }
+
+    &__agenda-closed-badge {
+      width: 100%;
+      margin-top: auto;
+      justify-self: center;
+      text-align: center;
     }
 
     &__calendar-day-meta {
@@ -2693,13 +2724,13 @@
       }
 
       &__month-nav {
-        flex-wrap: wrap;
+        width: 100%;
       }
 
       &__month-nav-label {
         min-width: 0;
-        width: 100%;
-        order: -1;
+        width: auto;
+        order: 0;
       }
 
       &__calendar-weekdays,
@@ -2708,14 +2739,20 @@
       }
 
       &__calendar-day {
-        min-height: 3.05rem;
-        padding: 0.2rem;
+        min-height: 3.2rem;
+        aspect-ratio: 1 / 1;
+        padding: 0.22rem 0.22rem 0.2rem;
+        border-radius: 0.8rem;
+      }
+
+      &__calendar-day-number {
+        font-size: 0.84rem;
       }
 
       &__agenda-day-count {
-        min-width: 1rem;
-        height: 1rem;
-        font-size: 0.6rem;
+        min-width: 1.02rem;
+        height: 1.02rem;
+        font-size: 0.56rem;
       }
 
       &__calendar-day-number {
@@ -2724,6 +2761,35 @@
 
       &__calendar-day-meta {
         font-size: 0.58rem;
+      }
+
+      &__calendar-day--agenda {
+        position: relative;
+        justify-content: center;
+      }
+
+      &__agenda-day-number-wrap {
+        width: 100%;
+        justify-content: center;
+      }
+
+      &__agenda-day-count {
+        position: absolute;
+        top: 0.18rem;
+        right: 0.18rem;
+      }
+
+      &__agenda-closed-badge {
+        display: none;
+      }
+
+      &__calendar-day--closed {
+        background: rgba(184, 92, 92, 0.18);
+        border-color: rgba(184, 92, 92, 0.46);
+
+        .admin-panel--container__calendar-day-number {
+          color: colors.$color-error;
+        }
       }
 
       &__button,

@@ -12,6 +12,7 @@ import { CitasService } from './citas.service';
 export class CitasComponent {
   protected readonly citasService = inject(CitasService);
   private readonly route = inject(ActivatedRoute);
+  private readonly reserveActionsAnchorId = 'citas-reserva-actions';
 
   protected readonly salonName = this.citasService.getSalonName();
   protected readonly headline = this.citasService.getHeadline();
@@ -40,9 +41,26 @@ export class CitasComponent {
 
   protected selectAppointment(id: number): void {
     this.selectedAppointmentTypeId.set(id);
+    this.scrollToReserveActions();
   }
 
   protected toggleInvitadaOptions(): void {
     this.isInvitadaExpanded.update((value) => !value);
+  }
+
+  private scrollToReserveActions(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.setTimeout(() => {
+      const reserveActions = window.document.getElementById(this.reserveActionsAnchorId);
+
+      if (!reserveActions) {
+        return;
+      }
+
+      reserveActions.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
   }
 }

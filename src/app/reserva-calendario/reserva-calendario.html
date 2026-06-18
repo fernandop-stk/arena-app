@@ -188,7 +188,7 @@
             <span class="reserva-calendario--container__legend-text">Rojo = día completo</span>
           </div>
           <div class="reserva-calendario--container__calendar">
-            @for (day of days; track day.iso) {
+            @for (day of days(); track day.iso) {
               <button
                 type="button"
                 class="reserva-calendario--container__day"
@@ -208,6 +208,18 @@
               </button>
             }
           </div>
+
+          @if (canLoadMoreDays()) {
+            <div class="reserva-calendario--container__calendar-more">
+              <button
+                type="button"
+                class="reserva-calendario--container__back"
+                (click)="loadMoreDays()"
+              >
+                Ver más fechas
+              </button>
+            </div>
+          }
         }
 
         <div class="reserva-calendario--container__nav">

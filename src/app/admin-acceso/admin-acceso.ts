@@ -68,6 +68,17 @@ export class AdminAccesoComponent {
     this.selectedRoleUser.set(null);
     this.roleUserPasswordForm.reset();
     this.showRoleUserPassword.set(false);
+
+    if (typeof window !== 'undefined') {
+      window.location.assign('/');
+      return;
+    }
+
+    void this.router.navigateByUrl('/');
+  }
+
+  protected closeAccessModalAndGoHome(): void {
+    this.closeAccessModal();
   }
 
   protected setAccessModalTab(tab: 'login' | 'register-client'): void {

@@ -335,6 +335,7 @@
                     class="admin-panel--container__calendar-day admin-panel--container__calendar-day--agenda"
                     [class.admin-panel--container__calendar-day--outside]="!day.isCurrentMonth"
                     [class.admin-panel--container__calendar-day--today]="day.isToday"
+                    [class.admin-panel--container__calendar-day--closed]="day.isClosedDay"
                     (click)="openAgendaDaySchedule(day.dateIso)"
                   >
                     <span class="admin-panel--container__agenda-day-number-wrap">
@@ -345,10 +346,11 @@
                         <span class="admin-panel--container__agenda-day-count">
                           {{ day.reservationCount }}
                         </span>
-                      } @else if (day.isClosedDay) {
-                        <span class="admin-panel--container__agenda-closed-badge">Cerrado</span>
                       }
                     </span>
+                    @if (day.isClosedDay) {
+                      <span class="admin-panel--container__agenda-closed-badge">Cerrado</span>
+                    }
                   </button>
                 }
               </div>
@@ -4001,6 +4003,75 @@
         <p class="admin-panel--container__hint">
           Organiza empleados por vistas: crear, listado resumido y buscador con ficha en modal.
         </p>
+
+        <div class="admin-panel--container__permissions-editor">
+          <div class="admin-panel--container__permissions-editor-head">
+            <span class="admin-panel--container__permissions-editor-title">
+              🔒 Cuenta superadmin
+            </span>
+          </div>
+          <p class="admin-panel--container__hint admin-panel--container__hint--compact">
+            Puedes actualizar nombre de usuario, email y contraseña principal.
+          </p>
+          <div class="admin-panel--container__employee-filters">
+            <label class="admin-panel--container__label">
+              Usuario superadmin
+              <input
+                class="admin-panel--container__input"
+                type="text"
+                [value]="superadminEditUsername()"
+                (input)="onSuperadminUsernameInput($event)"
+                autocomplete="off"
+              />
+            </label>
+
+            <label class="admin-panel--container__label">
+              Email superadmin
+              <input
+                class="admin-panel--container__input"
+                type="email"
+                [value]="superadminEditEmail()"
+                (input)="onSuperadminEmailInput($event)"
+                autocomplete="off"
+              />
+            </label>
+
+            <label class="admin-panel--container__label">
+              Nueva contraseña
+              <div
+                class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact"
+              >
+                <input
+                  class="admin-panel--container__input"
+                  [type]="showSuperadminEditPassword() ? 'text' : 'password'"
+                  [value]="superadminEditPassword()"
+                  (input)="onSuperadminPasswordInput($event)"
+                  autocomplete="new-password"
+                  placeholder="Opcional: deja vacío para mantener la actual"
+                />
+                <button
+                  type="button"
+                  class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                  (click)="toggleSuperadminPasswordVisibility()"
+                >
+                  {{ showSuperadminEditPassword() ? 'Ocultar' : 'Mostrar' }}
+                </button>
+              </div>
+            </label>
+          </div>
+          <div
+            class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact"
+          >
+            <button
+              type="button"
+              class="admin-panel--container__action-button admin-panel--container__action-button--accept"
+              [disabled]="superadminEditLoading()"
+              (click)="saveSuperadminCredentials()"
+            >
+              {{ superadminEditLoading() ? 'Guardando...' : 'Guardar credenciales superadmin' }}
+            </button>
+          </div>
+        </div>
 
         <app-employee-management-tabs
           [activeTab]="employeeManagementTab()"

@@ -69,7 +69,7 @@ const allowedHosts = [
     .filter(Boolean) ?? []),
 ];
 const angularApp = new AngularNodeAppEngine({ allowedHosts });
-const adminOwnerEmail =
+let adminOwnerEmail =
   process.env['ADMIN_OWNER_EMAIL']?.trim().toLowerCase() ?? 'ferperezsanchez@gmail.com';
 const resendAllowedRecipient = process.env['RESEND_ALLOWED_TO']?.trim().toLowerCase() ?? '';
 const adminMagicSecret = process.env['ADMIN_MAGIC_SECRET'] ?? process.env['RESEND_API_KEY'] ?? '';
@@ -1381,12 +1381,37 @@ const upsertUser = (user: AppUser): void => {
   });
 };
 
+const getSuperadminUser = (): AppUser | null => {
+  for (const user of usersByEmail.values()) {
+    if (user.role === 'superadmin') {
+      return user;
+    }
+  }
+
+  return null;
+};
+
+const syncAdminOwnerEmailFromUsers = (): void => {
+  const superadmin = getSuperadminUser();
+
+  if (superadmin) {
+    adminOwnerEmail = superadmin.email;
+  }
+};
+
 const seedAuthUsers = (): void => {
   if (authSeeded) {
     return;
   }
 
   authSeeded = true;
+
+  const existingSuperadmin = getSuperadminUser();
+
+  if (existingSuperadmin) {
+    adminOwnerEmail = existingSuperadmin.email;
+    return;
+  }
 
   const ownerPassword = process.env['ADMIN_SUPERADMIN_PASSWORD'] ?? 'Hair-studio';
   const ownerUsername = process.env['ADMIN_SUPERADMIN_USERNAME']?.trim() || 'admin';
@@ -3566,6 +3591,101 @@ app.post('/api/admin/empleados', (req, res) => {
   return res.status(200).json({ ok: true });
 });
 
+app.patch('/api/admin/superadmin/credenciales', (req, res) => {
+  seedAuthUsers();
+  const session = isSuperadminRequest(req.headers.cookie);
+
+  if (!session.isSuperadmin) {
+    return res
+      .status(403)
+      .json({ ok: false, error: 'Solo superadmin puede actualizar credenciales.' });
+  }
+
+  const currentSuperadmin = getSuperadminUser();
+
+  if (!currentSuperadmin) {
+    return res.status(404).json({ ok: false, error: 'No se encontró la cuenta superadmin.' });
+  }
+
+  const email = `${req.body?.email ?? ''}`.trim().toLowerCase();
+  const username = `${req.body?.username ?? ''}`.trim();
+  const password = `${req.body?.password ?? ''}`;
+  const usernameLower = username.toLowerCase();
+
+  if (!email || !username) {
+    return res.status(400).json({ ok: false, error: 'Email y usuario son obligatorios.' });
+  }
+
+  const isValidEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+
+  if (!isValidEmail) {
+    return res.status(400).json({ ok: false, error: 'El email no tiene un formato válido.' });
+  }
+
+  if (username.length < 3 || username.length > 40) {
+    return res
+      .status(400)
+      .json({ ok: false, error: 'El usuario debe tener entre 3 y 40 caracteres.' });
+  }
+
+  if (password) {
+    if (password.length < 8) {
+      return res
+        .status(400)
+        .json({ ok: false, error: 'La contraseña debe tener al menos 8 caracteres.' });
+    }
+
+    if (!/[A-Z]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'La contraseña debe incluir una mayúscula y un carácter especial.',
+      });
+    }
+  }
+
+  const userByEmail = usersByEmail.get(email);
+
+  if (userByEmail && userByEmail.id !== currentSuperadmin.id) {
+    return res.status(409).json({ ok: false, error: 'Ya existe una cuenta con ese email.' });
+  }
+
+  const userByUsername = usersByUsername.get(usernameLower);
+
+  if (userByUsername && userByUsername.id !== currentSuperadmin.id) {
+    return res.status(409).json({ ok: false, error: 'Ese nombre de usuario ya está en uso.' });
+  }
+
+  usersByEmail.delete(currentSuperadmin.email);
+  usersByUsername.delete(currentSuperadmin.usernameLower);
+
+  const updatedSuperadmin: AppUser = {
+    ...currentSuperadmin,
+    email,
+    username,
+    usernameLower,
+    passwordHash: password ? hashPassword(password) : currentSuperadmin.passwordHash,
+    role: 'superadmin',
+  };
+
+  upsertUser(updatedSuperadmin);
+  adminOwnerEmail = updatedSuperadmin.email;
+
+  const maxAgeSeconds = 60 * 60 * 24 * 7;
+  const expiresAt = Date.now() + maxAgeSeconds * 1000;
+  const token = createAuthSessionToken(updatedSuperadmin, expiresAt);
+
+  res.setHeader('Set-Cookie', buildAuthCookieValue(token, maxAgeSeconds));
+
+  return res.status(200).json({
+    ok: true,
+    user: {
+      email: updatedSuperadmin.email,
+      username: updatedSuperadmin.username,
+      role: updatedSuperadmin.role,
+    },
+  });
+});
+
 app.delete('/api/admin/empleados/:email', (req, res) => {
   seedAuthUsers();
   const session = isSuperadminRequest(req.headers.cookie);
@@ -4672,6 +4792,8 @@ const initializeFromDb = async (): Promise<void> => {
       `DISK: ${diskUsers.length} usuario(s), ${diskCards.length} ficha(s) de cliente, ${diskStockProducts.length} producto(s) de almacén, ${diskCierres.length} cierre(s) y ${diskDailyPayments.length} acumulado(s) diario(s) de cobros cargados.`,
     );
   }
+
+  syncAdminOwnerEmailFromUsers();
 
   if (dbUsersCount === 0 && usersByEmail.size > 0) {
     void persistUsersToDisk();

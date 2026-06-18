@@ -487,6 +487,12 @@
       gap: layout.$space-1;
     }
 
+    &__calendar-more {
+      margin-top: layout.$space-2;
+      display: flex;
+      justify-content: center;
+    }
+
     &__day {
       min-height: 5.1rem;
       padding: layout.$space-1;

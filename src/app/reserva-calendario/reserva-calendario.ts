@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
@@ -31,7 +31,10 @@ export class ReservaCalendarioComponent {
   protected readonly title = this.reservaCalendarioService.getTitle();
   protected readonly description = this.reservaCalendarioService.getDescription();
   protected readonly continueLabel = this.reservaCalendarioService.getContinueButtonLabel();
-  protected readonly days = this.reservaCalendarioService.getCalendarDays(14);
+  private readonly calendarDaysBatchSize = 14;
+  private readonly allCalendarDays = this.reservaCalendarioService.getCalendarDays(45);
+  protected readonly visibleDaysCount = signal(this.calendarDaysBatchSize);
+  protected readonly days = computed(() => this.allCalendarDays.slice(0, this.visibleDaysCount()));
 
   protected readonly selectedTypeId = signal(
     this.reservaCalendarioService.getSelectedTypeFromQuery(
@@ -71,6 +74,21 @@ export class ReservaCalendarioComponent {
     this.timeSlots.set([]);
     this.loadDayAvailability();
     this.currentStep.set(2);
+  }
+
+  protected canLoadMoreDays(): boolean {
+    return this.visibleDaysCount() < this.allCalendarDays.length;
+  }
+
+  protected loadMoreDays(): void {
+    if (!this.canLoadMoreDays()) {
+      return;
+    }
+
+    this.visibleDaysCount.update((count) =>
+      Math.min(count + this.calendarDaysBatchSize, this.allCalendarDays.length),
+    );
+    this.loadDayAvailability();
   }
 
   protected onDurationChange(event: Event): void {
@@ -183,7 +201,7 @@ export class ReservaCalendarioComponent {
   protected getSelectedDayLabel(): string {
     const iso = this.selectedDateIso();
     if (!iso) return '';
-    const day = this.days.find((d) => d.iso === iso);
+    const day = this.days().find((d) => d.iso === iso);
     if (!day) return iso;
     return `${day.dayName} ${day.dayNumber} ${day.monthName}`;
   }
@@ -278,7 +296,7 @@ export class ReservaCalendarioComponent {
     this.isLoadingDays.set(true);
 
     forkJoin(
-      this.days.map((day) =>
+      this.days().map((day) =>
         this.reservaCalendarioService.getAvailableTimeSlotsFromApi(day.iso, duration).pipe(
           map((slots) => ({
             iso: day.iso,

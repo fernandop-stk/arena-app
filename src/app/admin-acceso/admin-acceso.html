@@ -1,6 +1,6 @@
 <section class="admin-acceso">
   @if (showAccessModal()) {
-    <div class="admin-acceso--container__modal-backdrop" (click)="closeAccessModal()">
+    <div class="admin-acceso--container__modal-backdrop" (click)="closeAccessModalAndGoHome()">
       <div class="admin-acceso--container__modal" (click)="$event.stopPropagation()">
         <div class="admin-acceso--container__modal-head">
           <h2 class="admin-acceso--container__modal-title">
