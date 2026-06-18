@@ -49,7 +49,7 @@ export class InicioComponent {
       const introTimer = window.setTimeout(() => {
         this.showIntro.set(false);
         this.showContent.set(true);
-      }, 3050);
+      }, 4550);
 
       this.destroyRef.onDestroy(() => {
         window.clearTimeout(introTimer);

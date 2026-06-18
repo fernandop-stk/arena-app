@@ -181,7 +181,10 @@
         <h2 class="reserva-calendario--container__subtitle">Elige el día</h2>
 
         @if (isLoadingDays()) {
-          <p class="reserva-calendario--container__hint">Cargando disponibilidad...</p>
+          <div class="reserva-calendario--container__loading" role="status" aria-live="polite">
+            <span class="reserva-calendario--container__spinner" aria-hidden="true"></span>
+            <p class="reserva-calendario--container__loading-text">Cargando disponibilidad...</p>
+          </div>
         } @else {
           <div class="reserva-calendario--container__legend">
             <span class="reserva-calendario--container__legend-dot"></span>
@@ -278,7 +281,12 @@
         }
 
         @if (isLoadingSlots()) {
-          <p class="reserva-calendario--container__hint">Cargando horarios disponibles...</p>
+          <div class="reserva-calendario--container__loading" role="status" aria-live="polite">
+            <span class="reserva-calendario--container__spinner" aria-hidden="true"></span>
+            <p class="reserva-calendario--container__loading-text">
+              Cargando horarios disponibles...
+            </p>
+          </div>
         } @else if (slotsError()) {
           <p class="reserva-calendario--container__hint">{{ slotsError() }}</p>
         } @else if (timeSlots().length === 0 || !hasAnyAvailableSlot()) {

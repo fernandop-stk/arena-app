@@ -35,11 +35,11 @@ export class HistoriaService {
     {
       title: 'Belleza que también se siente',
       text: 'La experiencia está diseñada para que te sientas cómoda, cuidada y acompañada en cada momento del proceso.',
-      imageSrc: '/assets/conocenos/espera.jpeg',
+      imageSrc: '/assets/conocenos/pelobonito2.jpeg',
       imageAlt: 'Zona de espera acogedora del salón.',
       badge: 'Calma',
       caption:
-        'Queremos que el salón sea ese lugar donde haces una pausa, te reconectas contigo y sales renovada.',
+        'Descubre el placer de un cabello tratado con mimo, precisión y productos de alta calidad. Un resultado que transforma no solo tu imagen, sino cómo te sientes',
     },
     {
       title: 'Especialistas en color y transformación',
