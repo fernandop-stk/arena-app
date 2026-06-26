@@ -2679,6 +2679,15 @@
               </label>
             </div>
 
+            <label class="admin-panel--container__checkbox-label">
+              <input
+                type="checkbox"
+                [checked]="stockCreateIsSellable()"
+                (change)="onStockCreateIsSellableInput($event)"
+              />
+              Producto para vender
+            </label>
+
             <button
               type="button"
               class="admin-panel--container__button admin-panel--container__button--primary"
@@ -2764,6 +2773,25 @@
             </button>
           </div>
 
+          <div
+            class="admin-panel--container__block-form admin-panel--container__block-form--compact"
+          >
+            <h3 class="admin-panel--container__reservation-title">Productos para vender</h3>
+            @if (getSellableStockProducts().length === 0) {
+              <p class="admin-panel--container__hint">
+                No hay productos marcados como producto para vender.
+              </p>
+            } @else {
+              <div class="admin-panel--container__chips">
+                @for (product of getSellableStockProducts(); track product.id) {
+                  <span class="admin-panel--container__chip">
+                    {{ product.productName }} ({{ product.quantity }})
+                  </span>
+                }
+              </div>
+            }
+          </div>
+
           @if (isLoadingStockProducts()) {
             <p class="admin-panel--container__hint">Cargando stock...</p>
           } @else if (stockProducts().length === 0) {
@@ -2808,6 +2836,9 @@
                   <p class="admin-panel--container__reservation-text">
                     Marca: {{ product.brand }} &middot; Color: {{ product.color }}
                   </p>
+                  @if (product.isSellable) {
+                    <p class="admin-panel--container__reservation-text">Producto para vender: Sí</p>
+                  }
                   <p class="admin-panel--container__reservation-text">
                     Precio: {{ product.price }} &euro; &middot; Alta:
                     {{ formatDateTime(product.createdAtIso) }}

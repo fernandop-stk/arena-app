@@ -3006,3 +3006,50 @@
     }
   }
 }
+// Contenedor principal de la fila del selector
+.admin-panel--container_stock-quantity-row {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #c2b4a6; // Borde sutil del contenedor
+  border-radius: 4px;
+  background-color: #ffffff;
+  overflow: hidden;
+
+  // Estilo general para los botones (+ y -)
+  .admin-panel--container_stock-qty-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: none;
+    border: none;
+    font-size: 14px;
+    color: #4a3e3d;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+
+    &:hover {
+      background-color: #f5eae1; // Efecto hover sutil
+    }
+
+    &:active {
+      background-color: #ebdcd0;
+    }
+  }
+
+  // Elemento central que muestra el valor numérico
+  .admin-panel--container_stock-qty-value {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #333333;
+    border-left: 1px solid #ebdcd0; // Líneas divisorias internas
+    border-right: 1px solid #ebdcd0;
+    user-select: none;
+  }
+}

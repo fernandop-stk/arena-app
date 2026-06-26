@@ -186,6 +186,7 @@ interface StockProductItem {
   quantity: number;
   price: number;
   color: string;
+  isSellable: boolean;
   createdAtIso: string;
   createdByEmail: string;
 }
@@ -473,6 +474,7 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly stockCreateQuantity = signal('');
   protected readonly stockCreatePrice = signal('');
   protected readonly stockCreateColor = signal('');
+  protected readonly stockCreateIsSellable = signal(false);
   protected readonly stockCreateLoading = signal(false);
   protected readonly stockFilterName = signal('');
   protected readonly stockFilterBrand = signal('');
@@ -1574,6 +1576,11 @@ export class AdminPanelComponent implements OnDestroy {
     this.stockCreateColor.set(target.value);
   }
 
+  protected onStockCreateIsSellableInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.stockCreateIsSellable.set(target.checked);
+  }
+
   protected onStockFilterNameInput(event: Event): void {
     const target = event.target as HTMLInputElement;
     this.stockFilterName.set(target.value);
@@ -1643,12 +1650,17 @@ export class AdminPanelComponent implements OnDestroy {
     });
   }
 
+  protected getSellableStockProducts(): StockProductItem[] {
+    return this.stockProducts().filter((product) => product.isSellable);
+  }
+
   protected createStockProduct(): void {
     const productName = this.stockCreateName().trim();
     const brand = this.stockCreateBrand().trim();
     const quantity = Number(this.stockCreateQuantity());
     const price = Number(this.stockCreatePrice());
     const color = this.stockCreateColor().trim();
+    const isSellable = this.stockCreateIsSellable();
 
     this.stockError.set('');
     this.stockMessage.set('');
@@ -1677,6 +1689,7 @@ export class AdminPanelComponent implements OnDestroy {
         quantity,
         price,
         color,
+        isSellable,
       })
       .subscribe({
         next: (response) => {
@@ -1691,6 +1704,7 @@ export class AdminPanelComponent implements OnDestroy {
           this.stockCreateQuantity.set('');
           this.stockCreatePrice.set('');
           this.stockCreateColor.set('');
+          this.stockCreateIsSellable.set(false);
           this.loadStockProducts();
         },
         error: (error) => {

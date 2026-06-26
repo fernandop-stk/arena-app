@@ -618,6 +618,7 @@ interface StockProductItem {
   quantity: number;
   price: number;
   color: string;
+  isSellable: boolean;
   createdAtIso: string;
   createdByEmail: string;
 }
@@ -1016,6 +1017,7 @@ const normalizeStockProduct = (product: StockProductItem): StockProductItem => {
     color: `${product.color ?? ''}`.trim().slice(0, 40),
     quantity: normalizedQuantity,
     price: Number(normalizedPrice.toFixed(2)),
+    isSellable: Boolean(product.isSellable),
   };
 };
 
@@ -2983,6 +2985,7 @@ app.post('/api/admin/almacen', (req, res) => {
   const color = `${req.body?.color ?? ''}`.trim();
   const quantity = Number(req.body?.quantity ?? NaN);
   const price = Number(req.body?.price ?? NaN);
+  const isSellable = Boolean(req.body?.isSellable);
 
   if (!productName || !brand || !color) {
     return res.status(400).json({
@@ -3012,6 +3015,7 @@ app.post('/api/admin/almacen', (req, res) => {
     color,
     quantity,
     price,
+    isSellable,
     createdAtIso: new Date().toISOString(),
     createdByEmail: session.email,
   });
