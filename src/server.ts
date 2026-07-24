@@ -104,6 +104,24 @@ const allowedHosts = [
   ...new Set(envHosts),
 ];
 const angularApp = new AngularNodeAppEngine({ allowedHosts });
+
+const getDatabaseTargetLabel = (): string => {
+  const connectionString = process.env['DATABASE_URL']?.trim();
+
+  if (!connectionString) {
+    return 'DATABASE_URL:no-definida';
+  }
+
+  try {
+    const parsed = new URL(connectionString);
+    const dbName = parsed.pathname.replace(/^\//, '') || '(sin-db)';
+    const user = parsed.username || '(sin-usuario)';
+    return `${parsed.hostname}/${dbName} user=${user}`;
+  } catch {
+    return 'DATABASE_URL:formato-invalido';
+  }
+};
+
 let adminOwnerEmail =
   process.env['ADMIN_OWNER_EMAIL']?.trim().toLowerCase() ?? 'ferperezsanchez@gmail.com';
 const resendAllowedRecipient = process.env['RESEND_ALLOWED_TO']?.trim().toLowerCase() ?? '';
@@ -3066,6 +3084,7 @@ app.post('/api/admin/almacen', async (req, res) => {
 
   stockProductsById.set(product.id, product);
   void persistStockProductsToDisk();
+  console.log(`[persistencia] stock guardado en DB id=${product.id}`);
 
   return res.status(200).json({ ok: true, product });
 });
@@ -3220,6 +3239,7 @@ app.post('/api/admin/cierre-caja', async (req, res) => {
 
     cierreCajaById.set(cierre.id, cierre);
     void persistCierreCajaToDisk();
+    console.log(`[persistencia] cierre guardado en DB id=${cierre.id}`);
 
     // TODO: cuando se conecte el servicio fiscal externo, llamar aquí a la API
     // correspondiente (ej. Verifactu, SII, software de contabilidad) y actualizar
@@ -3407,6 +3427,7 @@ app.post('/api/admin/clientes', async (req, res) => {
 
   clientCardsById.set(card.id, normalizedCard);
   void persistClientCardsToDisk();
+  console.log(`[persistencia] ficha guardada en DB id=${normalizedCard.id}`);
 
   return res.status(200).json({ ok: true, card: normalizedCard });
 });
@@ -4829,6 +4850,8 @@ const initializeFromDb = async (): Promise<void> => {
   let dbStockProductsCount = 0;
   let dbCierresCount = 0;
   let dbDailyPaymentsCount = 0;
+
+  console.log(`[persistencia] objetivo_db=${getDatabaseTargetLabel()}`);
 
   try {
     const integrationsPool = getDatabasePoolForIntegrations();
