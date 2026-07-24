@@ -67,14 +67,41 @@ import {
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 const app = express();
-const allowedHosts = [
-  'localhost',
-  '127.0.0.1',
-  '::1',
+
+const extractHostname = (value: string | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    return new URL(trimmed).hostname;
+  } catch {
+    // Allows plain hostnames coming from env vars.
+    return trimmed.replace(/^https?:\/\//i, '').split('/')[0] || null;
+  }
+};
+
+const envHosts = [
   ...(process.env['NG_ALLOWED_HOSTS']
     ?.split(',')
     .map((host) => host.trim())
     .filter(Boolean) ?? []),
+  extractHostname(process.env['APP_BASE_URL']),
+  extractHostname(process.env['RENDER_EXTERNAL_URL']),
+  process.env['RENDER_EXTERNAL_HOSTNAME']?.trim() || null,
+].filter((host): host is string => Boolean(host));
+
+const allowedHosts = [
+  'localhost',
+  '127.0.0.1',
+  '::1',
+  ...new Set(envHosts),
 ];
 const angularApp = new AngularNodeAppEngine({ allowedHosts });
 let adminOwnerEmail =
