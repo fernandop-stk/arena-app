@@ -2981,6 +2981,84 @@ app.get('/api/admin/session', (req, res) => {
   });
 });
 
+app.get('/api/admin/debug/persistencia', async (req, res) => {
+  seedAuthUsers();
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const pool = getDatabasePoolForIntegrations();
+
+  if (!pool) {
+    return res.status(500).json({
+      ok: false,
+      error: 'La conexión a base de datos no está disponible en este entorno.',
+      dbTarget: getDatabaseTargetLabel(),
+      nodeEnv: process.env['NODE_ENV'] ?? 'undefined',
+      fallbackFlag: process.env['ALLOW_MEMORY_RESERVAS_FALLBACK'] === 'true',
+    });
+  }
+
+  try {
+    const [usersCount, cardsCount, stockCount, cierresCount, dailyCount, latestStock] =
+      await Promise.all([
+        pool.query<{ n: number }>('SELECT COUNT(*)::int AS n FROM app_users'),
+        pool.query<{ n: number }>('SELECT COUNT(*)::int AS n FROM client_cards'),
+        pool.query<{ n: number }>('SELECT COUNT(*)::int AS n FROM stock_products'),
+        pool.query<{ n: number }>('SELECT COUNT(*)::int AS n FROM cierre_caja_entries'),
+        pool.query<{ n: number }>('SELECT COUNT(*)::int AS n FROM daily_payment_summaries'),
+        pool.query<{
+          id: string;
+          product_name: string;
+          brand: string;
+          quantity: number;
+          price: string;
+          created_at: string;
+        }>(
+          `
+          SELECT id, product_name, brand, quantity, price, created_at
+          FROM stock_products
+          ORDER BY created_at DESC
+          LIMIT 10
+          `,
+        ),
+      ]);
+
+    return res.status(200).json({
+      ok: true,
+      dbTarget: getDatabaseTargetLabel(),
+      nodeEnv: process.env['NODE_ENV'] ?? 'undefined',
+      fallbackFlag: process.env['ALLOW_MEMORY_RESERVAS_FALLBACK'] === 'true',
+      counts: {
+        appUsers: usersCount.rows[0]?.n ?? 0,
+        clientCards: cardsCount.rows[0]?.n ?? 0,
+        stockProducts: stockCount.rows[0]?.n ?? 0,
+        cierresCaja: cierresCount.rows[0]?.n ?? 0,
+        dailyPaymentSummaries: dailyCount.rows[0]?.n ?? 0,
+      },
+      latestStockProducts: latestStock.rows.map((row) => ({
+        id: row.id,
+        productName: row.product_name,
+        brand: row.brand,
+        quantity: Number(row.quantity) || 0,
+        price: Number(row.price) || 0,
+        createdAtIso: new Date(row.created_at).toISOString(),
+      })),
+    });
+  } catch (error) {
+    console.error('[debug/persistencia] Error leyendo estado de DB:', error);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo leer el estado de persistencia en DB.',
+      detail: error instanceof Error ? error.message : 'Error desconocido',
+      dbTarget: getDatabaseTargetLabel(),
+      nodeEnv: process.env['NODE_ENV'] ?? 'undefined',
+    });
+  }
+});
+
 app.get('/api/admin/identificacion-usuarios', (req, res) => {
   seedAuthUsers();
   const session = isAdminRequest(req.headers.cookie);
