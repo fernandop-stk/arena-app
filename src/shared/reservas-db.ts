@@ -333,8 +333,15 @@ const shouldUseDatabase = (): boolean => {
   }
 
   const connectionString = process.env['DATABASE_URL'];
+  const isProduction = process.env['NODE_ENV'] === 'production';
 
   if (!connectionString || isPlaceholderConnectionString(connectionString)) {
+    if (isProduction) {
+      throw new Error(
+        'DATABASE_URL no configurada correctamente en producción. Se desactiva el modo memoria para evitar pérdida de datos.',
+      );
+    }
+
     if (!fallbackWarningShown) {
       console.warn(
         'DATABASE_URL no configurada correctamente. Usando almacenamiento temporal en memoria para reservas.',
@@ -356,9 +363,14 @@ const getPool = (): Pool => {
   }
 
   if (!pool) {
+    const requiresSsl =
+      process.env['NODE_ENV'] === 'production' ||
+      /sslmode=require/i.test(connectionString) ||
+      process.env['PGSSLMODE']?.toLowerCase() === 'require';
+
     pool = new Pool({
       connectionString,
-      ssl: process.env['NODE_ENV'] === 'production' ? { rejectUnauthorized: false } : false,
+      ssl: requiresSsl ? { rejectUnauthorized: false } : false,
     });
   }
 
@@ -2088,6 +2100,41 @@ export interface DbClientCard {
   passwordHash?: string;
 }
 
+export interface DbStockProduct {
+  id: string;
+  productName: string;
+  brand: string;
+  quantity: number;
+  price: number;
+  color: string;
+  isSellable: boolean;
+  createdAtIso: string;
+  createdByEmail: string;
+}
+
+export interface DbCierreCaja {
+  id: string;
+  fechaIso: string;
+  efectivo: number;
+  tarjeta: number;
+  bizum: number;
+  total: number;
+  notas: string;
+  registradoPorEmail: string;
+  createdAtIso: string;
+  enviadoAlServicioFiscal: boolean;
+  idServicioFiscal: string;
+}
+
+export interface DbDailyPaymentSummary {
+  dateIso: string;
+  efectivo: number;
+  tarjeta: number;
+  bizum: number;
+  total: number;
+  updatedAtIso: string;
+}
+
 let usersAndCardsSchemaReady = false;
 
 const ensureUsersAndCardsSchema = async (): Promise<void> => {
@@ -2122,6 +2169,47 @@ const ensureUsersAndCardsSchema = async (): Promise<void> => {
       created_by_email TEXT NOT NULL,
       treatments JSONB NOT NULL DEFAULT '[]',
       password_hash TEXT
+    );
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS stock_products (
+      id TEXT PRIMARY KEY,
+      product_name TEXT NOT NULL,
+      brand TEXT NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 0,
+      price NUMERIC(12,2) NOT NULL DEFAULT 0,
+      color TEXT NOT NULL,
+      is_sellable BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_by_email TEXT NOT NULL
+    );
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS cierre_caja_entries (
+      id TEXT PRIMARY KEY,
+      fecha_iso TEXT NOT NULL,
+      efectivo NUMERIC(12,2) NOT NULL DEFAULT 0,
+      tarjeta NUMERIC(12,2) NOT NULL DEFAULT 0,
+      bizum NUMERIC(12,2) NOT NULL DEFAULT 0,
+      total NUMERIC(12,2) NOT NULL DEFAULT 0,
+      notas TEXT NOT NULL DEFAULT '',
+      registrado_por_email TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      enviado_al_servicio_fiscal BOOLEAN NOT NULL DEFAULT false,
+      id_servicio_fiscal TEXT NOT NULL DEFAULT ''
+    );
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS daily_payment_summaries (
+      date_iso TEXT PRIMARY KEY,
+      efectivo NUMERIC(12,2) NOT NULL DEFAULT 0,
+      tarjeta NUMERIC(12,2) NOT NULL DEFAULT 0,
+      bizum NUMERIC(12,2) NOT NULL DEFAULT 0,
+      total NUMERIC(12,2) NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 
@@ -2323,6 +2411,313 @@ export const saveClientCardToDb = async (card: DbClientCard): Promise<void> => {
 
     throw error;
   }
+};
+
+export const loadAllStockProductsFromDb = async (): Promise<DbStockProduct[]> => {
+  if (!shouldUseDatabase()) {
+    return [];
+  }
+
+  try {
+    await ensureUsersAndCardsSchema();
+    const db = getPool();
+    const result = await db.query<{
+      id: string;
+      product_name: string;
+      brand: string;
+      quantity: number;
+      price: string;
+      color: string;
+      is_sellable: boolean;
+      created_at: string;
+      created_by_email: string;
+    }>(`
+      SELECT id, product_name, brand, quantity, price, color, is_sellable, created_at, created_by_email
+      FROM stock_products
+    `);
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      productName: row.product_name,
+      brand: row.brand,
+      quantity: Number(row.quantity) || 0,
+      price: Number(row.price) || 0,
+      color: row.color,
+      isSellable: Boolean(row.is_sellable),
+      createdAtIso: new Date(row.created_at).toISOString(),
+      createdByEmail: row.created_by_email,
+    }));
+  } catch (error) {
+    if (enableRuntimeMemoryMode(error)) {
+      return [];
+    }
+
+    throw error;
+  }
+};
+
+export const saveStockProductToDb = async (product: DbStockProduct): Promise<void> => {
+  if (!shouldUseDatabase()) {
+    return;
+  }
+
+  try {
+    await ensureUsersAndCardsSchema();
+    const db = getPool();
+    await db.query(
+      `
+      INSERT INTO stock_products (
+        id,
+        product_name,
+        brand,
+        quantity,
+        price,
+        color,
+        is_sellable,
+        created_at,
+        created_by_email
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      ON CONFLICT (id) DO UPDATE SET
+        product_name = EXCLUDED.product_name,
+        brand = EXCLUDED.brand,
+        quantity = EXCLUDED.quantity,
+        price = EXCLUDED.price,
+        color = EXCLUDED.color,
+        is_sellable = EXCLUDED.is_sellable,
+        created_by_email = EXCLUDED.created_by_email
+      `,
+      [
+        product.id,
+        product.productName,
+        product.brand,
+        product.quantity,
+        product.price,
+        product.color,
+        product.isSellable,
+        product.createdAtIso,
+        product.createdByEmail,
+      ],
+    );
+  } catch (error) {
+    if (enableRuntimeMemoryMode(error)) {
+      return;
+    }
+
+    throw error;
+  }
+};
+
+export const loadAllCierresFromDb = async (): Promise<DbCierreCaja[]> => {
+  if (!shouldUseDatabase()) {
+    return [];
+  }
+
+  try {
+    await ensureUsersAndCardsSchema();
+    const db = getPool();
+    const result = await db.query<{
+      id: string;
+      fecha_iso: string;
+      efectivo: string;
+      tarjeta: string;
+      bizum: string;
+      total: string;
+      notas: string;
+      registrado_por_email: string;
+      created_at: string;
+      enviado_al_servicio_fiscal: boolean;
+      id_servicio_fiscal: string;
+    }>(`
+      SELECT id, fecha_iso, efectivo, tarjeta, bizum, total, notas, registrado_por_email, created_at, enviado_al_servicio_fiscal, id_servicio_fiscal
+      FROM cierre_caja_entries
+    `);
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      fechaIso: row.fecha_iso,
+      efectivo: Number(row.efectivo) || 0,
+      tarjeta: Number(row.tarjeta) || 0,
+      bizum: Number(row.bizum) || 0,
+      total: Number(row.total) || 0,
+      notas: row.notas ?? '',
+      registradoPorEmail: row.registrado_por_email,
+      createdAtIso: new Date(row.created_at).toISOString(),
+      enviadoAlServicioFiscal: Boolean(row.enviado_al_servicio_fiscal),
+      idServicioFiscal: row.id_servicio_fiscal ?? '',
+    }));
+  } catch (error) {
+    if (enableRuntimeMemoryMode(error)) {
+      return [];
+    }
+
+    throw error;
+  }
+};
+
+export const saveCierreCajaToDb = async (cierre: DbCierreCaja): Promise<void> => {
+  if (!shouldUseDatabase()) {
+    return;
+  }
+
+  try {
+    await ensureUsersAndCardsSchema();
+    const db = getPool();
+    await db.query(
+      `
+      INSERT INTO cierre_caja_entries (
+        id,
+        fecha_iso,
+        efectivo,
+        tarjeta,
+        bizum,
+        total,
+        notas,
+        registrado_por_email,
+        created_at,
+        enviado_al_servicio_fiscal,
+        id_servicio_fiscal
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      ON CONFLICT (id) DO UPDATE SET
+        fecha_iso = EXCLUDED.fecha_iso,
+        efectivo = EXCLUDED.efectivo,
+        tarjeta = EXCLUDED.tarjeta,
+        bizum = EXCLUDED.bizum,
+        total = EXCLUDED.total,
+        notas = EXCLUDED.notas,
+        registrado_por_email = EXCLUDED.registrado_por_email,
+        enviado_al_servicio_fiscal = EXCLUDED.enviado_al_servicio_fiscal,
+        id_servicio_fiscal = EXCLUDED.id_servicio_fiscal
+      `,
+      [
+        cierre.id,
+        cierre.fechaIso,
+        cierre.efectivo,
+        cierre.tarjeta,
+        cierre.bizum,
+        cierre.total,
+        cierre.notas,
+        cierre.registradoPorEmail,
+        cierre.createdAtIso,
+        cierre.enviadoAlServicioFiscal,
+        cierre.idServicioFiscal,
+      ],
+    );
+  } catch (error) {
+    if (enableRuntimeMemoryMode(error)) {
+      return;
+    }
+
+    throw error;
+  }
+};
+
+export const deleteCierreCajaFromDb = async (cierreId: string): Promise<void> => {
+  if (!shouldUseDatabase()) {
+    return;
+  }
+
+  try {
+    await ensureUsersAndCardsSchema();
+    const db = getPool();
+    await db.query('DELETE FROM cierre_caja_entries WHERE id = $1', [cierreId]);
+  } catch (error) {
+    if (enableRuntimeMemoryMode(error)) {
+      return;
+    }
+
+    throw error;
+  }
+};
+
+export const loadAllDailyPaymentsFromDb = async (): Promise<DbDailyPaymentSummary[]> => {
+  if (!shouldUseDatabase()) {
+    return [];
+  }
+
+  try {
+    await ensureUsersAndCardsSchema();
+    const db = getPool();
+    const result = await db.query<{
+      date_iso: string;
+      efectivo: string;
+      tarjeta: string;
+      bizum: string;
+      total: string;
+      updated_at: string;
+    }>(`
+      SELECT date_iso, efectivo, tarjeta, bizum, total, updated_at
+      FROM daily_payment_summaries
+    `);
+
+    return result.rows.map((row) => ({
+      dateIso: row.date_iso,
+      efectivo: Number(row.efectivo) || 0,
+      tarjeta: Number(row.tarjeta) || 0,
+      bizum: Number(row.bizum) || 0,
+      total: Number(row.total) || 0,
+      updatedAtIso: new Date(row.updated_at).toISOString(),
+    }));
+  } catch (error) {
+    if (enableRuntimeMemoryMode(error)) {
+      return [];
+    }
+
+    throw error;
+  }
+};
+
+export const saveDailyPaymentToDb = async (summary: DbDailyPaymentSummary): Promise<void> => {
+  if (!shouldUseDatabase()) {
+    return;
+  }
+
+  try {
+    await ensureUsersAndCardsSchema();
+    const db = getPool();
+    await db.query(
+      `
+      INSERT INTO daily_payment_summaries (
+        date_iso,
+        efectivo,
+        tarjeta,
+        bizum,
+        total,
+        updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (date_iso) DO UPDATE SET
+        efectivo = EXCLUDED.efectivo,
+        tarjeta = EXCLUDED.tarjeta,
+        bizum = EXCLUDED.bizum,
+        total = EXCLUDED.total,
+        updated_at = EXCLUDED.updated_at
+      `,
+      [
+        summary.dateIso,
+        summary.efectivo,
+        summary.tarjeta,
+        summary.bizum,
+        summary.total,
+        summary.updatedAtIso,
+      ],
+    );
+  } catch (error) {
+    if (enableRuntimeMemoryMode(error)) {
+      return;
+    }
+
+    throw error;
+  }
+};
+
+export const getDatabasePoolForIntegrations = (): Pool | null => {
+  if (!shouldUseDatabase()) {
+    return null;
+  }
+
+  return getPool();
 };
 
 // ==================== ALERTAS ====================

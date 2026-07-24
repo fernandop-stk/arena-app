@@ -3,7 +3,7 @@ services:
     name: arena-app
     env: node
     plan: free
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run serve:ssr:arena-app
     envVars:
       - key: NODE_VERSION

@@ -16,17 +16,25 @@ import {
   ClientConfirmationStatus,
   createBlockedPeriodForAdmin,
   createReservationWithSlots,
+  deleteCierreCajaFromDb,
   deleteBlockedPeriodForAdmin,
   deleteReservationById,
   deleteUserFromDb,
+  getDatabasePoolForIntegrations,
   getAvailableSlotsForDate,
   listBlockedPeriodsForAdmin,
+  loadAllCierresFromDb,
   listReservationsForAdmin,
   getReservationByIdForAdmin,
   loadAllClientCardsFromDb,
+  loadAllDailyPaymentsFromDb,
+  loadAllStockProductsFromDb,
   loadAllUsersFromDb,
   markReservationClientReminderSentAt,
+  saveCierreCajaToDb,
   saveClientCardToDb,
+  saveDailyPaymentToDb,
+  saveStockProductToDb,
   saveUserToDb,
   updateReservationAdminStatus,
   updateReservationClientConfirmationStatus,
@@ -1259,6 +1267,9 @@ const addPaymentToDailySummary = (
   const normalized = normalizeDailyPaymentSummary(next);
   dailyPaymentsByDateIso.set(dateIso, normalized);
   void persistDailyPaymentsToDisk();
+  saveDailyPaymentToDb(normalized).catch((err: unknown) => {
+    console.error('Error persistiendo cobro diario en DB:', err);
+  });
   return normalized;
 };
 
@@ -3022,6 +3033,9 @@ app.post('/api/admin/almacen', (req, res) => {
 
   stockProductsById.set(product.id, product);
   void persistStockProductsToDisk();
+  saveStockProductToDb(product).catch((err: unknown) => {
+    console.error('Error persistiendo producto de almacén en DB:', err);
+  });
 
   return res.status(200).json({ ok: true, product });
 });
@@ -3058,6 +3072,9 @@ app.patch('/api/admin/almacen/:id/quantity', (req, res) => {
   const updated = { ...product, quantity: newQuantity };
   stockProductsById.set(id, updated);
   void persistStockProductsToDisk();
+  saveStockProductToDb(updated).catch((err: unknown) => {
+    console.error('Error persistiendo actualización de stock en DB:', err);
+  });
 
   return res.status(200).json({ ok: true, product: normalizeStockProduct(updated) });
 });
@@ -3155,6 +3172,9 @@ app.post('/api/admin/cierre-caja', (req, res) => {
 
     cierreCajaById.set(cierre.id, cierre);
     void persistCierreCajaToDisk();
+    saveCierreCajaToDb(cierre).catch((err: unknown) => {
+      console.error('Error persistiendo cierre de caja en DB:', err);
+    });
 
     // TODO: cuando se conecte el servicio fiscal externo, llamar aquí a la API
     // correspondiente (ej. Verifactu, SII, software de contabilidad) y actualizar
@@ -3218,6 +3238,9 @@ app.patch('/api/admin/cierre-caja/:id', (req, res) => {
 
   cierreCajaById.set(id, updated);
   void persistCierreCajaToDisk();
+  saveCierreCajaToDb(updated).catch((err: unknown) => {
+    console.error('Error persistiendo actualización de cierre en DB:', err);
+  });
 
   return res.status(200).json({ ok: true, cierre: updated });
 });
@@ -3242,6 +3265,9 @@ app.delete('/api/admin/cierre-caja/:id', (req, res) => {
 
   cierreCajaById.delete(id);
   void persistCierreCajaToDisk();
+  deleteCierreCajaFromDb(id).catch((err: unknown) => {
+    console.error('Error eliminando cierre de caja en DB:', err);
+  });
 
   return res.status(200).json({ ok: true });
 });
@@ -4194,7 +4220,8 @@ app.post('/api/admin/reservas', async (req, res) => {
         customerName,
         customerPhone,
         appointmentTypeName,
-        requiresReservationSignal,
+        // Las reservas creadas desde agenda admin deben persistir como cita confirmada internamente.
+        requiresReservationSignal: false,
       },
       {
         allowClosedSchedule: superadminSession.isSuperadmin,
@@ -4209,6 +4236,8 @@ app.post('/api/admin/reservas', async (req, res) => {
           : 'No se pudo crear la reserva porque ese horario está cerrado o ya no está disponible.',
       });
     }
+
+    await updateReservationAdminStatus(created.reservationId, 'accepted');
 
     return res.status(200).json({ ok: true, reservationId: created.reservationId });
   } catch (error) {
@@ -4709,15 +4738,35 @@ app.use((req, res, next) => {
 const initializeFromDb = async (): Promise<void> => {
   let dbUsersCount = 0;
   let dbCardsCount = 0;
+  let dbStockProductsCount = 0;
+  let dbCierresCount = 0;
+  let dbDailyPaymentsCount = 0;
 
   try {
-    const [dbUsers, dbCards] = await Promise.all([
+    const integrationsPool = getDatabasePoolForIntegrations();
+    if (integrationsPool) {
+      setNotificationsPool(integrationsPool);
+      await initializeNotificationsSchema(integrationsPool);
+    }
+  } catch (error) {
+    console.error('Error inicializando notificaciones sobre PostgreSQL:', error);
+    throw error;
+  }
+
+  try {
+    const [dbUsers, dbCards, dbStockProducts, dbCierres, dbDailyPayments] = await Promise.all([
       loadAllUsersFromDb(),
       loadAllClientCardsFromDb(),
+      loadAllStockProductsFromDb(),
+      loadAllCierresFromDb(),
+      loadAllDailyPaymentsFromDb(),
     ]);
 
     dbUsersCount = dbUsers.length;
     dbCardsCount = dbCards.length;
+    dbStockProductsCount = dbStockProducts.length;
+    dbCierresCount = dbCierres.length;
+    dbDailyPaymentsCount = dbDailyPayments.length;
 
     for (const dbUser of dbUsers) {
       const user: AppUser = {
@@ -4750,9 +4799,59 @@ const initializeFromDb = async (): Promise<void> => {
       clientCardsById.set(card.id, normalizeClientCard(card));
     }
 
-    if (dbUsers.length > 0 || dbCards.length > 0) {
+    for (const dbProduct of dbStockProducts) {
+      const product: StockProductItem = {
+        id: dbProduct.id,
+        productName: dbProduct.productName,
+        brand: dbProduct.brand,
+        quantity: dbProduct.quantity,
+        price: dbProduct.price,
+        color: dbProduct.color,
+        isSellable: dbProduct.isSellable,
+        createdAtIso: dbProduct.createdAtIso,
+        createdByEmail: dbProduct.createdByEmail,
+      };
+      stockProductsById.set(product.id, normalizeStockProduct(product));
+    }
+
+    for (const dbCierre of dbCierres) {
+      const cierre: CierreCajaItem = {
+        id: dbCierre.id,
+        fechaIso: dbCierre.fechaIso,
+        efectivo: dbCierre.efectivo,
+        tarjeta: dbCierre.tarjeta,
+        bizum: dbCierre.bizum,
+        total: dbCierre.total,
+        notas: dbCierre.notas,
+        registradoPorEmail: dbCierre.registradoPorEmail,
+        createdAtIso: dbCierre.createdAtIso,
+        enviadoAlServicioFiscal: dbCierre.enviadoAlServicioFiscal,
+        idServicioFiscal: dbCierre.idServicioFiscal,
+      };
+      cierreCajaById.set(cierre.id, normalizeCierre(cierre));
+    }
+
+    for (const dbDailyPayment of dbDailyPayments) {
+      const summary: DailyPaymentSummaryItem = {
+        dateIso: dbDailyPayment.dateIso,
+        efectivo: dbDailyPayment.efectivo,
+        tarjeta: dbDailyPayment.tarjeta,
+        bizum: dbDailyPayment.bizum,
+        total: dbDailyPayment.total,
+        updatedAtIso: dbDailyPayment.updatedAtIso,
+      };
+      dailyPaymentsByDateIso.set(summary.dateIso, normalizeDailyPaymentSummary(summary));
+    }
+
+    if (
+      dbUsers.length > 0 ||
+      dbCards.length > 0 ||
+      dbStockProducts.length > 0 ||
+      dbCierres.length > 0 ||
+      dbDailyPayments.length > 0
+    ) {
       console.log(
-        `DB: ${dbUsers.length} usuario(s) y ${dbCards.length} ficha(s) de cliente cargados.`,
+        `DB: ${dbUsers.length} usuario(s), ${dbCards.length} ficha(s), ${dbStockProducts.length} producto(s), ${dbCierres.length} cierre(s) y ${dbDailyPayments.length} acumulado(s) diarios cargados.`,
       );
     }
   } catch (error) {
@@ -4816,6 +4915,18 @@ const initializeFromDb = async (): Promise<void> => {
 
   if (dbCardsCount === 0 && clientCardsById.size > 0) {
     void persistClientCardsToDisk();
+  }
+
+  if (dbStockProductsCount === 0 && stockProductsById.size > 0) {
+    void persistStockProductsToDisk();
+  }
+
+  if (dbCierresCount === 0 && cierreCajaById.size > 0) {
+    void persistCierreCajaToDisk();
+  }
+
+  if (dbDailyPaymentsCount === 0 && dailyPaymentsByDateIso.size > 0) {
+    void persistDailyPaymentsToDisk();
   }
 
   if (stockProductsById.size > 0) {
@@ -4996,18 +5107,33 @@ const startReservationReminderScheduler = (): void => {
 
 if (isMainModule(import.meta.url) || process.env['pm_id']) {
   const port = process.env['PORT'] || 4000;
-  initializeFromDb()
-    .catch((error) => console.error('Error en inicialización desde DB:', error))
-    .finally(() => {
-      seedAuthUsers();
-      startReservationReminderScheduler();
-      app.listen(port, (error) => {
-        if (error) {
-          throw error;
-        }
 
-        console.log(`Node Express server listening on http://localhost:${port}`);
-      });
+  const startServer = (): void => {
+    seedAuthUsers();
+    startReservationReminderScheduler();
+    app.listen(port, (error) => {
+      if (error) {
+        throw error;
+      }
+
+      console.log(`Node Express server listening on http://localhost:${port}`);
+    });
+  };
+
+  initializeFromDb()
+    .then(() => {
+      startServer();
+    })
+    .catch((error) => {
+      console.error('Error en inicialización desde DB:', error);
+
+      if (process.env['NODE_ENV'] === 'production') {
+        console.error('Abortando arranque en producción para evitar inconsistencias de persistencia.');
+        return;
+      }
+
+      console.warn('Continuando en desarrollo con persistencia local temporal.');
+      startServer();
     });
 }
 
