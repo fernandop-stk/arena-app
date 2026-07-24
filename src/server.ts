@@ -3074,19 +3074,6 @@ app.post('/api/admin/almacen', async (req, res) => {
 
   try {
     await saveStockProductToDb(product);
-
-    const persistedProducts = await loadAllStockProductsFromDb();
-    const persistedInDb = persistedProducts.some((item) => item.id === product.id);
-
-    if (!persistedInDb) {
-      console.error(
-        `[persistencia] producto no encontrado tras guardar en DB id=${product.id} objetivo=${getDatabaseTargetLabel()}`,
-      );
-      return res.status(500).json({
-        ok: false,
-        error: 'El producto no se pudo confirmar en base de datos tras el guardado. Intenta de nuevo.',
-      });
-    }
   } catch (error) {
     console.error('Error persistiendo producto de almacén en DB:', error);
     return res.status(500).json({
@@ -3242,19 +3229,6 @@ app.post('/api/admin/cierre-caja', async (req, res) => {
 
     try {
       await saveCierreCajaToDb(cierre);
-
-      const persistedCierres = await loadAllCierresFromDb();
-      const persistedInDb = persistedCierres.some((item) => item.id === cierre.id);
-
-      if (!persistedInDb) {
-        console.error(
-          `[persistencia] cierre no encontrado tras guardar en DB id=${cierre.id} objetivo=${getDatabaseTargetLabel()}`,
-        );
-        return res.status(500).json({
-          ok: false,
-          error: 'El cierre no se pudo confirmar en base de datos tras el guardado. Intenta de nuevo.',
-        });
-      }
     } catch (error) {
       console.error('Error persistiendo cierre de caja en DB:', error);
       return res.status(500).json({
@@ -3443,19 +3417,6 @@ app.post('/api/admin/clientes', async (req, res) => {
 
   try {
     await saveClientCardToDb(normalizedCard);
-
-    const persistedCards = await loadAllClientCardsFromDb();
-    const persistedInDb = persistedCards.some((item) => item.id === normalizedCard.id);
-
-    if (!persistedInDb) {
-      console.error(
-        `[persistencia] ficha no encontrada tras guardar en DB id=${normalizedCard.id} objetivo=${getDatabaseTargetLabel()}`,
-      );
-      return res.status(500).json({
-        ok: false,
-        error: 'La ficha no se pudo confirmar en base de datos tras el guardado. Intenta de nuevo.',
-      });
-    }
   } catch (error) {
     console.error('Error persistiendo ficha de cliente en DB:', error);
     return res.status(500).json({
