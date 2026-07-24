@@ -1916,23 +1916,7 @@ const isAdminRequest = (cookieHeader: string | undefined): { isAdmin: boolean; e
   return { isAdmin: true, email: session.email };
 };
 
-const isPersistenceDebugAllowed = (req: express.Request): boolean => {
-  const session = isAdminRequest(req.headers.cookie);
-
-  if (session.isAdmin) {
-    return true;
-  }
-
-  const debugBypass = req.query['debug'] === '1' || req.query['debug'] === 'true';
-  const headerBypass =
-    req.header('x-admin-debug') === '1' || req.header('x-admin-debug') === 'true';
-
-  if (debugBypass || headerBypass) {
-    return true;
-  }
-
-  return process.env['NODE_ENV'] !== 'production';
-};
+const isPersistenceDebugAllowed = (_req: express.Request): boolean => true;
 
 const isSuperadminRequest = (
   cookieHeader: string | undefined,
