@@ -2370,10 +2370,15 @@ export const saveClientCardToDb = async (card: DbClientCard): Promise<void> => {
     return;
   }
 
+  let client: PoolClient | null = null;
+
   try {
     await ensureUsersAndCardsSchema();
     const db = getPool();
-    await db.query(
+    client = await db.connect();
+
+    await client.query('BEGIN');
+    await client.query(
       `
       INSERT INTO client_cards (id, full_name, email, phone, birth_date_iso, notes, created_at, created_by_email, treatments, password_hash)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -2400,12 +2405,22 @@ export const saveClientCardToDb = async (card: DbClientCard): Promise<void> => {
         card.passwordHash ?? null,
       ],
     );
+
+    await client.query('COMMIT');
   } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK');
+    }
+
     if (enableRuntimeMemoryMode(error)) {
       return;
     }
 
     throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 };
 
@@ -2457,10 +2472,15 @@ export const saveStockProductToDb = async (product: DbStockProduct): Promise<voi
     return;
   }
 
+  let client: PoolClient | null = null;
+
   try {
     await ensureUsersAndCardsSchema();
     const db = getPool();
-    await db.query(
+    client = await db.connect();
+
+    await client.query('BEGIN');
+    await client.query(
       `
       INSERT INTO stock_products (
         id,
@@ -2495,12 +2515,22 @@ export const saveStockProductToDb = async (product: DbStockProduct): Promise<voi
         product.createdByEmail,
       ],
     );
+
+    await client.query('COMMIT');
   } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK');
+    }
+
     if (enableRuntimeMemoryMode(error)) {
       return;
     }
 
     throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 };
 
@@ -2556,10 +2586,15 @@ export const saveCierreCajaToDb = async (cierre: DbCierreCaja): Promise<void> =>
     return;
   }
 
+  let client: PoolClient | null = null;
+
   try {
     await ensureUsersAndCardsSchema();
     const db = getPool();
-    await db.query(
+    client = await db.connect();
+
+    await client.query('BEGIN');
+    await client.query(
       `
       INSERT INTO cierre_caja_entries (
         id,
@@ -2600,12 +2635,22 @@ export const saveCierreCajaToDb = async (cierre: DbCierreCaja): Promise<void> =>
         cierre.idServicioFiscal,
       ],
     );
+
+    await client.query('COMMIT');
   } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK');
+    }
+
     if (enableRuntimeMemoryMode(error)) {
       return;
     }
 
     throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 };
 
@@ -2669,10 +2714,15 @@ export const saveDailyPaymentToDb = async (summary: DbDailyPaymentSummary): Prom
     return;
   }
 
+  let client: PoolClient | null = null;
+
   try {
     await ensureUsersAndCardsSchema();
     const db = getPool();
-    await db.query(
+    client = await db.connect();
+
+    await client.query('BEGIN');
+    await client.query(
       `
       INSERT INTO daily_payment_summaries (
         date_iso,
@@ -2699,12 +2749,22 @@ export const saveDailyPaymentToDb = async (summary: DbDailyPaymentSummary): Prom
         summary.updatedAtIso,
       ],
     );
+
+    await client.query('COMMIT');
   } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK');
+    }
+
     if (enableRuntimeMemoryMode(error)) {
       return;
     }
 
     throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 };
 
