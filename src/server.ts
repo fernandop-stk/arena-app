@@ -5195,6 +5195,11 @@ const startReservationReminderScheduler = (): void => {
 
 if (isMainModule(import.meta.url) || process.env['pm_id']) {
   const port = process.env['PORT'] || 4000;
+  const allowMemoryFallback = process.env['ALLOW_MEMORY_RESERVAS_FALLBACK'] === 'true';
+
+  console.log(
+    `[persistencia] fallback_memoria=${allowMemoryFallback ? 'activo' : 'desactivado'} | node_env=${process.env['NODE_ENV'] ?? 'undefined'}`,
+  );
 
   const startServer = (): void => {
     seedAuthUsers();
@@ -5215,12 +5220,14 @@ if (isMainModule(import.meta.url) || process.env['pm_id']) {
     .catch((error) => {
       console.error('Error en inicialización desde DB:', error);
 
-      if (process.env['NODE_ENV'] === 'production') {
-        console.error('Abortando arranque en producción para evitar inconsistencias de persistencia.');
+      if (!allowMemoryFallback) {
+        console.error(
+          'Abortando arranque para evitar inconsistencias de persistencia. Define ALLOW_MEMORY_RESERVAS_FALLBACK=true solo para desarrollo temporal.',
+        );
         return;
       }
 
-      console.warn('Continuando en desarrollo con persistencia local temporal.');
+      console.warn('Continuando con fallback de memoria por configuración explícita.');
       startServer();
     });
 }

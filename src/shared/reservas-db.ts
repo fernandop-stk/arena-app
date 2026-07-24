@@ -292,11 +292,7 @@ const loadMemoryFromFile = (): void => {
 };
 
 const isMemoryFallbackAllowed = (): boolean => {
-  if (process.env['ALLOW_MEMORY_RESERVAS_FALLBACK'] === 'true') {
-    return true;
-  }
-
-  return process.env['NODE_ENV'] !== 'production';
+  return process.env['ALLOW_MEMORY_RESERVAS_FALLBACK'] === 'true';
 };
 
 const enableRuntimeMemoryMode = (reason: unknown): boolean => {
