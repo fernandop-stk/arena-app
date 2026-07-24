@@ -2189,7 +2189,7 @@ app.post('/api/auth/logout', (_req, res) => {
   return res.status(200).json({ ok: true });
 });
 
-app.post('/api/cliente/registro', (req, res) => {
+app.post('/api/cliente/registro', async (req, res) => {
   const nombre = `${req.body?.nombre ?? ''}`.trim();
   const apellidos = `${req.body?.apellidos ?? ''}`.trim();
   const fechaNacimiento = normalizeBirthDateIso(req.body?.fechaNacimiento);
@@ -2240,11 +2240,9 @@ app.post('/api/cliente/registro', (req, res) => {
     };
 
     const normalizedCard = normalizeClientCard(card);
+    await saveClientCardToDb(normalizedCard);
     clientCardsById.set(card.id, normalizedCard);
     void persistClientCardsToDisk();
-    saveClientCardToDb(normalizedCard).catch((err: unknown) => {
-      console.error('Error persistiendo ficha de cliente en DB:', err);
-    });
 
     return res.status(200).json({
       ok: true,
@@ -2440,9 +2438,7 @@ app.post('/api/cliente/resetear-contraseña', async (req, res) => {
     writeFileSync(clientCardsFile, JSON.stringify(Array.from(clientCardsById.values()), null, 2));
 
     // Persist to DB if configured
-    saveClientCardToDb(client).catch((err: unknown) => {
-      if (err) console.error('Error updating client password in DB:', err);
-    });
+    await saveClientCardToDb(client);
 
     // Invalidate token
     clientRecoveryTokens.delete(token);
@@ -3010,7 +3006,7 @@ app.get('/api/admin/almacen', (req, res) => {
   return res.status(200).json({ ok: true, products });
 });
 
-app.post('/api/admin/almacen', (req, res) => {
+app.post('/api/admin/almacen', async (req, res) => {
   seedAuthUsers();
   const session = isAdminRequest(req.headers.cookie);
 
@@ -3058,18 +3054,25 @@ app.post('/api/admin/almacen', (req, res) => {
     createdByEmail: session.email,
   });
 
+  try {
+    await saveStockProductToDb(product);
+  } catch (error) {
+    console.error('Error persistiendo producto de almacén en DB:', error);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo guardar el producto en base de datos. Intenta de nuevo.',
+    });
+  }
+
   stockProductsById.set(product.id, product);
   void persistStockProductsToDisk();
-  saveStockProductToDb(product).catch((err: unknown) => {
-    console.error('Error persistiendo producto de almacén en DB:', err);
-  });
 
   return res.status(200).json({ ok: true, product });
 });
 
 // ── Cierre de caja ─────────────────────────────────────────────────────────
 
-app.patch('/api/admin/almacen/:id/quantity', (req, res) => {
+app.patch('/api/admin/almacen/:id/quantity', async (req, res) => {
   seedAuthUsers();
   const session = isAdminRequest(req.headers.cookie);
 
@@ -3097,11 +3100,19 @@ app.patch('/api/admin/almacen/:id/quantity', (req, res) => {
   }
 
   const updated = { ...product, quantity: newQuantity };
+
+  try {
+    await saveStockProductToDb(updated);
+  } catch (error) {
+    console.error('Error persistiendo actualización de stock en DB:', error);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo actualizar el stock en base de datos. Intenta de nuevo.',
+    });
+  }
+
   stockProductsById.set(id, updated);
   void persistStockProductsToDisk();
-  saveStockProductToDb(updated).catch((err: unknown) => {
-    console.error('Error persistiendo actualización de stock en DB:', err);
-  });
 
   return res.status(200).json({ ok: true, product: normalizeStockProduct(updated) });
 });
@@ -3145,7 +3156,7 @@ app.get('/api/admin/cierre-caja/auto-diario', (req, res) => {
   });
 });
 
-app.post('/api/admin/cierre-caja', (req, res) => {
+app.post('/api/admin/cierre-caja', async (req, res) => {
   seedAuthUsers();
   const session = isAdminRequest(req.headers.cookie);
 
@@ -3197,11 +3208,18 @@ app.post('/api/admin/cierre-caja', (req, res) => {
       idServicioFiscal: '',
     });
 
+    try {
+      await saveCierreCajaToDb(cierre);
+    } catch (error) {
+      console.error('Error persistiendo cierre de caja en DB:', error);
+      return res.status(500).json({
+        ok: false,
+        error: 'No se pudo guardar el cierre en base de datos. Intenta de nuevo.',
+      });
+    }
+
     cierreCajaById.set(cierre.id, cierre);
     void persistCierreCajaToDisk();
-    saveCierreCajaToDb(cierre).catch((err: unknown) => {
-      console.error('Error persistiendo cierre de caja en DB:', err);
-    });
 
     // TODO: cuando se conecte el servicio fiscal externo, llamar aquí a la API
     // correspondiente (ej. Verifactu, SII, software de contabilidad) y actualizar
@@ -3217,7 +3235,7 @@ app.post('/api/admin/cierre-caja', (req, res) => {
   }
 });
 
-app.patch('/api/admin/cierre-caja/:id', (req, res) => {
+app.patch('/api/admin/cierre-caja/:id', async (req, res) => {
   seedAuthUsers();
   const session = isAdminRequest(req.headers.cookie);
 
@@ -3263,16 +3281,23 @@ app.patch('/api/admin/cierre-caja/:id', (req, res) => {
     notas: typeof body.notas === 'string' ? body.notas.trim().slice(0, 500) : existing.notas,
   });
 
+  try {
+    await saveCierreCajaToDb(updated);
+  } catch (error) {
+    console.error('Error persistiendo actualización de cierre en DB:', error);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo actualizar el cierre en base de datos. Intenta de nuevo.',
+    });
+  }
+
   cierreCajaById.set(id, updated);
   void persistCierreCajaToDisk();
-  saveCierreCajaToDb(updated).catch((err: unknown) => {
-    console.error('Error persistiendo actualización de cierre en DB:', err);
-  });
 
   return res.status(200).json({ ok: true, cierre: updated });
 });
 
-app.delete('/api/admin/cierre-caja/:id', (req, res) => {
+app.delete('/api/admin/cierre-caja/:id', async (req, res) => {
   seedAuthUsers();
   const session = isAdminRequest(req.headers.cookie);
 
@@ -3290,11 +3315,18 @@ app.delete('/api/admin/cierre-caja/:id', (req, res) => {
     return res.status(404).json({ ok: false, error: 'Cierre no encontrado.' });
   }
 
+  try {
+    await deleteCierreCajaFromDb(id);
+  } catch (error) {
+    console.error('Error eliminando cierre de caja en DB:', error);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo eliminar el cierre en base de datos. Intenta de nuevo.',
+    });
+  }
+
   cierreCajaById.delete(id);
   void persistCierreCajaToDisk();
-  deleteCierreCajaFromDb(id).catch((err: unknown) => {
-    console.error('Error eliminando cierre de caja en DB:', err);
-  });
 
   return res.status(200).json({ ok: true });
 });
@@ -3314,7 +3346,7 @@ app.get('/api/admin/clientes', (req, res) => {
   return res.status(200).json({ ok: true, cards });
 });
 
-app.post('/api/admin/clientes', (req, res) => {
+app.post('/api/admin/clientes', async (req, res) => {
   seedAuthUsers();
   const session = isAdminRequest(req.headers.cookie);
 
@@ -3362,16 +3394,24 @@ app.post('/api/admin/clientes', (req, res) => {
   };
 
   const normalizedCard = normalizeClientCard(card);
+
+  try {
+    await saveClientCardToDb(normalizedCard);
+  } catch (error) {
+    console.error('Error persistiendo ficha de cliente en DB:', error);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo guardar la ficha en base de datos. Intenta de nuevo.',
+    });
+  }
+
   clientCardsById.set(card.id, normalizedCard);
   void persistClientCardsToDisk();
-  saveClientCardToDb(normalizedCard).catch((err: unknown) => {
-    console.error('Error persistiendo ficha de cliente en DB:', err);
-  });
 
   return res.status(200).json({ ok: true, card: normalizedCard });
 });
 
-app.patch('/api/admin/clientes/:id', (req, res) => {
+app.patch('/api/admin/clientes/:id', async (req, res) => {
   seedAuthUsers();
   const session = isAdminRequest(req.headers.cookie);
 
@@ -3422,16 +3462,23 @@ app.patch('/api/admin/clientes/:id', (req, res) => {
     notes,
   });
 
+  try {
+    await saveClientCardToDb(nextCard);
+  } catch (error) {
+    console.error('Error persistiendo actualización de ficha de cliente en DB:', error);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo actualizar la ficha en base de datos. Intenta de nuevo.',
+    });
+  }
+
   clientCardsById.set(id, nextCard);
   void persistClientCardsToDisk();
-  saveClientCardToDb(nextCard).catch((err: unknown) => {
-    console.error('Error persistiendo actualización de ficha de cliente en DB:', err);
-  });
 
   return res.status(200).json({ ok: true, card: nextCard });
 });
 
-app.post('/api/admin/clientes/:id/packs', (req, res) => {
+app.post('/api/admin/clientes/:id/packs', async (req, res) => {
   seedAuthUsers();
   const session = isAdminRequest(req.headers.cookie);
 
@@ -3470,16 +3517,23 @@ app.post('/api/admin/clientes/:id/packs', (req, res) => {
     treatments: [treatment, ...(card.treatments ?? [])],
   });
 
+  try {
+    await saveClientCardToDb(nextCard);
+  } catch (error) {
+    console.error('Error persistiendo tratamiento en DB:', error);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo guardar el tratamiento en base de datos. Intenta de nuevo.',
+    });
+  }
+
   clientCardsById.set(card.id, nextCard);
   void persistClientCardsToDisk();
-  saveClientCardToDb(nextCard).catch((err: unknown) => {
-    console.error('Error persistiendo tratamiento en DB:', err);
-  });
 
   return res.status(200).json({ ok: true, card: nextCard });
 });
 
-app.patch('/api/admin/clientes/:clientId/packs/:treatmentId/payment', (req, res) => {
+app.patch('/api/admin/clientes/:clientId/packs/:treatmentId/payment', async (req, res) => {
   seedAuthUsers();
   const session = isAdminRequest(req.headers.cookie);
 
@@ -3547,6 +3601,16 @@ app.patch('/api/admin/clientes/:clientId/packs/:treatmentId/payment', (req, res)
     treatments: updatedTreatments,
   };
 
+  try {
+    await saveClientCardToDb(updatedCard);
+  } catch (error) {
+    console.error('Error persistiendo pago de tratamiento en DB:', error);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo guardar el cobro en base de datos. Intenta de nuevo.',
+    });
+  }
+
   clientCardsById.set(clientId, updatedCard);
   void persistClientCardsToDisk();
   const todayIso = new Date().toISOString().slice(0, 10);
@@ -3555,9 +3619,6 @@ app.patch('/api/admin/clientes/:clientId/packs/:treatmentId/payment', (req, res)
     paymentMethod as 'efectivo' | 'tarjeta' | 'bizum',
     Number(priceEuro.toFixed(2)),
   );
-  saveClientCardToDb(updatedCard).catch((err: unknown) => {
-    console.error('Error persistiendo pago de tratamiento en DB:', err);
-  });
 
   return res.status(200).json({ ok: true, card: updatedCard });
 });
