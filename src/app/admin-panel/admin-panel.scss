@@ -3007,7 +3007,7 @@
   }
 }
 // Contenedor principal de la fila del selector
-.admin-panel--container_stock-quantity-row {
+.admin-panel--container__stock-quantity-row {
   display: inline-flex;
   align-items: center;
   border: 1px solid #c2b4a6; // Borde sutil del contenedor
@@ -3016,7 +3016,7 @@
   overflow: hidden;
 
   // Estilo general para los botones (+ y -)
-  .admin-panel--container_stock-qty-btn {
+  .admin-panel--container__stock-qty-btn {
     display: flex;
     align-items: center;
     justify-content: center;

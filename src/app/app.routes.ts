@@ -60,8 +60,8 @@ export const routes: Routes = [
   {
     path: 'cliente/recuperar',
     loadComponent: () =>
-      import('./recuperar-contraseña/recuperar-contraseña').then(
-        (m) => m.RecuperarContraseñaComponent,
+      import('./recuperar-contrasena/recuperar-contrasena').then(
+        (m) => m.RecuperarContrasenaComponent,
       ),
   },
   {

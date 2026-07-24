@@ -13,12 +13,12 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 type RecuperacionStep = 'solicitud' | 'resetear';
 
 @Component({
-  selector: 'app-recuperar-contraseña',
+  selector: 'app-recuperar-contrasena',
   imports: [ReactiveFormsModule, RouterLink],
-  templateUrl: './recuperar-contraseña.html',
-  styleUrl: './recuperar-contraseña.scss',
+  templateUrl: './recuperar-contrasena.html',
+  styleUrl: './recuperar-contrasena.scss',
 })
-export class RecuperarContraseñaComponent {
+export class RecuperarContrasenaComponent {
   private readonly uppercaseRegex = /[A-Z]/;
   private readonly specialCharRegex = /[^A-Za-z0-9]/;
 
