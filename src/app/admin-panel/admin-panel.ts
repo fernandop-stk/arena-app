@@ -402,6 +402,14 @@ export class AdminPanelComponent implements OnDestroy {
   private lastActivityMs = 0;
   private readonly INACTIVITY_MS = 5 * 60 * 1000;
   private readonly WARNING_MS = 4 * 60 * 1000;
+  private readonly onReturnHomeFromHeader = (): void => {
+    this.closeTransientOverlaysBeforeHomeNavigation();
+    this.setActiveTab('home');
+
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
   protected readonly activeTab = signal<AdminTab>('home');
   protected readonly agendaManagementTab = signal<AgendaManagementTab>('listado');
   protected readonly agendaRange = signal<AgendaRange>('hoy');
@@ -750,6 +758,10 @@ export class AdminPanelComponent implements OnDestroy {
   constructor() {
     this.resetEmployeeHistoryRangeToCurrentMonth();
 
+    if (typeof window !== 'undefined') {
+      window.addEventListener('arena-admin-return-home', this.onReturnHomeFromHeader);
+    }
+
     // Use afterNextRender so the session check only runs AFTER full hydration.
     // Making HTTP calls during hydration with withEventReplay() can cause the
     // observable to never complete, leaving isChecking=true forever.
@@ -870,6 +882,27 @@ export class AdminPanelComponent implements OnDestroy {
       this.loadCierres();
       this.loadCierreAutoDiario();
     }
+  }
+
+  private closeTransientOverlaysBeforeHomeNavigation(): void {
+    this.closeAgendaPackPicker();
+    this.closeAgendaReservationDetail();
+    this.closeAgendaCalendarModal();
+    this.closeAgendaWeekScheduleModal();
+    this.closeAgendaManualReserveModal();
+    this.showQuickReserveModal.set(false);
+    this.closeDeleteStockConfirmModal();
+    this.closeDeleteClientConfirmModal();
+    this.closeClientStatsModal();
+    this.closeClientDetailModal();
+    this.closePaymentModal();
+    this.closeDayReservationsModal();
+    this.closeClientTypePickerModal();
+    this.closePaymentMethodModal();
+    this.closeNoPermissionModal();
+    this.closeEmployeeTrackingCalendarModal();
+    this.closeEmployeeDetailModal();
+    this.cancelRoleChangeConfirm();
   }
 
   protected openAdminCard(
@@ -5959,6 +5992,10 @@ export class AdminPanelComponent implements OnDestroy {
   ngOnDestroy(): void {
     if (this.inactivityTimer) {
       clearInterval(this.inactivityTimer);
+    }
+
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('arena-admin-return-home', this.onReturnHomeFromHeader);
     }
   }
 

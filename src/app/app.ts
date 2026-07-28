@@ -88,7 +88,7 @@ import { AppService } from './app.service';
                   class="app-shell--header__link app-shell--header__link--admin"
                   routerLink="/admin"
                   routerLinkActive="app-shell--header__link--active"
-                  (click)="closeMenu()"
+                  (click)="onAdminHeaderPanelClick($event)"
                   >Panel admin</a
                 >
               }
@@ -318,6 +318,23 @@ export class App {
 
   protected closeMenu(): void {
     this.isMenuOpen.set(false);
+  }
+
+  protected onAdminHeaderPanelClick(event: MouseEvent): void {
+    const normalizedUrl = this.router.url.split('?')[0]?.split('#')[0] ?? '';
+
+    if (normalizedUrl === '/admin') {
+      event.preventDefault();
+      this.closeMenu();
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('arena-admin-return-home'));
+      }
+
+      return;
+    }
+
+    this.closeMenu();
   }
 
   protected logout(): void {
