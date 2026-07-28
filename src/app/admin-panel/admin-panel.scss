@@ -2151,6 +2151,7 @@
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: layout.$space-1;
       align-items: end;
+      padding-bottom: 1rem;
     }
 
     &__client-stats-filters {
@@ -2193,7 +2194,8 @@
       font-weight: 800;
       color: #6e5142;
       background: rgba(201, 123, 99, 0.14);
-      margin: 3px &--multiline {
+      margin: 3px;
+      &--multiline {
         white-space: normal;
         line-height: 1.25;
       }
@@ -3052,4 +3054,8 @@
     border-right: 1px solid #ebdcd0;
     user-select: none;
   }
+}
+
+.search-client {
+  width: 260px;
 }

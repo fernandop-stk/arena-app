@@ -69,6 +69,8 @@ import {
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 const app = express();
+const serverStartedAtIso = new Date().toISOString();
+let notificationsDegradedMode = false;
 
 const extractHostname = (value: string | undefined): string | null => {
   if (!value) {
@@ -2991,6 +2993,16 @@ app.get('/api/admin/session', (req, res) => {
   });
 });
 
+app.get('/api/health', (_req, res) => {
+  return res.status(200).json({
+    ok: true,
+    status: notificationsDegradedMode ? 'degraded' : 'healthy',
+    notificationsMode: notificationsDegradedMode ? 'degraded' : 'normal',
+    startedAtIso: serverStartedAtIso,
+    nowIso: new Date().toISOString(),
+  });
+});
+
 app.get('/api/admin/debug/persistencia', async (req, res) => {
   seedAuthUsers();
 
@@ -5051,10 +5063,17 @@ const initializeFromDb = async (): Promise<void> => {
     if (integrationsPool) {
       setNotificationsPool(integrationsPool);
       await initializeNotificationsSchema(integrationsPool);
+      notificationsDegradedMode = false;
+    } else {
+      notificationsDegradedMode = true;
+      console.warn('Sistema de notificaciones sin pool de DB. Modo degradado activo.');
     }
   } catch (error) {
     console.error('Error inicializando notificaciones sobre PostgreSQL:', error);
-    throw error;
+    notificationsDegradedMode = true;
+    console.warn(
+      'Continuando en modo degradado: sistema de notificaciones no disponible temporalmente.',
+    );
   }
 
   try {
@@ -5247,6 +5266,42 @@ const initializeFromDb = async (): Promise<void> => {
   }
 };
 
+const wait = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+const initializeFromDbWithRetry = async (
+  maxAttempts: number,
+  retryDelayMs: number,
+): Promise<void> => {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await initializeFromDb();
+
+      if (attempt > 1) {
+        console.log(`[persistencia] inicializacion completada en intento ${attempt}/${maxAttempts}`);
+      }
+
+      return;
+    } catch (error) {
+      lastError = error;
+      console.error(
+        `[persistencia] fallo de inicializacion intento ${attempt}/${maxAttempts}:`,
+        error,
+      );
+
+      if (attempt < maxAttempts) {
+        await wait(retryDelayMs);
+      }
+    }
+  }
+
+  throw lastError ?? new Error('Fallo desconocido al inicializar persistencia.');
+};
+
 // ============================================================================
 // API Endpoints: Notificaciones (Solo para admin/superadmin)
 // ============================================================================
@@ -5413,6 +5468,16 @@ const startReservationReminderScheduler = (): void => {
 if (isMainModule(import.meta.url) || process.env['pm_id']) {
   const port = process.env['PORT'] || 4000;
   const allowMemoryFallback = process.env['ALLOW_MEMORY_RESERVAS_FALLBACK'] === 'true';
+  const initMaxAttemptsRaw = Number(process.env['DB_INIT_MAX_ATTEMPTS'] ?? '3');
+  const initRetryDelayMsRaw = Number(process.env['DB_INIT_RETRY_DELAY_MS'] ?? '1500');
+  const initMaxAttempts =
+    Number.isFinite(initMaxAttemptsRaw) && initMaxAttemptsRaw > 0
+      ? Math.trunc(initMaxAttemptsRaw)
+      : 3;
+  const initRetryDelayMs =
+    Number.isFinite(initRetryDelayMsRaw) && initRetryDelayMsRaw >= 0
+      ? Math.trunc(initRetryDelayMsRaw)
+      : 1500;
 
   console.log(
     `[persistencia] fallback_memoria=${allowMemoryFallback ? 'activo' : 'desactivado'} | node_env=${process.env['NODE_ENV'] ?? 'undefined'}`,
@@ -5430,7 +5495,7 @@ if (isMainModule(import.meta.url) || process.env['pm_id']) {
     });
   };
 
-  initializeFromDb()
+  initializeFromDbWithRetry(initMaxAttempts, initRetryDelayMs)
     .then(() => {
       startServer();
     })

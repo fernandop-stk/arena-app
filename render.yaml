@@ -3,6 +3,7 @@ services:
     name: arena-app
     env: node
     plan: free
+    healthCheckPath: /api/health
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run serve:ssr:arena-app
     envVars:
