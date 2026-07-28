@@ -455,7 +455,8 @@
       gap: 0.5rem;
 
       &--role-confirm {
-        justify-content: flex-end;
+        justify-content: space-between;
+        margin-top: 0;
       }
     }
 
@@ -1526,7 +1527,6 @@
       color: colors.$color-text-soft;
       font-size: 0.82rem;
       font-weight: 600;
-      text-transform: capitalize;
     }
 
     &__modal-body {

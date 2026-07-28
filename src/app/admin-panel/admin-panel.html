@@ -2880,13 +2880,14 @@
                   @if (product.isSellable) {
                     <p class="admin-panel--container__reservation-text">Producto para vender: Sí</p>
                   }
-                  <p class="admin-panel--container__reservation-text">
-                    Precio: {{ product.price }} &euro; &middot; Alta:
-                    {{ formatDateTime(product.createdAtIso) }}
-                  </p>
+
                   <div
                     class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--role-confirm"
                   >
+                    <p class="admin-panel--container__reservation-text">
+                      Precio: {{ product.price }} &euro; &middot; Alta:
+                      {{ formatDateTime(product.createdAtIso) }}
+                    </p>
                     <button
                       type="button"
                       class="admin-panel--container__action-button admin-panel--container__action-button--reject"
