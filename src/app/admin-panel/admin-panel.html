@@ -2407,6 +2407,18 @@
                     >
                       💰 Cobrar pago
                     </button>
+                    <button
+                      type="button"
+                      class="admin-panel--container__action-button admin-panel--container__action-button--reject"
+                      [disabled]="clientDeleteLoading()"
+                      (click)="openDeleteClientConfirmModal()"
+                    >
+                      @if (clientDeleteLoading()) {
+                        Eliminando...
+                      } @else {
+                        🗑️ Eliminar clienta
+                      }
+                    </button>
                   </div>
 
                   <div
@@ -2872,6 +2884,25 @@
                     Precio: {{ product.price }} &euro; &middot; Alta:
                     {{ formatDateTime(product.createdAtIso) }}
                   </p>
+                  <div
+                    class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--role-confirm"
+                  >
+                    <button
+                      type="button"
+                      class="admin-panel--container__action-button admin-panel--container__action-button--reject"
+                      [disabled]="
+                        stockDeletingProductId() === product.id ||
+                        stockAdjustingProductId() === product.id
+                      "
+                      (click)="openDeleteStockConfirmModal(product.id)"
+                    >
+                      @if (stockDeletingProductId() === product.id) {
+                        Eliminando...
+                      } @else {
+                        🗑️ Borrar producto
+                      }
+                    </button>
+                  </div>
                 </article>
               }
               @if (stockAdjustError()) {
@@ -4831,6 +4862,109 @@
             (click)="closeNoPermissionModal()"
           >
             Entendido
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showDeleteClientConfirmModal()) {
+    <div class="admin-panel--container__modal-backdrop" (click)="closeDeleteClientConfirmModal()">
+      <div
+        class="admin-panel--container__modal admin-panel--container__modal--compact"
+        role="dialog"
+        aria-modal="true"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="admin-panel--container__modal-head">
+          <div>
+            <h3 class="admin-panel--container__modal-title">¿Eliminar esta clienta?</h3>
+          </div>
+          <button
+            type="button"
+            class="admin-panel--container__modal-close"
+            (click)="closeDeleteClientConfirmModal()"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+        <p class="admin-panel--container__modal-subtitle" style="padding: 0 0 0.5rem">
+          Esta acción es irreversible. Se eliminará la ficha y todas las reservas asociadas de esta
+          clienta.
+        </p>
+        <div class="admin-panel--container__modal-actions">
+          <button
+            type="button"
+            class="admin-panel--container__btn admin-panel--container__btn--secondary"
+            [disabled]="clientDeleteLoading()"
+            (click)="closeDeleteClientConfirmModal()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__btn admin-panel--container__btn--primary"
+            [disabled]="clientDeleteLoading()"
+            (click)="confirmDeleteClientCard()"
+          >
+            @if (clientDeleteLoading()) {
+              Eliminando...
+            } @else {
+              Sí, eliminar
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showDeleteStockConfirmModal()) {
+    <div class="admin-panel--container__modal-backdrop" (click)="closeDeleteStockConfirmModal()">
+      <div
+        class="admin-panel--container__modal admin-panel--container__modal--compact"
+        role="dialog"
+        aria-modal="true"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="admin-panel--container__modal-head">
+          <div>
+            <h3 class="admin-panel--container__modal-title">¿Eliminar este producto?</h3>
+          </div>
+          <button
+            type="button"
+            class="admin-panel--container__modal-close"
+            (click)="closeDeleteStockConfirmModal()"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+        <p class="admin-panel--container__modal-subtitle" style="padding: 0 0 0.5rem">
+          Esta acción es irreversible. Se eliminará
+          <strong>{{ getDeleteStockTargetProductLabel() }}</strong>
+          del listado y de la base de datos.
+        </p>
+        <div class="admin-panel--container__modal-actions">
+          <button
+            type="button"
+            class="admin-panel--container__btn admin-panel--container__btn--secondary"
+            [disabled]="!!stockDeletingProductId()"
+            (click)="closeDeleteStockConfirmModal()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__btn admin-panel--container__btn--primary"
+            [disabled]="!!stockDeletingProductId()"
+            (click)="confirmDeleteStockProduct()"
+          >
+            @if (stockDeletingProductId()) {
+              Eliminando...
+            } @else {
+              Sí, eliminar
+            }
           </button>
         </div>
       </div>

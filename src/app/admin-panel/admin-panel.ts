@@ -482,6 +482,9 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly stockFilterMinQuantity = signal('');
   protected readonly stockFilterMaxPrice = signal('');
   protected readonly stockAdjustingProductId = signal('');
+  protected readonly stockDeletingProductId = signal('');
+  protected readonly showDeleteStockConfirmModal = signal(false);
+  protected readonly deleteStockTargetProductId = signal('');
   protected readonly stockAdjustError = signal('');
 
   // ── Cierre de caja ──────────────────────────────────────────────────────────
@@ -686,6 +689,7 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly clientCardsMessage = signal('');
   protected readonly clientManagementTab = signal<ClientManagementTab>('listado');
   protected readonly showClientDetailModal = signal(false);
+  protected readonly showDeleteClientConfirmModal = signal(false);
   protected readonly showClientStatsModal = signal(false);
   protected readonly selectedClientId = signal('');
   protected readonly clientFullName = signal('');
@@ -701,6 +705,7 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly clientEditBirthDateIso = signal('');
   protected readonly clientEditNotes = signal('');
   protected readonly clientEditLoading = signal(false);
+  protected readonly clientDeleteLoading = signal(false);
   protected readonly clientTreatmentName = signal('');
   protected readonly clientTreatmentNote = signal('');
   protected readonly clientTreatmentLoading = signal(false);
@@ -1756,6 +1761,95 @@ export class AdminPanelComponent implements OnDestroy {
       });
   }
 
+  protected deleteStockProduct(productId: string): void {
+    if (!productId || this.stockDeletingProductId()) {
+      return;
+    }
+
+    this.stockError.set('');
+    this.stockMessage.set('');
+    this.stockAdjustError.set('');
+    this.stockDeletingProductId.set(productId);
+
+    this.http
+      .delete<{
+        ok: boolean;
+        error?: string;
+      }>(`/api/admin/almacen/${encodeURIComponent(productId)}`)
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.stockError.set(response.error ?? 'No se pudo eliminar el producto.');
+            return;
+          }
+
+          this.stockProducts.update((products) => products.filter((p) => p.id !== productId));
+          this.stockMessage.set('Producto eliminado correctamente.');
+          this.showDeleteStockConfirmModal.set(false);
+          this.deleteStockTargetProductId.set('');
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.stockError.set(
+            typeof apiError === 'string' && apiError
+              ? apiError
+              : 'No se pudo eliminar el producto.',
+          );
+        },
+        complete: () => {
+          this.stockDeletingProductId.set('');
+        },
+      });
+  }
+
+  protected openDeleteStockConfirmModal(productId: string): void {
+    if (!productId || this.stockDeletingProductId()) {
+      return;
+    }
+
+    this.stockError.set('');
+    this.stockMessage.set('');
+    this.deleteStockTargetProductId.set(productId);
+    this.showDeleteStockConfirmModal.set(true);
+  }
+
+  protected closeDeleteStockConfirmModal(): void {
+    if (this.stockDeletingProductId()) {
+      return;
+    }
+
+    this.showDeleteStockConfirmModal.set(false);
+    this.deleteStockTargetProductId.set('');
+  }
+
+  protected confirmDeleteStockProduct(): void {
+    const productId = this.deleteStockTargetProductId();
+
+    if (!productId) {
+      this.showDeleteStockConfirmModal.set(false);
+      return;
+    }
+
+    this.deleteStockProduct(productId);
+  }
+
+  protected getDeleteStockTargetProductLabel(): string {
+    const productId = this.deleteStockTargetProductId();
+
+    if (!productId) {
+      return 'este producto';
+    }
+
+    const product = this.stockProducts().find((item) => item.id === productId);
+
+    if (!product) {
+      return 'este producto';
+    }
+
+    const brand = product.brand.trim();
+    return brand ? `${product.productName} (${brand})` : product.productName;
+  }
+
   private getAgendaReservationsInRange(): AdminReservationItem[] {
     const range = this.agendaRange();
     const selectedDateIso = this.agendaSelectedDateIso() || this.getTodayIso();
@@ -1827,6 +1921,8 @@ export class AdminPanelComponent implements OnDestroy {
     this.clientEditBirthDateIso.set(card.birthDateIso ?? '');
     this.clientEditNotes.set(card.notes ?? '');
     this.showClientDetailModal.set(true);
+    this.showDeleteClientConfirmModal.set(false);
+    this.clientDeleteLoading.set(false);
     this.clientTreatmentName.set('');
     this.clientTreatmentNote.set('');
     this.clientChartType.set('pie');
@@ -1839,6 +1935,7 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected closeClientDetailModal(): void {
     this.showClientDetailModal.set(false);
+    this.showDeleteClientConfirmModal.set(false);
     this.selectedClientId.set('');
     this.clientEditFullName.set('');
     this.clientEditEmail.set('');
@@ -1846,6 +1943,7 @@ export class AdminPanelComponent implements OnDestroy {
     this.clientEditBirthDateIso.set('');
     this.clientEditNotes.set('');
     this.clientEditLoading.set(false);
+    this.clientDeleteLoading.set(false);
     this.clientTreatmentName.set('');
     this.clientTreatmentNote.set('');
     this.clientChartType.set('pie');
@@ -3545,6 +3643,77 @@ export class AdminPanelComponent implements OnDestroy {
         },
         complete: () => {
           this.clientEditLoading.set(false);
+        },
+      });
+  }
+
+  protected openDeleteClientConfirmModal(): void {
+    if (!this.requirePermission('clientes_gestionar', 'Eliminar fichas de clientes')) return;
+
+    const selected = this.getSelectedClientCard();
+
+    if (!selected) {
+      this.clientCardsError.set('Selecciona una ficha de cliente.');
+      return;
+    }
+
+    this.clientCardsError.set('');
+    this.clientCardsMessage.set('');
+    this.showDeleteClientConfirmModal.set(true);
+  }
+
+  protected closeDeleteClientConfirmModal(): void {
+    this.showDeleteClientConfirmModal.set(false);
+    this.clientDeleteLoading.set(false);
+  }
+
+  protected confirmDeleteClientCard(): void {
+    if (!this.requirePermission('clientes_gestionar', 'Eliminar fichas de clientes')) return;
+
+    const selected = this.getSelectedClientCard();
+
+    if (!selected) {
+      this.clientCardsError.set('Selecciona una ficha de cliente.');
+      this.showDeleteClientConfirmModal.set(false);
+      return;
+    }
+
+    this.clientDeleteLoading.set(true);
+    this.clientCardsError.set('');
+    this.clientCardsMessage.set('');
+
+    this.http
+      .delete<{
+        ok: boolean;
+        deletedReservations?: number;
+        error?: string;
+      }>(`/api/admin/clientes/${encodeURIComponent(selected.id)}`)
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.clientCardsError.set(response.error ?? 'No se pudo eliminar la ficha.');
+            return;
+          }
+
+          const deletedReservations = response.deletedReservations ?? 0;
+          this.clientCardsMessage.set(
+            `Clienta eliminada correctamente. Reservas eliminadas: ${deletedReservations}.`,
+          );
+          this.loadClientCards();
+          this.loadReservations();
+          this.closeDeleteClientConfirmModal();
+          this.closeClientDetailModal();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.clientCardsError.set(
+            typeof apiError === 'string' && apiError
+              ? apiError
+              : 'No se pudo eliminar la ficha de clienta.',
+          );
+        },
+        complete: () => {
+          this.clientDeleteLoading.set(false);
         },
       });
   }

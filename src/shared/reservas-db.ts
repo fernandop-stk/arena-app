@@ -2435,6 +2435,24 @@ export const saveClientCardToDb = async (card: DbClientCard): Promise<void> => {
   }
 };
 
+export const deleteClientCardFromDb = async (clientId: string): Promise<void> => {
+  if (!shouldUseDatabase()) {
+    return;
+  }
+
+  try {
+    await ensureUsersAndCardsSchema();
+    const db = getPool();
+    await db.query('DELETE FROM client_cards WHERE id = $1', [clientId]);
+  } catch (error) {
+    if (enableRuntimeMemoryMode(error)) {
+      return;
+    }
+
+    throw error;
+  }
+};
+
 export const loadAllStockProductsFromDb = async (): Promise<DbStockProduct[]> => {
   if (!shouldUseDatabase()) {
     return [];
@@ -2542,6 +2560,24 @@ export const saveStockProductToDb = async (product: DbStockProduct): Promise<voi
     if (client) {
       client.release();
     }
+  }
+};
+
+export const deleteStockProductFromDb = async (productId: string): Promise<void> => {
+  if (!shouldUseDatabase()) {
+    return;
+  }
+
+  try {
+    await ensureUsersAndCardsSchema();
+    const db = getPool();
+    await db.query('DELETE FROM stock_products WHERE id = $1', [productId]);
+  } catch (error) {
+    if (enableRuntimeMemoryMode(error)) {
+      return;
+    }
+
+    throw error;
   }
 };
 

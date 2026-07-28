@@ -16,9 +16,11 @@ import {
   ClientConfirmationStatus,
   createBlockedPeriodForAdmin,
   createReservationWithSlots,
+  deleteClientCardFromDb,
   deleteCierreCajaFromDb,
   deleteBlockedPeriodForAdmin,
   deleteReservationById,
+  deleteStockProductFromDb,
   deleteUserFromDb,
   getDatabasePoolForIntegrations,
   getAvailableSlotsForDate,
@@ -3221,6 +3223,42 @@ app.patch('/api/admin/almacen/:id/quantity', async (req, res) => {
   return res.status(200).json({ ok: true, product: normalizeStockProduct(updated) });
 });
 
+app.delete('/api/admin/almacen/:id', async (req, res) => {
+  seedAuthUsers();
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const id = `${req.params['id'] ?? ''}`.trim();
+
+  if (!id) {
+    return res.status(400).json({ ok: false, error: 'ID de producto inválido.' });
+  }
+
+  const product = stockProductsById.get(id);
+
+  if (!product) {
+    return res.status(404).json({ ok: false, error: 'Producto no encontrado.' });
+  }
+
+  try {
+    await deleteStockProductFromDb(id);
+  } catch (error) {
+    console.error('Error eliminando producto de stock en DB:', error);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo eliminar el producto en base de datos. Intenta de nuevo.',
+    });
+  }
+
+  stockProductsById.delete(id);
+  void persistStockProductsToDisk();
+
+  return res.status(200).json({ ok: true, id });
+});
+
 app.get('/api/admin/cierre-caja', (req, res) => {
   seedAuthUsers();
   const session = isAdminRequest(req.headers.cookie);
@@ -3582,6 +3620,76 @@ app.patch('/api/admin/clientes/:id', async (req, res) => {
   void persistClientCardsToDisk();
 
   return res.status(200).json({ ok: true, card: nextCard });
+});
+
+app.delete('/api/admin/clientes/:id', async (req, res) => {
+  seedAuthUsers();
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const id = `${req.params['id'] ?? ''}`.trim();
+
+  if (!id) {
+    return res.status(400).json({ ok: false, error: 'ID de clienta inválido.' });
+  }
+
+  const card = clientCardsById.get(id);
+
+  if (!card) {
+    return res.status(404).json({ ok: false, error: 'Ficha de clienta no encontrada.' });
+  }
+
+  const normalizePhone = (value: string): string => `${value}`.replace(/\D/g, '');
+  const cardEmail = `${card.email ?? ''}`.trim().toLowerCase();
+  const cardPhone = normalizePhone(card.phone ?? '');
+
+  let deletedReservations = 0;
+
+  try {
+    const reservations = await listReservationsForAdmin();
+    const linkedReservations = reservations.filter((reservation) => {
+      const reservationEmail = `${reservation.customerEmail ?? ''}`.trim().toLowerCase();
+      const reservationPhone = normalizePhone(reservation.customerPhone ?? '');
+
+      if (cardEmail && reservationEmail && reservationEmail === cardEmail) {
+        return true;
+      }
+
+      if (cardPhone && reservationPhone && reservationPhone === cardPhone) {
+        return true;
+      }
+
+      return false;
+    });
+
+    for (const reservation of linkedReservations) {
+      await deleteReservationById(reservation.id);
+      await notifyFreedSlotAlerts({
+        dateIso: reservation.dateIso,
+        startTime: reservation.startTime,
+        endTime: reservation.endTime,
+        appointmentTypeName: reservation.appointmentTypeName,
+      });
+      deletedReservations += 1;
+    }
+
+    await deleteClientCardFromDb(id);
+  } catch (error) {
+    console.error('Error eliminando clienta y reservas asociadas:', error);
+    return res.status(500).json({
+      ok: false,
+      error:
+        'No se pudo eliminar la clienta y sus reservas asociadas en base de datos. Intenta de nuevo.',
+    });
+  }
+
+  clientCardsById.delete(id);
+  void persistClientCardsToDisk();
+
+  return res.status(200).json({ ok: true, deletedReservations });
 });
 
 app.post('/api/admin/clientes/:id/packs', async (req, res) => {
