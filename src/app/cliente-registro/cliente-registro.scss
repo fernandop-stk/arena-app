@@ -45,7 +45,7 @@
 
 .cliente-registro--form-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+
   gap: 1rem;
 
   @media (max-width: 480px) {
@@ -70,6 +70,7 @@
   font-family: inherit;
   transition: all 0.15s ease;
   background: #fdfbf9;
+  width: 100%;
 
   &:focus {
     outline: none;

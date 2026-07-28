@@ -2081,6 +2081,7 @@ export interface DbAppUser {
   role: string;
   createdAtIso: string;
   tracking: unknown;
+  permissions?: unknown;
 }
 
 export interface DbClientCard {
@@ -2149,8 +2150,14 @@ const ensureUsersAndCardsSchema = async (): Promise<void> => {
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'client',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      tracking JSONB NOT NULL DEFAULT '{}'
+      tracking JSONB NOT NULL DEFAULT '{}',
+      permissions JSONB NOT NULL DEFAULT '[]'
     );
+  `);
+
+  await db.query(`
+    ALTER TABLE app_users
+    ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '[]';
   `);
 
   await db.query(`
@@ -2239,8 +2246,9 @@ export const loadAllUsersFromDb = async (): Promise<DbAppUser[]> => {
       role: string;
       created_at: string;
       tracking: unknown;
+      permissions: unknown;
     }>(`
-      SELECT id, email, username, username_lower, password_hash, role, created_at, tracking
+      SELECT id, email, username, username_lower, password_hash, role, created_at, tracking, permissions
       FROM app_users
     `);
 
@@ -2253,6 +2261,7 @@ export const loadAllUsersFromDb = async (): Promise<DbAppUser[]> => {
       role: row.role,
       createdAtIso: new Date(row.created_at).toISOString(),
       tracking: row.tracking ?? {},
+      permissions: row.permissions ?? [],
     }));
   } catch (error) {
     if (enableRuntimeMemoryMode(error)) {
@@ -2273,14 +2282,15 @@ export const saveUserToDb = async (user: DbAppUser): Promise<void> => {
     const db = getPool();
     await db.query(
       `
-      INSERT INTO app_users (id, email, username, username_lower, password_hash, role, created_at, tracking)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO app_users (id, email, username, username_lower, password_hash, role, created_at, tracking, permissions)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       ON CONFLICT (email) DO UPDATE SET
         username = EXCLUDED.username,
         username_lower = EXCLUDED.username_lower,
         password_hash = EXCLUDED.password_hash,
         role = EXCLUDED.role,
-        tracking = EXCLUDED.tracking
+        tracking = EXCLUDED.tracking,
+        permissions = EXCLUDED.permissions
       `,
       [
         user.id,
@@ -2291,6 +2301,7 @@ export const saveUserToDb = async (user: DbAppUser): Promise<void> => {
         user.role,
         user.createdAtIso,
         JSON.stringify(user.tracking ?? {}),
+        JSON.stringify(user.permissions ?? []),
       ],
     );
   } catch (error) {

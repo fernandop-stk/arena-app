@@ -23,4 +23,12 @@
   >
     Buscar empleado
   </button>
+  <button
+    type="button"
+    class="employee-management-tabs__btn"
+    [class.employee-management-tabs__btn--active]="activeTab === 'superadmin'"
+    (click)="setTab('superadmin')"
+  >
+    Cuenta superadmin
+  </button>
 </div>

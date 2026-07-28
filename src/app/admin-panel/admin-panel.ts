@@ -38,7 +38,7 @@ type ReservationListRangeTab = 'none' | 'dia' | 'semana' | 'mes' | 'total';
 type StockManagementTab = 'crear' | 'ver';
 type CierreStatsRange = 'semana' | 'mes' | 'anio';
 type CierreStatsMetric = 'efectivo' | 'tarjeta' | 'bizum' | 'digital' | 'total';
-type EmployeeManagementTab = 'crear' | 'listado' | 'buscar';
+type EmployeeManagementTab = 'crear' | 'listado' | 'buscar' | 'superadmin';
 type ClientManagementTab = 'crear' | 'listado' | 'buscar';
 type AdminUserRole = 'superadmin' | 'admin' | 'client';
 type EmployeeWorkStatus = 'idle' | 'working' | 'vacation' | 'sick_leave' | 'recovering_hours';
@@ -4626,6 +4626,15 @@ export class AdminPanelComponent implements OnDestroy {
             return;
           }
 
+          this.agendaDetailReservation.update((current) =>
+            current && current.id === reservationId
+              ? {
+                  ...current,
+                  paymentReceived: true,
+                }
+              : current,
+          );
+
           this.loadReservations();
           this.loadCierreAutoDiario();
         },
@@ -6394,6 +6403,70 @@ export class AdminPanelComponent implements OnDestroy {
     this.agendaDetailReservation.set(reservation);
     this.agendaDetailMode.set('view');
     this.agendaDetailError.set('');
+  }
+
+  protected confirmAgendaDetailSignal(): void {
+    const reservation = this.agendaDetailReservation();
+
+    if (!reservation) {
+      return;
+    }
+
+    if (!this.requirePermission('reservas_gestionar', 'Confirmar señal de reservas')) {
+      return;
+    }
+
+    if (reservation.paymentReceived) {
+      return;
+    }
+
+    this.markPaymentReceivedDirect(reservation.id);
+  }
+
+  protected getAgendaDetailClientCardId(): string {
+    const reservation = this.agendaDetailReservation();
+
+    if (!reservation) {
+      return '';
+    }
+
+    const reservationEmail = `${reservation.customerEmail ?? ''}`.trim().toLowerCase();
+    const reservationPhone = this.normalizePhoneForMatch(reservation.customerPhone ?? '');
+
+    const match = this.clientCards().find((card) => {
+      const cardEmail = `${card.email ?? ''}`.trim().toLowerCase();
+      const cardPhone = this.normalizePhoneForMatch(card.phone ?? '');
+
+      if (reservationEmail && cardEmail && cardEmail === reservationEmail) {
+        return true;
+      }
+
+      if (reservationPhone && cardPhone && cardPhone === reservationPhone) {
+        return true;
+      }
+
+      return false;
+    });
+
+    return match?.id ?? '';
+  }
+
+  protected openAgendaDetailClientCard(): void {
+    const cardId = this.getAgendaDetailClientCardId();
+
+    if (!cardId) {
+      this.agendaDetailError.set('No se encontró ficha para esta clienta.');
+      return;
+    }
+
+    this.closeAgendaReservationDetail();
+    this.setActiveTab('clientes');
+    this.clientManagementTab.set('listado');
+    this.openClientDetailModal(cardId);
+  }
+
+  private normalizePhoneForMatch(value: string): string {
+    return `${value}`.replace(/\D/g, '');
   }
 
   protected closeAgendaReservationDetail(): void {

@@ -164,7 +164,7 @@
       border-radius: layout.$radius-md;
       background:
         linear-gradient(rgba(36, 28, 23, 0.26), rgba(36, 28, 23, 0.6)),
-        url('/assets/branding/fondo.jpeg') center / cover no-repeat;
+        url('/assets/branding/espuma.jpeg') center / cover no-repeat;
       min-height: 14rem;
       position: relative;
       transform: none;
@@ -268,14 +268,6 @@
         opacity: 0.15;
         filter: saturate(0.85);
         pointer-events: none;
-      }
-
-      &--packs::before {
-        background-image: url('/assets/conocenos/espejos.jpeg');
-      }
-
-      &--tratamientos::before {
-        background-image: url('/assets/conocenos/cabezas.jpeg');
       }
 
       > * {
@@ -456,6 +448,7 @@
       padding: 0 1rem;
       background: colors.$color-surface;
       color: colors.$color-primary-dark;
+      padding-bottom: 5px;
       font-weight: 700;
       cursor: pointer;
       transition:

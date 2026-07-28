@@ -1087,6 +1087,16 @@ const normalizeTrackingInfo = (
   history: tracking?.history ?? [],
 });
 
+const normalizeEmployeePermissions = (permissions: unknown): EmployeePermission[] => {
+  if (!Array.isArray(permissions)) {
+    return [];
+  }
+
+  return permissions.filter((permission): permission is EmployeePermission =>
+    ALL_EMPLOYEE_PERMISSIONS.includes(permission as EmployeePermission),
+  );
+};
+
 const ensureRuntimeDataDir = async (): Promise<void> => {
   await mkdir(runtimeDataDir, { recursive: true });
 };
@@ -1136,6 +1146,7 @@ const loadUsersFromDisk = async (): Promise<AppUser[]> => {
       email: `${user.email ?? ''}`.toLowerCase(),
       usernameLower: `${user.usernameLower ?? user.username ?? ''}`.toLowerCase(),
       tracking: normalizeTrackingInfo(user.tracking),
+      permissions: normalizeEmployeePermissions(user.permissions),
     }));
   } catch {
     return [];
@@ -4963,6 +4974,7 @@ const initializeFromDb = async (): Promise<void> => {
         role: dbUser.role as AppUserRole,
         createdAtIso: dbUser.createdAtIso,
         tracking: normalizeTrackingInfo(dbUser.tracking as EmployeeTrackingInfo | undefined),
+        permissions: normalizeEmployeePermissions(dbUser.permissions),
       };
       usersByEmail.set(user.email, user);
       usersByUsername.set(user.usernameLower, user);

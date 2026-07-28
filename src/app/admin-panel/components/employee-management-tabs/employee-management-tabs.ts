@@ -1,6 +1,6 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 
-type EmployeeManagementTab = 'crear' | 'listado' | 'buscar';
+type EmployeeManagementTab = 'crear' | 'listado' | 'buscar' | 'superadmin';
 
 @Component({
   selector: 'app-employee-management-tabs',

@@ -38,7 +38,7 @@ export class TratamientosService {
         id: 1,
         nombre: 'Pack Corte',
         descripcion: '• Asesoría • Terapia capilar (lavado + hidratación) • Corte',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: 'Desde 40€',
         duracionMinutos: 60,
         appointmentTypeId: 1,
@@ -47,7 +47,7 @@ export class TratamientosService {
         id: 2,
         nombre: 'Pack Peinado',
         descripcion: '• Asesoría • Terapia capilar (lavado + hidratación) • Peinado',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: 'Desde 40€',
         duracionMinutos: 60,
         appointmentTypeId: 2,
@@ -56,7 +56,7 @@ export class TratamientosService {
         id: 3,
         nombre: 'Pack Corte y Peinado',
         descripcion: '• Asesoría • Terapia capilar (lavado + hidratación) • Corte + peinado',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: 'Desde 60€',
         duracionMinutos: 90,
         appointmentTypeId: 3,
@@ -66,7 +66,7 @@ export class TratamientosService {
         nombre: 'Pack Color',
         descripcion:
           '• Asesoría • Técnica de color (raíz) • Terapia capilar (lavado + hidratación) • Corte + peinado',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: 'Desde 70€',
         duracionMinutos: 120,
         appointmentTypeId: 4,
@@ -76,7 +76,7 @@ export class TratamientosService {
         nombre: 'Pack Color Plus',
         descripcion:
           '• Asesoría • Color (matiz o completo) • Terapia capilar (lavado + hidratación) • Corte + peinado',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: 'Desde 90€',
         duracionMinutos: 150,
         appointmentTypeId: 5,
@@ -86,7 +86,7 @@ export class TratamientosService {
         nombre: 'Pack Ilumina',
         descripcion:
           '• Asesoría • Puntos de luz + matiz • Terapia capilar (lavado + hidratación) • Tratamiento personalizado • Corte + peinado',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: 'Desde 140€',
         duracionMinutos: 210,
         appointmentTypeId: 6,
@@ -96,7 +96,7 @@ export class TratamientosService {
         nombre: 'Pack Full Color',
         descripcion:
           '• Asesoría • Iluminación a medida • Terapia capilar (lavado + hidratación) • Tratamiento personalizado • Corte + peinado',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: 'Desde 180€',
         duracionMinutos: 360,
         appointmentTypeId: 7,
@@ -106,7 +106,7 @@ export class TratamientosService {
         nombre: 'Pack Invitada',
         descripcion:
           '• Incluye asesoría + terapia capilar (lavado + hidratación) • Elige una opción según el peinado que quieras',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: 'Desde 40€',
         duracionMinutos: 60,
         appointmentTypeId: 8,
@@ -138,7 +138,7 @@ export class TratamientosService {
         id: 11,
         nombre: 'Pack Novia',
         descripcion: '• Asesoría • Prueba • Día de la boda',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: '300€',
         duracionMinutos: 180,
         appointmentTypeId: 11,
@@ -154,7 +154,7 @@ export class TratamientosService {
         categoria: 'Tratamientos Arena',
         descripcion:
           '• Embellece el cabello aportando salud y brillo • Prolonga la duración del peinado',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: 'Suplemento: +10€',
         duracionMinutos: 20,
       },
@@ -164,7 +164,7 @@ export class TratamientosService {
         categoria: 'Tratamientos Arena',
         descripcion:
           '• Mantiene tu color perfecto durante más tiempo • Aporta un brillo extra espectacular',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: 'Suplemento: +10€',
         duracionMinutos: 20,
       },
@@ -174,7 +174,7 @@ export class TratamientosService {
         categoria: 'Tratamientos exprés y personalizados',
         descripcion:
           '• Brillo inmediato • Hidratación rápida • Elasticidad visible en tiempo récord',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: '15€',
         duracionMinutos: 30,
       },
@@ -184,7 +184,7 @@ export class TratamientosService {
         categoria: 'Tratamientos exprés y personalizados',
         descripcion:
           '• Servicio 100% adaptado a tu cabello • Potenciadores de reparación, nutrición o blindaje de color • Diseñado según tus necesidades',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: '25€ + pack de color / 60€ con peinado',
         duracionMinutos: 60,
       },
@@ -194,7 +194,7 @@ export class TratamientosService {
         categoria: 'Tratamientos intensivos',
         descripcion:
           '• Tratamiento inteligente según necesidad del cabello • Rellena la fibra capilar • Devuelve fuerza, nutrición y densidad • Resultado: cabello más sano, fuerte y duradero',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: '40€ + pack de color / 80€ con peinado',
         duracionMinutos: 75,
       },
@@ -204,7 +204,7 @@ export class TratamientosService {
         categoria: 'Tratamientos intensivos',
         descripcion:
           '• Reconstrucción profunda y cauterización • Ideal para cabello dañado por procesos químicos • Repara desde el interior • Protege la fibra antes, durante y después de trabajos técnicos',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: '40€ + pack de color / 80€ con peinado',
         duracionMinutos: 75,
       },
@@ -214,7 +214,7 @@ export class TratamientosService {
         categoria: 'Tratamientos intensivos',
         descripcion:
           '• Bono de 3 sesiones personalizadas • Combinación de reconstrucción y nutrición • Adaptado a las necesidades de tu cabello',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: 'Antes: 240€ · Precio especial: 180€',
         duracionMinutos: 180,
       },
@@ -224,7 +224,7 @@ export class TratamientosService {
         categoria: 'Tratamientos con asesoría previa',
         descripcion:
           '• Requiere asesoría previa • Alisado orgánico para cabello liso, pulido y manejable • Ideal para amantes del liso impecable',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: 'Con asesoría previa · consultar',
         duracionMinutos: 180,
       },
@@ -234,7 +234,7 @@ export class TratamientosService {
         categoria: 'Tratamientos con asesoría previa',
         descripcion:
           '• Requiere asesoría previa • Control total incluso en cabellos rebeldes • Melena lisa, suave y duradera',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: 'Con asesoría previa · consultar',
         duracionMinutos: 180,
       },
@@ -244,7 +244,7 @@ export class TratamientosService {
         categoria: 'Tratamientos con asesoría previa',
         descripcion:
           '• Requiere asesoría previa • Elimina el encrespamiento • Mantiene tu textura natural con control, suavidad y brillo',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: 'Con asesoría previa · consultar',
         duracionMinutos: 120,
       },
@@ -254,7 +254,7 @@ export class TratamientosService {
         categoria: 'Tratamientos con asesoría previa',
         descripcion:
           '• Requiere asesoría previa • Tecnología que alisa, repara y nutre en un solo paso • Resultado: cabello transformado, sano y brillante',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: 'Con asesoría previa · consultar',
         duracionMinutos: 180,
       },
@@ -264,7 +264,7 @@ export class TratamientosService {
         categoria: 'Cuidados y prevención',
         descripcion:
           '• Hidratación específica para cabello rizado • Definición y volumen controlado • Rizos elásticos, sueltos y llenos de vida',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: 'Consultar según diagnóstico',
         duracionMinutos: 90,
       },
@@ -274,7 +274,7 @@ export class TratamientosService {
         categoria: 'Cuidados y prevención',
         descripcion:
           '• Tratamiento intensivo de relleno de fibra capilar • Rejuvenece el cabello • Aporta suavidad profunda y acabado sedoso',
-        imagen: '/assets/branding/fondo.jpeg',
+        imagen: '/assets/branding/espuma.jpeg',
         precio: 'Consultar según diagnóstico',
         duracionMinutos: 90,
       },

@@ -78,7 +78,7 @@
       border-radius: layout.$radius-lg;
       background:
         linear-gradient(rgba(252, 243, 234, 0.82), rgba(252, 243, 234, 0.9)),
-        url('/assets/branding/fondo.jpeg') center / cover no-repeat;
+        url('/assets/branding/espuma.jpeg') center / cover no-repeat;
       min-height: 11.5rem;
       padding: layout.$space-3;
       display: flex;
@@ -1667,6 +1667,7 @@
       font-size: 1.25rem;
       line-height: 1;
       cursor: pointer;
+      padding-bottom: 5px;
 
       &:hover {
         background: rgba(201, 123, 99, 0.08);
@@ -2186,14 +2187,13 @@
     }
 
     &__employee-stat-chip {
-      padding: 0.24rem 0.58rem;
+      padding: 0.4rem 0.6rem;
       border-radius: 999px;
       font-size: 0.74rem;
       font-weight: 800;
       color: #6e5142;
       background: rgba(201, 123, 99, 0.14);
-
-      &--multiline {
+      margin: 3px &--multiline {
         white-space: normal;
         line-height: 1.25;
       }

@@ -198,6 +198,7 @@
                   <input
                     class="admin-panel--container__input"
                     type="date"
+                    lang="es-ES"
                     [value]="agendaSelectedDateIso()"
                     (input)="onAgendaSelectedDateInput($event)"
                   />
@@ -450,7 +451,7 @@
                               </p>
                             </div>
                             <p class="admin-panel--container__agenda-reservation-meta">
-                              {{ reservation.appointmentTypeName }} ·
+                              {{ reservation.appointmentTypeName }} €
                               {{ formatDuration(reservation.durationMinutes) }}
                             </p>
 
@@ -683,7 +684,7 @@
                                   </p>
                                 </div>
                                 <p class="admin-panel--container__agenda-reservation-meta">
-                                  {{ reservation.appointmentTypeName }} ·
+                                  {{ reservation.appointmentTypeName }} €
                                   {{ formatDuration(reservation.durationMinutes) }}
                                 </p>
                               </article>
@@ -827,6 +828,7 @@
                     <input
                       class="admin-panel--container__input"
                       type="date"
+                      lang="es-ES"
                       [value]="agendaManualReserveDateIso()"
                       (input)="agendaManualReserveDateIso.set($any($event.target).value)"
                     />
@@ -916,7 +918,7 @@
                   (click)="submitAgendaManualReserve()"
                 >
                   @if (agendaManualReserveLoading()) {
-                    Guardando…
+                    Guardando...
                   } @else {
                     Crear reserva
                   }
@@ -941,7 +943,7 @@
                   <h3 class="admin-panel--container__modal-title">Detalle de cita</h3>
                   <p class="admin-panel--container__modal-subtitle">
                     {{ agendaDetailReservation()!.dateIso }} ·
-                    {{ agendaDetailReservation()!.startTime }} –
+                    {{ agendaDetailReservation()!.startTime }} ·
                     {{ agendaDetailReservation()!.endTime }}
                   </p>
                 </div>
@@ -983,11 +985,11 @@
                     </p>
                     <p class="admin-panel--container__agenda-detail-row">
                       <span class="admin-panel--container__agenda-detail-label">Teléfono</span>
-                      <span>{{ agendaDetailReservation()!.customerPhone || '—' }}</span>
+                      <span>{{ agendaDetailReservation()!.customerPhone || '-' }}</span>
                     </p>
                     <p class="admin-panel--container__agenda-detail-row">
                       <span class="admin-panel--container__agenda-detail-label">Email</span>
-                      <span>{{ agendaDetailReservation()!.customerEmail || '—' }}</span>
+                      <span>{{ agendaDetailReservation()!.customerEmail || '-' }}</span>
                     </p>
                     <p class="admin-panel--container__agenda-detail-row">
                       <span class="admin-panel--container__agenda-detail-label">Estado</span>
@@ -1006,12 +1008,35 @@
                   </button>
                   <button
                     type="button"
+                    class="admin-panel--container__action-button admin-panel--container__action-button--accept"
+                    [disabled]="
+                      agendaDetailReservation()!.paymentReceived || actionLoadingId() !== ''
+                    "
+                    (click)="confirmAgendaDetailSignal()"
+                  >
+                    @if (agendaDetailReservation()!.paymentReceived) {
+                      Señal confirmada
+                    } @else {
+                      Confirmar señal
+                    }
+                  </button>
+                  @if (getAgendaDetailClientCardId()) {
+                    <button
+                      type="button"
+                      class="admin-panel--container__action-button"
+                      (click)="openAgendaDetailClientCard()"
+                    >
+                      Ver ficha de clienta
+                    </button>
+                  }
+                  <button
+                    type="button"
                     class="admin-panel--container__action-button admin-panel--container__action-button--reject"
                     [disabled]="agendaDetailCancelling()"
                     (click)="cancelAgendaReservationFromDetail()"
                   >
                     @if (agendaDetailCancelling()) {
-                      Cancelando…
+                      Cancelando...
                     } @else {
                       🗑️ Cancelar cita
                     }
@@ -1057,7 +1082,7 @@
                     (click)="saveAgendaReservationEdit()"
                   >
                     @if (agendaDetailSaving()) {
-                      Guardando…
+                      Guardando...
                     } @else {
                       💾 Guardar cambios
                     }
@@ -1170,6 +1195,7 @@
                       id="rf-base-date"
                       class="admin-panel--container__reservation-filter-input"
                       type="date"
+                      lang="es-ES"
                       [value]="agendaSelectedDateIso()"
                       (input)="onAgendaSelectedDateInput($event)"
                     />
@@ -1186,7 +1212,7 @@
                     id="rf-name"
                     class="admin-panel--container__reservation-filter-input"
                     type="text"
-                    placeholder="Buscar por nombre…"
+                    placeholder="Buscar por nombre..."
                     [value]="reservationFilterName()"
                     (input)="reservationFilterName.set($any($event.target).value)"
                   />
@@ -1199,6 +1225,7 @@
                     id="rf-date"
                     class="admin-panel--container__reservation-filter-input"
                     type="date"
+                    lang="es-ES"
                     [value]="reservationFilterDate()"
                     (input)="reservationFilterDate.set($any($event.target).value)"
                   />
@@ -1211,7 +1238,7 @@
                     id="rf-pack"
                     class="admin-panel--container__reservation-filter-input"
                     type="text"
-                    placeholder="Buscar por pack…"
+                    placeholder="Buscar por pack..."
                     [value]="reservationFilterPack()"
                     (input)="reservationFilterPack.set($any($event.target).value)"
                   />
@@ -1717,7 +1744,7 @@
                         </span>
                       </div>
                       <p class="admin-panel--container__modal-item-text">
-                        {{ reservation.startTime }} - {{ reservation.endTime }} ·
+                        {{ reservation.startTime }} - {{ reservation.endTime }} €
                         {{ formatDuration(reservation.durationMinutes) }}
                       </p>
                       <p
@@ -1744,7 +1771,7 @@
                 >
                   <div class="admin-panel--container__reservation-head">
                     <h3 class="admin-panel--container__reservation-title">
-                      {{ formatDate(blockedPeriod.dateIso) }} ·
+                      {{ formatDate(blockedPeriod.dateIso) }} €
                       {{ formatTimeRange(blockedPeriod.startTime, blockedPeriod.endTime) }}
                     </h3>
                   </div>
@@ -2012,7 +2039,7 @@
                     Cancelé una cita y sigue apareciendo en la agenda
                   </h4>
                   <p class="admin-panel--container__faq-answer">
-                    Revisa que esté en estado Rechazada desde el detalle de la cita. Después vuelve
+                    Revisa que está en estado Rechazada desde el detalle de la cita. Después vuelve
                     a cargar la vista de agenda para refrescar datos del día/semana/mes.
                   </p>
                   <div class="admin-panel--container__help-links">
@@ -2178,6 +2205,7 @@
                   <input
                     class="admin-panel--container__input"
                     type="date"
+                    lang="es-ES"
                     [value]="clientBirthDateIso()"
                     (input)="onClientBirthDateInput($event)"
                   />
@@ -2330,6 +2358,7 @@
                       <input
                         class="admin-panel--container__input"
                         type="date"
+                        lang="es-ES"
                         [value]="clientEditBirthDateIso()"
                         (input)="onClientEditBirthDateInput($event)"
                       />
@@ -2394,13 +2423,13 @@
                             (change)="onClientTreatmentNameInput($event)"
                           >
                             <option value="">Selecciona tratamiento</option>
-                            <option value="" disabled>──── Packs ────</option>
+                            <option value="" disabled>---- Packs ----</option>
                             @for (treatment of clientPackOptions; track treatment.name) {
                               <option [value]="treatment.name">
                                 {{ getClientTreatmentOptionLabel(treatment) }}
                               </option>
                             }
-                            <option value="" disabled>──── Tratamientos ────</option>
+                            <option value="" disabled>---- Tratamientos ----</option>
                             @for (treatment of clientTratamientoOptions; track treatment.name) {
                               <option [value]="treatment.name">
                                 {{ getClientTreatmentOptionLabel(treatment) }}
@@ -2881,7 +2910,7 @@
             } @else if (hasCierreAutoDiario() && cierreAutoDiario(); as auto) {
               <div class="admin-panel--container__cierre-summary-row">
                 <span class="admin-panel--container__cierre-summary-label"
-                  >🧾 Acumulado automático ({{ auto.dateIso }})</span
+                  >📊 Acumulado automático ({{ auto.dateIso }})</span
                 >
                 <span class="admin-panel--container__cierre-summary-value"
                   >Actualizado: {{ formatDateTime(auto.updatedAtIso) }}</span
@@ -3036,7 +3065,7 @@
               [disabled]="!canExportLatestCierrePdf()"
               (click)="exportLatestCierrePdf()"
             >
-              Exportar último cierre en PDF
+              Exportar Último cierre en PDF
             </button>
             <span class="admin-panel--container__hint admin-panel--container__hint--compact">
               Genera un PDF imprimible desde navegador, listo para guardar o compartir.
@@ -3077,7 +3106,7 @@
                       <td>
                         <strong>{{ cierre.total | number: '1.2-2' }} €</strong>
                       </td>
-                      <td>{{ cierre.notas || '—' }}</td>
+                      <td>{{ cierre.notas || '-' }}</td>
                       <td>
                         @if (cierre.enviadoAlServicioFiscal) {
                           <span
@@ -3491,6 +3520,7 @@
               <input
                 class="admin-panel--container__input"
                 type="date"
+                lang="es-ES"
                 [value]="globalTreatmentStartDateIso()"
                 (input)="onGlobalTreatmentStartDateInput($event)"
               />
@@ -3501,6 +3531,7 @@
               <input
                 class="admin-panel--container__input"
                 type="date"
+                lang="es-ES"
                 [value]="globalTreatmentEndDateIso()"
                 (input)="onGlobalTreatmentEndDateInput($event)"
               />
@@ -4032,77 +4063,8 @@
       @if (activeTab() === 'empleados' && isSuperadmin()) {
         <h2 class="admin-panel--container__subtitle">Gestión de empleados</h2>
         <p class="admin-panel--container__hint">
-          Organiza empleados por vistas: crear, listado resumido y buscador con ficha en modal.
+          Organiza empleados por vistas: crear, listado resumido, buscador y cuenta superadmin.
         </p>
-
-        <div class="admin-panel--container__permissions-editor">
-          <div class="admin-panel--container__permissions-editor-head">
-            <span class="admin-panel--container__permissions-editor-title">
-              🔒 Cuenta superadmin
-            </span>
-          </div>
-          <p class="admin-panel--container__hint admin-panel--container__hint--compact">
-            Puedes actualizar nombre de usuario, email y contraseña principal.
-          </p>
-          <div class="admin-panel--container__employee-filters">
-            <label class="admin-panel--container__label">
-              Usuario superadmin
-              <input
-                class="admin-panel--container__input"
-                type="text"
-                [value]="superadminEditUsername()"
-                (input)="onSuperadminUsernameInput($event)"
-                autocomplete="off"
-              />
-            </label>
-
-            <label class="admin-panel--container__label">
-              Email superadmin
-              <input
-                class="admin-panel--container__input"
-                type="email"
-                [value]="superadminEditEmail()"
-                (input)="onSuperadminEmailInput($event)"
-                autocomplete="off"
-              />
-            </label>
-
-            <label class="admin-panel--container__label">
-              Nueva contraseña
-              <div
-                class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact"
-              >
-                <input
-                  class="admin-panel--container__input"
-                  [type]="showSuperadminEditPassword() ? 'text' : 'password'"
-                  [value]="superadminEditPassword()"
-                  (input)="onSuperadminPasswordInput($event)"
-                  autocomplete="new-password"
-                  placeholder="Opcional: deja vacío para mantener la actual"
-                />
-                <button
-                  type="button"
-                  class="admin-panel--container__action-button admin-panel--container__action-button--soft"
-                  (click)="toggleSuperadminPasswordVisibility()"
-                >
-                  {{ showSuperadminEditPassword() ? 'Ocultar' : 'Mostrar' }}
-                </button>
-              </div>
-            </label>
-          </div>
-          <div
-            class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact"
-          >
-            <button
-              type="button"
-              class="admin-panel--container__action-button admin-panel--container__action-button--accept"
-              [disabled]="superadminEditLoading()"
-              (click)="saveSuperadminCredentials()"
-            >
-              {{ superadminEditLoading() ? 'Guardando...' : 'Guardar credenciales superadmin' }}
-            </button>
-          </div>
-        </div>
 
         <app-employee-management-tabs
           [activeTab]="employeeManagementTab()"
@@ -4120,11 +4082,82 @@
         @if (isLoadingEmployees()) {
           <p class="admin-panel--container__hint">Cargando usuarios...</p>
         } @else if (
-          employeeManagementTab() !== 'crear' &&
+          (employeeManagementTab() === 'listado' || employeeManagementTab() === 'buscar') &&
           (employeeUsers().length === 0 || getEmployeeSummaryUsers().length === 0)
         ) {
           <p class="admin-panel--container__hint">No hay usuarios registrados.</p>
         } @else {
+          @if (employeeManagementTab() === 'superadmin') {
+            <div class="admin-panel--container__permissions-editor">
+              <div class="admin-panel--container__permissions-editor-head">
+                <span class="admin-panel--container__permissions-editor-title">
+                  🔒 Cuenta superadmin
+                </span>
+              </div>
+              <p class="admin-panel--container__hint admin-panel--container__hint--compact">
+                Puedes actualizar nombre de usuario, email y contraseña principal.
+              </p>
+              <div class="admin-panel--container__employee-filters">
+                <label class="admin-panel--container__label">
+                  Usuario superadmin
+                  <input
+                    class="admin-panel--container__input"
+                    type="text"
+                    [value]="superadminEditUsername()"
+                    (input)="onSuperadminUsernameInput($event)"
+                    autocomplete="off"
+                  />
+                </label>
+
+                <label class="admin-panel--container__label">
+                  Email superadmin
+                  <input
+                    class="admin-panel--container__input"
+                    type="email"
+                    [value]="superadminEditEmail()"
+                    (input)="onSuperadminEmailInput($event)"
+                    autocomplete="off"
+                  />
+                </label>
+
+                <label class="admin-panel--container__label">
+                  Nueva contraseña
+                  <div
+                    class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact"
+                  >
+                    <input
+                      class="admin-panel--container__input"
+                      [type]="showSuperadminEditPassword() ? 'text' : 'password'"
+                      [value]="superadminEditPassword()"
+                      (input)="onSuperadminPasswordInput($event)"
+                      autocomplete="new-password"
+                      placeholder="Opcional: deja vacío para mantener la actual"
+                    />
+                    <button
+                      type="button"
+                      class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                      (click)="toggleSuperadminPasswordVisibility()"
+                    >
+                      {{ showSuperadminEditPassword() ? 'Ocultar' : 'Mostrar' }}
+                    </button>
+                  </div>
+                </label>
+              </div>
+              <div
+                class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact"
+              >
+                <button
+                  type="button"
+                  class="admin-panel--container__action-button admin-panel--container__action-button--accept"
+                  [disabled]="superadminEditLoading()"
+                  (click)="saveSuperadminCredentials()"
+                >
+                  {{ superadminEditLoading() ? 'Guardando...' : 'Guardar credenciales superadmin' }}
+                </button>
+              </div>
+            </div>
+          }
+
           @if (employeeManagementTab() === 'crear') {
             <app-employee-create-form
               [username]="employeeCreateUsername()"
@@ -4245,7 +4278,7 @@
                           [disabled]="!canPromote(user) || isEmployeeActionLoading(user.email)"
                           (click)="promoteToAdmin(user.email)"
                         >
-                          <span class="admin-panel--container__employee-action-icon">🛡️</span>
+                          <span class="admin-panel--container__employee-action-icon">👑</span>
                           <span>Hacer admin</span>
                         </button>
 
@@ -4295,7 +4328,7 @@
                           [disabled]="isEmployeeActionLoading(user.email)"
                           (click)="openEmployeeTrackingCalendarModal(user.email, 'sick_leave')"
                         >
-                          <span class="admin-panel--container__employee-action-icon">🏥</span>
+                          <span class="admin-panel--container__employee-action-icon">🛌</span>
                           <span>Baja</span>
                         </button>
 
@@ -4440,6 +4473,7 @@
                           <input
                             class="admin-panel--container__input"
                             type="date"
+                            lang="es-ES"
                             [value]="employeeHistoryStartDateIso()"
                             (input)="onEmployeeHistoryStartDateInput($event)"
                           />
@@ -4450,6 +4484,7 @@
                           <input
                             class="admin-panel--container__input"
                             type="date"
+                            lang="es-ES"
                             [value]="employeeHistoryEndDateIso()"
                             (input)="onEmployeeHistoryEndDateInput($event)"
                           />
@@ -4629,7 +4664,7 @@
             class="admin-panel--container__client-type-btn admin-panel--container__client-type-btn--new"
             (click)="onClientTypePickerNewClient()"
           >
-            <span class="admin-panel--container__client-type-icon">✨</span>
+            <span class="admin-panel--container__client-type-icon">🆕</span>
             <span class="admin-panel--container__client-type-label">Nueva clienta</span>
             <span class="admin-panel--container__client-type-desc">
               Crea una ficha nueva con los datos de la reserva
@@ -4657,7 +4692,7 @@
             (click)="closePaymentMethodModal()"
             aria-label="Cerrar"
           >
-            ✕
+            ×
           </button>
         </div>
 
@@ -4739,7 +4774,7 @@
         aria-modal="true"
         aria-labelledby="forced-checkin-title"
       >
-        <div class="admin-panel--container__forced-checkin-icon">🕐</div>
+        <div class="admin-panel--container__forced-checkin-icon">⏱️</div>
         <h2 class="admin-panel--container__modal-title" id="forced-checkin-title">
           Ficha tu entrada
         </h2>
@@ -4772,7 +4807,7 @@
       >
         <div class="admin-panel--container__modal-head">
           <div>
-            <h3 class="admin-panel--container__modal-title">🔒 Acceso restringido</h3>
+            <h3 class="admin-panel--container__modal-title">⛔ Acceso restringido</h3>
           </div>
           <button
             type="button"

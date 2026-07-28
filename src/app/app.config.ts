@@ -1,4 +1,4 @@
-import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/core';
+import { ApplicationConfig, LOCALE_ID, provideBrowserGlobalErrorListeners } from '@angular/core';
 import { InMemoryScrollingOptions, provideRouter, withInMemoryScrolling } from '@angular/router';
 import { provideHttpClient, withFetch } from '@angular/common/http';
 
@@ -16,6 +16,7 @@ const scrollOptions: InMemoryScrollingOptions = {
 
 export const appConfig: ApplicationConfig = {
   providers: [
+    { provide: LOCALE_ID, useValue: 'es-ES' },
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes, withInMemoryScrolling(scrollOptions)),
     provideClientHydration(withEventReplay(), withIncrementalHydration()),

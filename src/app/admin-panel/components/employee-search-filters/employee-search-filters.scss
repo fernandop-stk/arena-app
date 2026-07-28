@@ -1,3 +1,31 @@
+@use '../../../../styles/variables/colors' as colors;
+@use '../../../../styles/variables/layout' as layout;
+@use '../../../../styles/variables/typography' as typography;
+
 :host {
   display: block;
+}
+
+.admin-panel--container {
+  &__employee-filters {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin: 1rem 0;
+  }
+  &__input {
+    min-height: 2.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid #dad3c8;
+    background: #fff;
+    color: #2f2722;
+    padding: 0 0.75rem;
+    font-size: 0.9rem;
+    width: 200px;
+  }
+  &__label {
+    display: flex;
+    flex-direction: column;
+    padding-right: 1rem;
+  }
 }
