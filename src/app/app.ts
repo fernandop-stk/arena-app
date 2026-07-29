@@ -115,50 +115,13 @@ import { AppService } from './app.service';
                   >Hola, {{ username() }}</span
                 >
                 @if (isAdmin() && !isSuperadmin()) {
-                  <section class="app-shell--header__tracking" aria-label="Fichaje de jornada">
-                    <p class="app-shell--header__tracking-status">
-                      Estado: {{ getEmployeeWorkStatusLabel(employeeWorkStatus()) }}
-                    </p>
-
-                    @if (employeeLastCheckInIso()) {
-                      <p class="app-shell--header__tracking-meta">
-                        Última entrada: {{ formatTrackingDate(employeeLastCheckInIso()) }}
-                      </p>
-                    }
-
-                    @if (employeeLastCheckOutIso()) {
-                      <p class="app-shell--header__tracking-meta">
-                        Última salida: {{ formatTrackingDate(employeeLastCheckOutIso()) }}
-                      </p>
-                    }
-
-                    <div class="app-shell--header__tracking-actions">
-                      <button
-                        type="button"
-                        class="app-shell--header__tracking-btn app-shell--header__tracking-btn--entry"
-                        [disabled]="
-                          isEmployeeTrackingLoading() || employeeWorkStatus() === 'working'
-                        "
-                        (click)="clockIn()"
-                      >
-                        Fichar entrada
-                      </button>
-                      <button
-                        type="button"
-                        class="app-shell--header__tracking-btn app-shell--header__tracking-btn--exit"
-                        [disabled]="
-                          isEmployeeTrackingLoading() || employeeWorkStatus() !== 'working'
-                        "
-                        (click)="clockOut()"
-                      >
-                        Fichar salida
-                      </button>
-                    </div>
-
-                    @if (employeeTrackingError()) {
-                      <p class="app-shell--header__tracking-error">{{ employeeTrackingError() }}</p>
-                    }
-                  </section>
+                  <button
+                    type="button"
+                    class="app-shell--header__link"
+                    (click)="openEmployeeActionsModal()"
+                  >
+                    Mis acciones
+                  </button>
                 }
                 <button type="button" class="app-shell--header__link" (click)="logout()">
                   Cerrar sesión
@@ -182,6 +145,71 @@ import { AppService } from './app.service';
         aria-label="Cerrar menú"
         (click)="closeMenu()"
       ></button>
+
+      @if (showEmployeeActionsModal()) {
+        <div class="app-shell--employee-actions-backdrop" (click)="closeEmployeeActionsModal()">
+          <section
+            class="app-shell--employee-actions-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Mis acciones"
+            (click)="$event.stopPropagation()"
+          >
+            <header class="app-shell--employee-actions-head">
+              <h2 class="app-shell--employee-actions-title">Mis acciones</h2>
+              <button
+                type="button"
+                class="app-shell--employee-actions-close"
+                aria-label="Cerrar"
+                (click)="closeEmployeeActionsModal()"
+              >
+                ×
+              </button>
+            </header>
+
+            <section class="app-shell--header__tracking" aria-label="Fichaje de jornada">
+              <p class="app-shell--header__tracking-status">
+                Estado: {{ getEmployeeWorkStatusLabel(employeeWorkStatus()) }}
+              </p>
+
+              @if (employeeLastCheckInIso()) {
+                <p class="app-shell--header__tracking-meta">
+                  Última entrada: {{ formatTrackingDate(employeeLastCheckInIso()) }}
+                </p>
+              }
+
+              @if (employeeLastCheckOutIso()) {
+                <p class="app-shell--header__tracking-meta">
+                  Última salida: {{ formatTrackingDate(employeeLastCheckOutIso()) }}
+                </p>
+              }
+
+              <div class="app-shell--header__tracking-actions">
+                <button
+                  type="button"
+                  class="app-shell--header__tracking-btn app-shell--header__tracking-btn--entry"
+                  [disabled]="isEmployeeTrackingLoading() || employeeWorkStatus() === 'working'"
+                  (click)="clockIn()"
+                >
+                  Fichar entrada
+                </button>
+                <button
+                  type="button"
+                  class="app-shell--header__tracking-btn app-shell--header__tracking-btn--exit"
+                  [disabled]="isEmployeeTrackingLoading() || employeeWorkStatus() !== 'working'"
+                  (click)="clockOut()"
+                >
+                  Fichar salida
+                </button>
+              </div>
+
+              @if (employeeTrackingError()) {
+                <p class="app-shell--header__tracking-error">{{ employeeTrackingError() }}</p>
+              }
+            </section>
+          </section>
+        </div>
+      }
 
       <main class="app-shell--main">
         <router-outlet />
@@ -264,6 +292,7 @@ export class App {
   protected readonly employeeLastCheckOutIso = signal('');
   protected readonly isEmployeeTrackingLoading = signal(false);
   protected readonly employeeTrackingError = signal('');
+  protected readonly showEmployeeActionsModal = signal(false);
 
   protected readonly appName = this.appService.getAppName();
   protected readonly currentYear = new Date().getFullYear();
@@ -286,6 +315,7 @@ export class App {
       )
       .subscribe(() => {
         this.closeMenu();
+        this.closeEmployeeActionsModal();
         this.refreshAuthSession();
       });
 
@@ -320,6 +350,15 @@ export class App {
     this.isMenuOpen.set(false);
   }
 
+  protected openEmployeeActionsModal(): void {
+    this.closeMenu();
+    this.showEmployeeActionsModal.set(true);
+  }
+
+  protected closeEmployeeActionsModal(): void {
+    this.showEmployeeActionsModal.set(false);
+  }
+
   protected onAdminHeaderPanelClick(event: MouseEvent): void {
     const normalizedUrl = this.router.url.split('?')[0]?.split('#')[0] ?? '';
 
@@ -342,6 +381,7 @@ export class App {
       complete: () => {
         this.http.post<{ ok: boolean }>('/api/cliente/logout', {}).subscribe({
           complete: () => {
+            this.closeEmployeeActionsModal();
             this.resetAuthState();
             this.closeMenu();
             void this.router.navigate(['/']);
@@ -408,6 +448,7 @@ export class App {
     this.employeeLastCheckOutIso.set('');
     this.employeeTrackingError.set('');
     this.isEmployeeTrackingLoading.set(false);
+    this.showEmployeeActionsModal.set(false);
   }
 
   private refreshEmployeeTracking(): void {

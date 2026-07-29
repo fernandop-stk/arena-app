@@ -16,7 +16,7 @@
     padding: layout.$space-3;
 
     &__hint {
-      margin: 0;
+      margin-top: 1rem;
       color: colors.$color-text-soft;
       font-weight: 600;
       position: relative;
@@ -98,6 +98,19 @@
         border-color: rgba(201, 123, 99, 0.5);
         box-shadow: 0 10px 20px rgba(121, 92, 69, 0.12);
       }
+
+      &--disabled {
+        opacity: 0.55;
+        filter: grayscale(0.3);
+        transform: none;
+        cursor: not-allowed;
+
+        &:hover {
+          transform: none;
+          border-color: rgba(201, 123, 99, 0.3);
+          box-shadow: none;
+        }
+      }
     }
 
     &__module-card-icon {
@@ -161,6 +174,11 @@
         border: none;
         color: #fff;
         box-shadow: 0 4px 12px rgba(201, 123, 99, 0.25);
+      }
+
+      &--disabled {
+        opacity: 0.52;
+        cursor: not-allowed;
       }
     }
 

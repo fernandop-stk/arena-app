@@ -334,6 +334,53 @@ body.app-menu-open {
     }
   }
 
+  &--employee-actions-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: rgba(45, 30, 20, 0.35);
+    backdrop-filter: blur(3px);
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+  }
+
+  &--employee-actions-modal {
+    width: min(30rem, 100%);
+    border: 1px solid colors.$color-border;
+    border-radius: layout.$radius-lg;
+    background: colors.$color-surface;
+    box-shadow: 0 24px 48px rgba(74, 48, 33, 0.22);
+    padding: layout.$space-2;
+  }
+
+  &--employee-actions-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.7rem;
+  }
+
+  &--employee-actions-title {
+    margin: 0;
+    color: colors.$color-primary-dark;
+    font-family: typography.$font-heading;
+    font-size: 1.2rem;
+  }
+
+  &--employee-actions-close {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    border: 1px solid colors.$color-border;
+    background: rgba(255, 255, 255, 0.95);
+    color: colors.$color-primary-dark;
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+
   &--footer {
     margin-top: auto;
     border-top: 1px solid colors.$color-border;

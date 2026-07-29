@@ -38,6 +38,7 @@ type ReservationListRangeTab = 'none' | 'dia' | 'semana' | 'mes' | 'total';
 type StockManagementTab = 'crear' | 'ver';
 type CierreStatsRange = 'semana' | 'mes' | 'anio';
 type CierreStatsMetric = 'efectivo' | 'tarjeta' | 'bizum' | 'digital' | 'total';
+type AdminCardTarget = 'packs' | 'reservas' | 'agenda' | 'clientes' | 'almacen' | 'cierre';
 type EmployeeManagementTab = 'crear' | 'listado' | 'buscar' | 'superadmin';
 type ClientManagementTab = 'crear' | 'listado' | 'buscar';
 type AdminUserRole = 'superadmin' | 'admin' | 'client';
@@ -649,6 +650,8 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly myPermissions = signal<EmployeePermission[]>([]);
   protected readonly showNoPermissionModal = signal(false);
   protected readonly noPermissionActionLabel = signal('');
+  protected readonly noPermissionTooltip =
+    'No tienes permiso para entrar aqui o realizar esta accion.';
   protected readonly employeeCreatePermissions = signal<EmployeePermission[]>([...ALL_PERMISSIONS]);
   protected readonly editingPermissionsEmail = signal('');
   protected readonly editingPermissions = signal<EmployeePermission[]>([]);
@@ -836,6 +839,11 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected setActiveTab(tab: AdminTab): void {
+    if (!this.canAccessAdminTab(tab)) {
+      this.openNoPermissionModal(this.getAdminTabActionLabel(tab));
+      return;
+    }
+
     if (tab === 'empleados' && !this.isSuperadmin()) {
       return;
     }
@@ -905,9 +913,12 @@ export class AdminPanelComponent implements OnDestroy {
     this.cancelRoleChangeConfirm();
   }
 
-  protected openAdminCard(
-    target: 'packs' | 'reservas' | 'agenda' | 'clientes' | 'almacen' | 'cierre',
-  ): void {
+  protected openAdminCard(target: AdminCardTarget): void {
+    if (!this.canAccessAdminCard(target)) {
+      this.openNoPermissionModal(this.getAdminCardActionLabel(target));
+      return;
+    }
+
     if (target === 'packs') {
       void this.router.navigate(['/packs']);
       return;
@@ -6070,6 +6081,92 @@ export class AdminPanelComponent implements OnDestroy {
 
   // ── Permisos ───────────────────────────────────────────────────────────────
 
+  protected canAccessAdminCard(target: AdminCardTarget): boolean {
+    if (this.isSuperadmin()) {
+      return true;
+    }
+
+    switch (target) {
+      case 'packs':
+      case 'reservas':
+        return this.hasPermission('reservas_ver');
+      case 'agenda':
+        return this.hasPermission('agenda_ver');
+      case 'clientes':
+        return this.hasPermission('clientes_gestionar');
+      case 'almacen':
+        return this.hasPermission('almacen_gestionar');
+      case 'cierre':
+        return this.hasPermission('cierre_registrar');
+      default:
+        return false;
+    }
+  }
+
+  protected canAccessAdminTab(tab: AdminTab): boolean {
+    if (this.isSuperadmin()) {
+      return true;
+    }
+
+    switch (tab) {
+      case 'home':
+      case 'ayuda':
+        return true;
+      case 'agenda':
+        return this.hasPermission('agenda_ver');
+      case 'clientes':
+        return this.hasPermission('clientes_gestionar');
+      case 'estadisticas':
+        return this.hasPermission('estadisticas_ver');
+      case 'almacen':
+        return this.hasPermission('almacen_gestionar');
+      case 'cierre':
+        return this.hasPermission('cierre_registrar');
+      case 'empleados':
+        return false;
+      default:
+        return false;
+    }
+  }
+
+  protected getAdminCardActionLabel(target: AdminCardTarget): string {
+    switch (target) {
+      case 'packs':
+        return 'Acceder a packs y tratamientos';
+      case 'reservas':
+        return 'Acceder a reservas';
+      case 'agenda':
+        return 'Acceder a la agenda';
+      case 'clientes':
+        return 'Acceder a ficha de cliente';
+      case 'almacen':
+        return 'Acceder al almacen';
+      case 'cierre':
+        return 'Acceder al cierre de caja';
+      default:
+        return 'Acceder a esta seccion';
+    }
+  }
+
+  protected getAdminTabActionLabel(tab: AdminTab): string {
+    switch (tab) {
+      case 'agenda':
+        return 'Acceder a la agenda';
+      case 'clientes':
+        return 'Acceder a ficha de cliente';
+      case 'estadisticas':
+        return 'Acceder a estadisticas';
+      case 'almacen':
+        return 'Acceder al almacen';
+      case 'cierre':
+        return 'Acceder al cierre de caja';
+      case 'empleados':
+        return 'Gestionar empleados';
+      default:
+        return 'Acceder a esta seccion';
+    }
+  }
+
   protected hasPermission(perm: EmployeePermission): boolean {
     if (this.isSuperadmin()) return true;
     return this.myPermissions().includes(perm);
@@ -6077,9 +6174,13 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected requirePermission(perm: EmployeePermission, label: string): boolean {
     if (this.hasPermission(perm)) return true;
+    this.openNoPermissionModal(label);
+    return false;
+  }
+
+  protected openNoPermissionModal(label: string): void {
     this.noPermissionActionLabel.set(label);
     this.showNoPermissionModal.set(true);
-    return false;
   }
 
   protected closeNoPermissionModal(): void {

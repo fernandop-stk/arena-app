@@ -22,6 +22,9 @@
           <button
             type="button"
             class="admin-panel--container__module-card"
+            [class.admin-panel--container__module-card--disabled]="!canAccessAdminCard('packs')"
+            [attr.aria-disabled]="!canAccessAdminCard('packs')"
+            [title]="!canAccessAdminCard('packs') ? noPermissionTooltip : ''"
             [style.--card-index]="0"
             (click)="openAdminCard('packs')"
           >
@@ -31,6 +34,9 @@
           <button
             type="button"
             class="admin-panel--container__module-card"
+            [class.admin-panel--container__module-card--disabled]="!canAccessAdminCard('reservas')"
+            [attr.aria-disabled]="!canAccessAdminCard('reservas')"
+            [title]="!canAccessAdminCard('reservas') ? noPermissionTooltip : ''"
             [style.--card-index]="1"
             (click)="openAdminCard('reservas')"
           >
@@ -40,6 +46,9 @@
           <button
             type="button"
             class="admin-panel--container__module-card"
+            [class.admin-panel--container__module-card--disabled]="!canAccessAdminCard('agenda')"
+            [attr.aria-disabled]="!canAccessAdminCard('agenda')"
+            [title]="!canAccessAdminCard('agenda') ? noPermissionTooltip : ''"
             [style.--card-index]="2"
             (click)="openAdminCard('agenda')"
           >
@@ -49,6 +58,9 @@
           <button
             type="button"
             class="admin-panel--container__module-card"
+            [class.admin-panel--container__module-card--disabled]="!canAccessAdminCard('clientes')"
+            [attr.aria-disabled]="!canAccessAdminCard('clientes')"
+            [title]="!canAccessAdminCard('clientes') ? noPermissionTooltip : ''"
             [style.--card-index]="3"
             (click)="openAdminCard('clientes')"
           >
@@ -58,6 +70,9 @@
           <button
             type="button"
             class="admin-panel--container__module-card"
+            [class.admin-panel--container__module-card--disabled]="!canAccessAdminCard('almacen')"
+            [attr.aria-disabled]="!canAccessAdminCard('almacen')"
+            [title]="!canAccessAdminCard('almacen') ? noPermissionTooltip : ''"
             [style.--card-index]="4"
             (click)="openAdminCard('almacen')"
           >
@@ -67,6 +82,9 @@
           <button
             type="button"
             class="admin-panel--container__module-card"
+            [class.admin-panel--container__module-card--disabled]="!canAccessAdminCard('cierre')"
+            [attr.aria-disabled]="!canAccessAdminCard('cierre')"
+            [title]="!canAccessAdminCard('cierre') ? noPermissionTooltip : ''"
             [style.--card-index]="5"
             (click)="openAdminCard('cierre')"
           >
@@ -79,6 +97,9 @@
             type="button"
             class="admin-panel--container__tab"
             [class.admin-panel--container__tab--active]="activeTab() === 'estadisticas'"
+            [class.admin-panel--container__tab--disabled]="!canAccessAdminTab('estadisticas')"
+            [attr.aria-disabled]="!canAccessAdminTab('estadisticas')"
+            [title]="!canAccessAdminTab('estadisticas') ? noPermissionTooltip : ''"
             (click)="setActiveTab('estadisticas')"
           >
             Estadísticas
@@ -112,6 +133,9 @@
               type="button"
               class="admin-panel--container__tab"
               [class.admin-panel--container__tab--active]="activeTab() === 'agenda'"
+              [class.admin-panel--container__tab--disabled]="!canAccessAdminTab('agenda')"
+              [attr.aria-disabled]="!canAccessAdminTab('agenda')"
+              [title]="!canAccessAdminTab('agenda') ? noPermissionTooltip : ''"
               (click)="setActiveTab('agenda')"
             >
               Agenda
@@ -4851,7 +4875,7 @@
           </button>
         </div>
         <p class="admin-panel--container__modal-subtitle" style="padding: 0 0 0.5rem">
-          No tienes permiso para realizar esta acción:
+          No tienes permiso para entrar aqui o realizar esta accion:
         </p>
         <p style="margin: 0 0 1rem; font-weight: 700; color: var(--color-primary-dark, #6b5748)">
           {{ noPermissionActionLabel() }}
@@ -4862,7 +4886,7 @@
             class="admin-panel--container__btn admin-panel--container__btn--primary"
             (click)="closeNoPermissionModal()"
           >
-            Entendido
+            Cerrar
           </button>
         </div>
       </div>
