@@ -2674,6 +2674,26 @@
           >
             Ver stock
           </button>
+          <button
+            type="button"
+            class="admin-panel--container__employee-subtab"
+            [class.admin-panel--container__employee-subtab--active]="
+              stockManagementTab() === 'vender'
+            "
+            (click)="setStockManagementTab('vender')"
+          >
+            Vender productos
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__employee-subtab"
+            [class.admin-panel--container__employee-subtab--active]="
+              stockManagementTab() === 'historial'
+            "
+            (click)="setStockManagementTab('historial')"
+          >
+            Historial ventas
+          </button>
         </div>
 
         @if (stockManagementTab() === 'crear') {
@@ -2719,25 +2739,25 @@
               </label>
 
               <label class="admin-panel--container__label">
-                Precio
+                Precio (opcional)
                 <input
                   class="admin-panel--container__input"
                   type="number"
                   min="0"
                   step="0.01"
-                  placeholder="0.00"
+                  placeholder="Si lo dejas vacio se guarda 0.00"
                   [value]="stockCreatePrice()"
                   (input)="onStockCreatePriceInput($event)"
                 />
               </label>
 
               <label class="admin-panel--container__label">
-                Color
+                Color (opcional)
                 <input
                   class="admin-panel--container__input"
                   type="text"
                   maxlength="40"
-                  placeholder="Ej. Rubio ceniza"
+                  placeholder="Ej. Rubio ceniza (opcional)"
                   [value]="stockCreateColor()"
                   (input)="onStockCreateColorInput($event)"
                 />
@@ -2899,7 +2919,10 @@
                   </div>
 
                   <p class="admin-panel--container__reservation-text">
-                    Marca: {{ product.brand }} &middot; Color: {{ product.color }}
+                    Marca: {{ product.brand }}
+                    @if (product.color) {
+                      &middot; Color: {{ product.color }}
+                    }
                   </p>
                   @if (product.isSellable) {
                     <p class="admin-panel--container__reservation-text">Producto para vender: Sí</p>
@@ -2912,6 +2935,18 @@
                       Precio: {{ product.price }} &euro; &middot; Alta:
                       {{ formatDateTime(product.createdAtIso) }}
                     </p>
+                    <button
+                      type="button"
+                      class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                      [disabled]="
+                        stockDeletingProductId() === product.id ||
+                        stockAdjustingProductId() === product.id ||
+                        editStockLoading()
+                      "
+                      (click)="openEditStockModal(product)"
+                    >
+                      ✏️ Modificar
+                    </button>
                     <button
                       type="button"
                       class="admin-panel--container__action-button admin-panel--container__action-button--reject"
@@ -2936,10 +2971,173 @@
             </div>
           }
         }
+
+        @if (stockManagementTab() === 'vender') {
+          <h3 class="admin-panel--container__reservation-title">Productos para vender</h3>
+
+          @if (isLoadingStockProducts()) {
+            <p class="admin-panel--container__hint">Cargando stock...</p>
+          } @else if (getSellableStockProducts().length === 0) {
+            <p class="admin-panel--container__hint">
+              No hay productos marcados como producto para vender.
+            </p>
+          } @else if (getAvailableSellableStockProducts().length === 0) {
+            <p class="admin-panel--container__hint">
+              No hay productos vendibles con stock disponible.
+            </p>
+          } @else {
+            <div class="admin-panel--container__list">
+              @for (product of getAvailableSellableStockProducts(); track product.id) {
+                <article class="admin-panel--container__reservation">
+                  <div class="admin-panel--container__reservation-head">
+                    <h3 class="admin-panel--container__reservation-title">
+                      {{ product.productName }}
+                    </h3>
+                    <span class="admin-panel--container__stock-sale-product-meta"
+                      >Stock: {{ product.quantity }}</span
+                    >
+                  </div>
+
+                  <p class="admin-panel--container__reservation-text">
+                    Marca: {{ product.brand }}
+                    @if (product.color) {
+                      &middot; Color: {{ product.color }}
+                    }
+                  </p>
+                  <p class="admin-panel--container__reservation-text">
+                    Precio: {{ product.price | number: '1.2-2' }} EUR &middot; Alta:
+                    {{ formatDateTime(product.createdAtIso) }}
+                  </p>
+
+                  <div
+                    class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--role-confirm"
+                  >
+                    <p class="admin-panel--container__reservation-text">
+                      Descripción: {{ getSelectedStockSaleDescription(product) }}
+                    </p>
+                    <button
+                      type="button"
+                      class="admin-panel--container__action-button admin-panel--container__action-button--accept"
+                      [disabled]="stockSaleLoading() || product.quantity === 0"
+                      (click)="openStockSaleModal(product.id)"
+                    >
+                      Vender
+                    </button>
+                  </div>
+                </article>
+              }
+            </div>
+          }
+        }
+
+        @if (stockManagementTab() === 'historial') {
+          <div class="admin-panel--container__stock-sale-history">
+            <h4 class="admin-panel--container__reservation-title">Historial de ventas</h4>
+
+            <div class="admin-panel--container__employee-filters">
+              <label class="admin-panel--container__label">
+                Fecha
+                <input
+                  class="admin-panel--container__input"
+                  type="date"
+                  lang="es-ES"
+                  [value]="stockSalesHistoryDateFilter()"
+                  (input)="onStockSalesHistoryDateFilterInput($event)"
+                />
+              </label>
+
+              <label class="admin-panel--container__label">
+                Metodo de pago
+                <select
+                  class="admin-panel--container__input"
+                  [value]="stockSalesHistoryMethodFilter()"
+                  (change)="onStockSalesHistoryMethodFilterChange($event)"
+                >
+                  <option value="all">Todos</option>
+                  <option value="efectivo">Efectivo</option>
+                  <option value="tarjeta">Tarjeta</option>
+                  <option value="bizum">Bizum</option>
+                </select>
+              </label>
+            </div>
+
+            <div
+              class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact"
+            >
+              <button
+                type="button"
+                class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                (click)="clearStockSalesHistoryFilters()"
+              >
+                Limpiar filtros
+              </button>
+            </div>
+
+            @if (stockSalesHistoryLoading()) {
+              <p class="admin-panel--container__hint">Cargando historial...</p>
+            } @else if (stockSalesHistory().length === 0) {
+              <p class="admin-panel--container__hint">Aún no hay ventas registradas.</p>
+            } @else if (getFilteredStockSalesHistory().length === 0) {
+              <p class="admin-panel--container__hint">
+                No hay ventas para los filtros seleccionados.
+              </p>
+            } @else {
+              <div
+                class="admin-panel--container__employee-history-list admin-panel--container__employee-history-list--compact"
+              >
+                @for (sale of getFilteredStockSalesHistory(); track sale.id) {
+                  <article class="admin-panel--container__employee-history-item">
+                    <p class="admin-panel--container__employee-history-text">
+                      <strong>{{ sale.productName }}</strong>
+                      · {{ sale.soldUnits }} ud · {{ sale.totalAmount | number: '1.2-2' }} EUR ·
+                      {{ sale.paymentMethod }}
+                    </p>
+                    <p class="admin-panel--container__employee-history-note">
+                      {{ formatDateTime(sale.soldAtIso) }} · Vendido por {{ sale.soldByEmail }}
+                    </p>
+                  </article>
+                }
+              </div>
+            }
+          </div>
+        }
       }
 
       @if (activeTab() === 'cierre') {
         <h2 class="admin-panel--container__subtitle">Cierre de caja</h2>
+
+        <div class="admin-panel--container__employee-subtabs">
+          <button
+            type="button"
+            class="admin-panel--container__employee-subtab"
+            [class.admin-panel--container__employee-subtab--active]="
+              cierreManagementTab() === 'registro'
+            "
+            (click)="setCierreManagementTab('registro')"
+          >
+            Registro
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__employee-subtab"
+            [class.admin-panel--container__employee-subtab--active]="
+              cierreManagementTab() === 'historial'
+            "
+            (click)="setCierreManagementTab('historial')"
+          >
+            Historial
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__employee-subtab"
+            [class.admin-panel--container__employee-subtab--active]="
+              cierreManagementTab() === 'estadisticas'
+            "
+            (click)="setCierreManagementTab('estadisticas')"
+          >
+            Estadísticas
+          </button>
+        </div>
 
         @if (cierreError()) {
           <p class="admin-panel--container__error-message">{{ cierreError() }}</p>
@@ -2948,599 +3146,825 @@
           <p class="admin-panel--container__success-message">{{ cierreMessage() }}</p>
         }
 
-        <!-- Formulario de registro -->
-        <div class="admin-panel--container__block-form">
-          <h3 class="admin-panel--container__block-form-title">Registrar cierre del día</h3>
-          <p class="admin-panel--container__hint">
-            Introduce los importes cobrados por cada método de pago. El total se calcula
-            automáticamente.
-          </p>
+        @if (cierreManagementTab() === 'registro') {
+          <!-- Formulario de registro -->
+          <div class="admin-panel--container__block-form">
+            <h3 class="admin-panel--container__block-form-title">Registrar cierre del día</h3>
+            <p class="admin-panel--container__hint">
+              Introduce los importes cobrados por cada método de pago. El total se calcula
+              automáticamente.
+            </p>
 
-          <div class="admin-panel--container__cierre-summary">
-            @if (isLoadingCierreAutoDiario()) {
-              <div class="admin-panel--container__cierre-summary-row">
-                <span class="admin-panel--container__cierre-summary-label"
-                  >Cargando acumulado automático del día...</span
+            <div class="admin-panel--container__cierre-summary">
+              @if (isLoadingCierreAutoDiario()) {
+                <div class="admin-panel--container__cierre-summary-row">
+                  <span class="admin-panel--container__cierre-summary-label"
+                    >Cargando acumulado automático del día...</span
+                  >
+                </div>
+              } @else if (cierreAlreadyClosedToday()) {
+                <div class="admin-panel--container__cierre-summary-row">
+                  <span class="admin-panel--container__cierre-summary-label"
+                    >Hoy ya existe un cierre registrado.</span
+                  >
+                  <span class="admin-panel--container__cierre-summary-value"
+                    >Revisa Historial para editarlo o anularlo.</span
+                  >
+                </div>
+              } @else if (hasCierreAutoDiario() && cierreAutoDiario(); as auto) {
+                <div class="admin-panel--container__cierre-summary-row">
+                  <span class="admin-panel--container__cierre-summary-label"
+                    >📊 Acumulado automático ({{ auto.dateIso }})</span
+                  >
+                  <span class="admin-panel--container__cierre-summary-value"
+                    >Actualizado: {{ formatDateTime(auto.updatedAtIso) }}</span
+                  >
+                </div>
+                <div class="admin-panel--container__cierre-summary-row">
+                  <span class="admin-panel--container__cierre-summary-label">💵 Efectivo</span>
+                  <span class="admin-panel--container__cierre-summary-value"
+                    >{{ auto.efectivo | number: '1.2-2' }} €</span
+                  >
+                </div>
+                <div class="admin-panel--container__cierre-summary-row">
+                  <span class="admin-panel--container__cierre-summary-label">💳 Tarjeta</span>
+                  <span class="admin-panel--container__cierre-summary-value"
+                    >{{ auto.tarjeta | number: '1.2-2' }} €</span
+                  >
+                </div>
+                <div class="admin-panel--container__cierre-summary-row">
+                  <span class="admin-panel--container__cierre-summary-label">📱 Bizum</span>
+                  <span class="admin-panel--container__cierre-summary-value"
+                    >{{ auto.bizum | number: '1.2-2' }} €</span
+                  >
+                </div>
+                <div
+                  class="admin-panel--container__cierre-summary-row admin-panel--container__cierre-summary-row--total"
                 >
+                  <span class="admin-panel--container__cierre-summary-label">TOTAL AUTO</span>
+                  <span class="admin-panel--container__cierre-summary-value"
+                    >{{ auto.total | number: '1.2-2' }} €</span
+                  >
+                </div>
+                <button
+                  type="button"
+                  class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                  (click)="applyCierreAutoDiarioToForm()"
+                >
+                  Usar acumulado automático en formulario
+                </button>
+              } @else {
+                <div class="admin-panel--container__cierre-summary-row">
+                  [disabled]="cierreAlreadyClosedToday()"
+                  <span class="admin-panel--container__cierre-summary-label"
+                    >Aún no hay cobros automáticos registrados hoy.</span
+                  >
+                </div>
+              }
+            </div>
+
+            <div class="admin-panel--container__form-row">
+              <div class="admin-panel--container__form-group">
+                <label class="admin-panel--container__label" for="cierreEfectivo"
+                  >Efectivo (€)</label
+                >
+                <input
+                  id="cierreEfectivo"
+                  class="admin-panel--container__input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  [disabled]="cierreAlreadyClosedToday()"
+                  [value]="cierreEfectivo()"
+                  (input)="onCierreEfectivoInput($event)"
+                />
               </div>
-            } @else if (hasCierreAutoDiario() && cierreAutoDiario(); as auto) {
-              <div class="admin-panel--container__cierre-summary-row">
-                <span class="admin-panel--container__cierre-summary-label"
-                  >📊 Acumulado automático ({{ auto.dateIso }})</span
-                >
-                <span class="admin-panel--container__cierre-summary-value"
-                  >Actualizado: {{ formatDateTime(auto.updatedAtIso) }}</span
-                >
+              <div class="admin-panel--container__form-group">
+                <label class="admin-panel--container__label" for="cierreTarjeta">Tarjeta (€)</label>
+                <input
+                  id="cierreTarjeta"
+                  class="admin-panel--container__input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  [disabled]="cierreAlreadyClosedToday()"
+                  [value]="cierreTarjeta()"
+                  (input)="onCierreTarjetaInput($event)"
+                />
               </div>
+              <div class="admin-panel--container__form-group">
+                <label class="admin-panel--container__label" for="cierreBizum">Bizum (€)</label>
+                <input
+                  id="cierreBizum"
+                  class="admin-panel--container__input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  [disabled]="cierreAlreadyClosedToday()"
+                  [value]="cierreBizum()"
+                  (input)="onCierreBizumInput($event)"
+                />
+              </div>
+            </div>
+
+            <!-- Resumen de totales -->
+            <div class="admin-panel--container__cierre-summary">
               <div class="admin-panel--container__cierre-summary-row">
                 <span class="admin-panel--container__cierre-summary-label">💵 Efectivo</span>
                 <span class="admin-panel--container__cierre-summary-value"
-                  >{{ auto.efectivo | number: '1.2-2' }} €</span
+                  >{{ cierreEfectivoNum() | number: '1.2-2' }} €</span
                 >
               </div>
               <div class="admin-panel--container__cierre-summary-row">
                 <span class="admin-panel--container__cierre-summary-label">💳 Tarjeta</span>
                 <span class="admin-panel--container__cierre-summary-value"
-                  >{{ auto.tarjeta | number: '1.2-2' }} €</span
+                  >{{ cierreTarjetaNum() | number: '1.2-2' }} €</span
                 >
               </div>
               <div class="admin-panel--container__cierre-summary-row">
                 <span class="admin-panel--container__cierre-summary-label">📱 Bizum</span>
                 <span class="admin-panel--container__cierre-summary-value"
-                  >{{ auto.bizum | number: '1.2-2' }} €</span
+                  >{{ cierreBizumNum() | number: '1.2-2' }} €</span
                 >
               </div>
               <div
                 class="admin-panel--container__cierre-summary-row admin-panel--container__cierre-summary-row--total"
               >
-                <span class="admin-panel--container__cierre-summary-label">TOTAL AUTO</span>
+                <span class="admin-panel--container__cierre-summary-label">TOTAL</span>
                 <span class="admin-panel--container__cierre-summary-value"
-                  >{{ auto.total | number: '1.2-2' }} €</span
+                  >{{ cierreTotal() | number: '1.2-2' }} €</span
                 >
               </div>
+            </div>
+
+            <div class="admin-panel--container__form-group">
+              <label class="admin-panel--container__label" for="cierreNotas"
+                >Notas (opcional)</label
+              >
+              <textarea
+                id="cierreNotas"
+                class="admin-panel--container__textarea"
+                rows="3"
+                placeholder="Observaciones del cierre..."
+                [disabled]="cierreAlreadyClosedToday()"
+                [value]="cierreNotas()"
+                (input)="onCierreNotasInput($event)"
+              ></textarea>
+            </div>
+
+            <div class="admin-panel--container__btn-wrapper">
+              <button
+                class="admin-panel--container__btn admin-panel--container__btn--primary"
+                [disabled]="cierreLoading() || cierreAlreadyClosedToday()"
+                (click)="registrarCierre()"
+              >
+                @if (cierreLoading()) {
+                  Registrando...
+                } @else if (cierreAlreadyClosedToday()) {
+                  Día ya cerrado
+                } @else {
+                  Registrar cierre
+                }
+              </button>
+            </div>
+
+            <div
+              class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact admin-panel--container__section admin-panel--container__cierre-card admin-panel--container__cierre-card--compact"
+            >
               <button
                 type="button"
-                class="admin-panel--container__action-button admin-panel--container__action-button--soft"
-                (click)="applyCierreAutoDiarioToForm()"
+                class="admin-panel--container__action-button admin-panel--container__action-button--secondary"
+                [disabled]="!canExportLatestCierrePdf()"
+                (click)="exportLatestCierrePdf()"
               >
-                Usar acumulado automático en formulario
+                Exportar Último cierre en PDF
               </button>
-            } @else {
-              <div class="admin-panel--container__cierre-summary-row">
-                <span class="admin-panel--container__cierre-summary-label"
-                  >Aún no hay cobros automáticos registrados hoy.</span
+              <span class="admin-panel--container__hint admin-panel--container__hint--compact">
+                Genera un PDF imprimible desde navegador, listo para guardar o compartir.
+              </span>
+            </div>
+          </div>
+        }
+
+        @if (cierreManagementTab() === 'historial') {
+          <!-- Historial de cierres -->
+          <div class="admin-panel--container__section admin-panel--container__cierre-card">
+            <h3 class="admin-panel--container__block-form-title">Historial de cierres</h3>
+
+            @if (getTodayCierre(); as cierreHoy) {
+              <div class="admin-panel--container__cierre-summary" style="margin: 0.75rem 0 1rem">
+                <div class="admin-panel--container__cierre-summary-row">
+                  <span class="admin-panel--container__cierre-summary-label">
+                    Cierre de hoy · {{ cierreHoy.fechaIso }}
+                  </span>
+                  <span class="admin-panel--container__cierre-summary-value">
+                    Ya está bloqueado para nuevos cierres
+                  </span>
+                </div>
+                <div class="admin-panel--container__cierre-summary-row">
+                  <span class="admin-panel--container__cierre-summary-label">Total</span>
+                  <span class="admin-panel--container__cierre-summary-value">
+                    {{ cierreHoy.total | number: '1.2-2' }} €
+                  </span>
+                </div>
+                <div class="admin-panel--container__cierre-summary-row">
+                  <span class="admin-panel--container__cierre-summary-label">Registrado por</span>
+                  <span class="admin-panel--container__cierre-summary-value">
+                    {{ cierreHoy.registradoPorEmail }}
+                  </span>
+                </div>
+                <div class="admin-panel--container__cierre-summary-row">
+                  <span class="admin-panel--container__cierre-summary-label">Fecha y hora</span>
+                  <span class="admin-panel--container__cierre-summary-value">
+                    {{ formatDateTime(cierreHoy.createdAtIso) }}
+                  </span>
+                </div>
+                <div
+                  class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact"
+                  style="margin-top: 0.5rem"
                 >
+                  <button
+                    type="button"
+                    class="admin-panel--container__action-button admin-panel--container__action-button--secondary"
+                    (click)="openCierreDetailsModal(cierreHoy)"
+                  >
+                    Ver detalle
+                  </button>
+                  <button
+                    type="button"
+                    class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                    (click)="openEditCierre(cierreHoy)"
+                  >
+                    Editar cierre de hoy
+                  </button>
+                </div>
+              </div>
+            }
+
+            @if (isLoadingCierres()) {
+              <p class="admin-panel--container__hint">Cargando historial...</p>
+            } @else if (cierreHistorial().length === 0) {
+              <p class="admin-panel--container__hint">No hay cierres registrados todavía.</p>
+            } @else {
+              <div class="admin-panel--container__table-wrapper">
+                <table class="admin-panel--container__table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Efectivo</th>
+                      <th>Tarjeta</th>
+                      <th>Bizum</th>
+                      <th>Total</th>
+                      <th>Notas</th>
+                      <th>Estado fiscal</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (cierre of cierreHistorial(); track cierre.id) {
+                      <tr>
+                        <td>{{ cierre.fechaIso }}</td>
+                        <td>{{ cierre.efectivo | number: '1.2-2' }} €</td>
+                        <td>{{ cierre.tarjeta | number: '1.2-2' }} €</td>
+                        <td>{{ cierre.bizum | number: '1.2-2' }} €</td>
+                        <td>
+                          <strong>{{ cierre.total | number: '1.2-2' }} €</strong>
+                        </td>
+                        <td>{{ cierre.notas || '-' }}</td>
+                        <td>
+                          @if (cierre.enviadoAlServicioFiscal) {
+                            <span
+                              class="admin-panel--container__badge admin-panel--container__badge--green"
+                              >Enviado ✓</span
+                            >
+                          } @else {
+                            <span
+                              class="admin-panel--container__badge admin-panel--container__badge--gray"
+                              >Pendiente</span
+                            >
+                          }
+                        </td>
+                        <td class="admin-panel--container__cierre-row-actions">
+                          <button
+                            type="button"
+                            class="admin-panel--container__action-button admin-panel--container__action-button--secondary"
+                            (click)="openCierreDetailsModal(cierre)"
+                            title="Ver detalle de operaciones"
+                          >
+                            📄
+                          </button>
+                          <button
+                            type="button"
+                            class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                            (click)="openEditCierre(cierre)"
+                            title="Editar cierre"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            type="button"
+                            class="admin-panel--container__action-button admin-panel--container__action-button--reject"
+                            (click)="confirmDeleteCierre(cierre.id)"
+                            title="Eliminar cierre"
+                          >
+                            🗑️
+                          </button>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
               </div>
             }
           </div>
 
-          <div class="admin-panel--container__form-row">
-            <div class="admin-panel--container__form-group">
-              <label class="admin-panel--container__label" for="cierreEfectivo">Efectivo (€)</label>
-              <input
-                id="cierreEfectivo"
-                class="admin-panel--container__input"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-                [value]="cierreEfectivo()"
-                (input)="onCierreEfectivoInput($event)"
-              />
-            </div>
-            <div class="admin-panel--container__form-group">
-              <label class="admin-panel--container__label" for="cierreTarjeta">Tarjeta (€)</label>
-              <input
-                id="cierreTarjeta"
-                class="admin-panel--container__input"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-                [value]="cierreTarjeta()"
-                (input)="onCierreTarjetaInput($event)"
-              />
-            </div>
-            <div class="admin-panel--container__form-group">
-              <label class="admin-panel--container__label" for="cierreBizum">Bizum (€)</label>
-              <input
-                id="cierreBizum"
-                class="admin-panel--container__input"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-                [value]="cierreBizum()"
-                (input)="onCierreBizumInput($event)"
-              />
-            </div>
-          </div>
-
-          <!-- Resumen de totales -->
-          <div class="admin-panel--container__cierre-summary">
-            <div class="admin-panel--container__cierre-summary-row">
-              <span class="admin-panel--container__cierre-summary-label">💵 Efectivo</span>
-              <span class="admin-panel--container__cierre-summary-value"
-                >{{ cierreEfectivoNum() | number: '1.2-2' }} €</span
+          @if (showCierreDetailsModal()) {
+            @if (selectedCierreForDetails(); as cierreDetalle) {
+              <div
+                class="admin-panel--container__modal-backdrop"
+                (click)="closeCierreDetailsModal()"
               >
-            </div>
-            <div class="admin-panel--container__cierre-summary-row">
-              <span class="admin-panel--container__cierre-summary-label">💳 Tarjeta</span>
-              <span class="admin-panel--container__cierre-summary-value"
-                >{{ cierreTarjetaNum() | number: '1.2-2' }} €</span
-              >
-            </div>
-            <div class="admin-panel--container__cierre-summary-row">
-              <span class="admin-panel--container__cierre-summary-label">📱 Bizum</span>
-              <span class="admin-panel--container__cierre-summary-value"
-                >{{ cierreBizumNum() | number: '1.2-2' }} €</span
-              >
-            </div>
-            <div
-              class="admin-panel--container__cierre-summary-row admin-panel--container__cierre-summary-row--total"
-            >
-              <span class="admin-panel--container__cierre-summary-label">TOTAL</span>
-              <span class="admin-panel--container__cierre-summary-value"
-                >{{ cierreTotal() | number: '1.2-2' }} €</span
-              >
-            </div>
-          </div>
+                <div
+                  class="admin-panel--container__modal admin-panel--container__modal-close-money-data"
+                  role="dialog"
+                  aria-modal="true"
+                  (click)="$event.stopPropagation()"
+                >
+                  <div class="admin-panel--container__modal-head">
+                    <div>
+                      <h3 class="admin-panel--container__modal-title">Detalle del cierre</h3>
+                      <p class="admin-panel--container__modal-subtitle">
+                        {{ cierreDetalle.fechaIso }} · {{ cierreDetalle.registradoPorEmail }}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      class="admin-panel--container__modal-close"
+                      (click)="closeCierreDetailsModal()"
+                      aria-label="Cerrar"
+                    >
+                      ×
+                    </button>
+                  </div>
 
-          <div class="admin-panel--container__form-group">
-            <label class="admin-panel--container__label" for="cierreNotas">Notas (opcional)</label>
-            <textarea
-              id="cierreNotas"
-              class="admin-panel--container__textarea"
-              rows="3"
-              placeholder="Observaciones del cierre..."
-              [value]="cierreNotas()"
-              (input)="onCierreNotasInput($event)"
-            ></textarea>
-          </div>
+                  <div
+                    class="admin-panel--container__form-row admin-panel--container__form-row--cierre"
+                  >
+                    <div class="admin-panel--container__form-group">
+                      <label class="admin-panel--container__label">Métodos de cobro</label>
+                      <label class="admin-panel--container__checkbox-label">
+                        <input
+                          type="checkbox"
+                          [checked]="cierreDetailsMethodFilters().efectivo"
+                          (change)="onCierreDetailsMethodFilterChange('efectivo', $event)"
+                        />
+                        Efectivo
+                      </label>
+                      <label class="admin-panel--container__checkbox-label">
+                        <input
+                          type="checkbox"
+                          [checked]="cierreDetailsMethodFilters().tarjeta"
+                          (change)="onCierreDetailsMethodFilterChange('tarjeta', $event)"
+                        />
+                        Tarjeta
+                      </label>
+                      <label class="admin-panel--container__checkbox-label">
+                        <input
+                          type="checkbox"
+                          [checked]="cierreDetailsMethodFilters().bizum"
+                          (change)="onCierreDetailsMethodFilterChange('bizum', $event)"
+                        />
+                        Bizum
+                      </label>
+                    </div>
 
-          <div class="admin-panel--container__btn-wrapper">
-            <button
-              class="admin-panel--container__btn admin-panel--container__btn--primary"
-              [disabled]="cierreLoading()"
-              (click)="registrarCierre()"
-            >
-              @if (cierreLoading()) {
-                Registrando...
-              } @else {
-                Registrar cierre
-              }
-            </button>
-          </div>
-
-          <div
-            class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact admin-panel--container__section admin-panel--container__cierre-card admin-panel--container__cierre-card--compact"
-          >
-            <button
-              type="button"
-              class="admin-panel--container__action-button admin-panel--container__action-button--secondary"
-              [disabled]="!canExportLatestCierrePdf()"
-              (click)="exportLatestCierrePdf()"
-            >
-              Exportar Último cierre en PDF
-            </button>
-            <span class="admin-panel--container__hint admin-panel--container__hint--compact">
-              Genera un PDF imprimible desde navegador, listo para guardar o compartir.
-            </span>
-          </div>
-        </div>
-
-        <!-- Historial de cierres -->
-        <div class="admin-panel--container__section admin-panel--container__cierre-card">
-          <h3 class="admin-panel--container__block-form-title">Historial de cierres</h3>
-
-          @if (isLoadingCierres()) {
-            <p class="admin-panel--container__hint">Cargando historial...</p>
-          } @else if (cierreHistorial().length === 0) {
-            <p class="admin-panel--container__hint">No hay cierres registrados todavía.</p>
-          } @else {
-            <div class="admin-panel--container__table-wrapper">
-              <table class="admin-panel--container__table">
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Efectivo</th>
-                    <th>Tarjeta</th>
-                    <th>Bizum</th>
-                    <th>Total</th>
-                    <th>Notas</th>
-                    <th>Estado fiscal</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (cierre of cierreHistorial(); track cierre.id) {
-                    <tr>
-                      <td>{{ cierre.fechaIso }}</td>
-                      <td>{{ cierre.efectivo | number: '1.2-2' }} €</td>
-                      <td>{{ cierre.tarjeta | number: '1.2-2' }} €</td>
-                      <td>{{ cierre.bizum | number: '1.2-2' }} €</td>
-                      <td>
-                        <strong>{{ cierre.total | number: '1.2-2' }} €</strong>
-                      </td>
-                      <td>{{ cierre.notas || '-' }}</td>
-                      <td>
-                        @if (cierre.enviadoAlServicioFiscal) {
-                          <span
-                            class="admin-panel--container__badge admin-panel--container__badge--green"
-                            >Enviado ✓</span
-                          >
-                        } @else {
-                          <span
-                            class="admin-panel--container__badge admin-panel--container__badge--gray"
-                            >Pendiente</span
-                          >
+                    <div class="admin-panel--container__form-group">
+                      <label class="admin-panel--container__label" for="cierreDetailsEmployeeFilter"
+                        >Persona que cobró</label
+                      >
+                      <select
+                        id="cierreDetailsEmployeeFilter"
+                        class="admin-panel--container__input"
+                        [value]="cierreDetailsEmployeeFilter()"
+                        (change)="onCierreDetailsEmployeeFilterInput($event)"
+                      >
+                        <option value="all">Todas</option>
+                        @for (email of getCierreDetailsEmployeeOptions(); track email) {
+                          <option [value]="email">{{ email }}</option>
                         }
-                      </td>
-                      <td class="admin-panel--container__cierre-row-actions">
-                        <button
-                          type="button"
-                          class="admin-panel--container__action-button admin-panel--container__action-button--soft"
-                          (click)="openEditCierre(cierre)"
-                          title="Editar cierre"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          type="button"
-                          class="admin-panel--container__action-button admin-panel--container__action-button--reject"
-                          (click)="confirmDeleteCierre(cierre.id)"
-                          title="Eliminar cierre"
-                        >
-                          🗑️
-                        </button>
-                      </td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
+                      </select>
+                      <button
+                        type="button"
+                        class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                        style="margin-top: 0.5rem"
+                        (click)="clearCierreDetailsFilters()"
+                      >
+                        Limpiar filtros
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="admin-panel--container__cierre-summary" style="margin-top: 0.5rem">
+                    <div class="admin-panel--container__cierre-summary-row">
+                      <span class="admin-panel--container__cierre-summary-label"
+                        >Operaciones visibles</span
+                      >
+                      <span class="admin-panel--container__cierre-summary-value">{{
+                        getSelectedCierreDetailItems().length
+                      }}</span>
+                    </div>
+                    <div class="admin-panel--container__cierre-summary-row">
+                      <span class="admin-panel--container__cierre-summary-label"
+                        >Importe visible</span
+                      >
+                      <span class="admin-panel--container__cierre-summary-value"
+                        >{{ getSelectedCierreDetailsFilteredTotal() | number: '1.2-2' }} €</span
+                      >
+                    </div>
+                  </div>
+
+                  <div class="admin-panel--container__table-wrapper" style="margin-top: 0.75rem">
+                    <table class="admin-panel--container__table">
+                      <thead>
+                        <tr>
+                          <th>Fecha y hora</th>
+                          <th>Operación</th>
+                          <th>Método</th>
+                          <th>Importe</th>
+                          <th>Realizada por</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @if (getSelectedCierreDetailItems().length === 0) {
+                          <tr>
+                            <td colspan="5">No hay operaciones para los filtros seleccionados.</td>
+                          </tr>
+                        } @else {
+                          @for (item of getSelectedCierreDetailItems(); track item.id) {
+                            <tr>
+                              <td>{{ formatDateTime(item.createdAtIso) }}</td>
+                              <td>{{ item.concept }}</td>
+                              <td>{{ getPaymentMethodDisplayLabel(item.paymentMethod) }}</td>
+                              <td>{{ item.amount | number: '1.2-2' }} €</td>
+                              <td>{{ item.performedByEmail || '-' }}</td>
+                            </tr>
+                          }
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            }
+          }
+
+          <!-- Modal: editar cierre -->
+          @if (editingCierre()) {
+            <div class="admin-panel--container__modal-backdrop" (click)="closeEditCierre()">
+              <div
+                class="admin-panel--container__modal"
+                role="dialog"
+                aria-modal="true"
+                (click)="$event.stopPropagation()"
+              >
+                <div class="admin-panel--container__modal-head">
+                  <div>
+                    <h3 class="admin-panel--container__modal-title">Editar cierre</h3>
+                    <p class="admin-panel--container__modal-subtitle">
+                      {{ editingCierre()!.fechaIso }} · {{ editingCierre()!.registradoPorEmail }}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    class="admin-panel--container__modal-close"
+                    (click)="closeEditCierre()"
+                    aria-label="Cerrar"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                @if (editCierreError()) {
+                  <p class="admin-panel--container__error">{{ editCierreError() }}</p>
+                }
+
+                <div
+                  class="admin-panel--container__form-row admin-panel--container__form-row--cierre"
+                >
+                  <div class="admin-panel--container__form-group">
+                    <label class="admin-panel--container__label" for="editEfectivo"
+                      >Efectivo (€)</label
+                    >
+                    <input
+                      id="editEfectivo"
+                      class="admin-panel--container__input"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      [value]="editCierreEfectivo()"
+                      (input)="editCierreEfectivo.set($any($event.target).value)"
+                    />
+                  </div>
+                  <div class="admin-panel--container__form-group">
+                    <label class="admin-panel--container__label" for="editTarjeta"
+                      >Tarjeta (€)</label
+                    >
+                    <input
+                      id="editTarjeta"
+                      class="admin-panel--container__input"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      [value]="editCierreTarjeta()"
+                      (input)="editCierreTarjeta.set($any($event.target).value)"
+                    />
+                  </div>
+                  <div class="admin-panel--container__form-group">
+                    <label class="admin-panel--container__label" for="editBizum">Bizum (€)</label>
+                    <input
+                      id="editBizum"
+                      class="admin-panel--container__input"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      [value]="editCierreBizum()"
+                      (input)="editCierreBizum.set($any($event.target).value)"
+                    />
+                  </div>
+                </div>
+
+                <div class="admin-panel--container__form-group" style="margin-top: 0.75rem">
+                  <label class="admin-panel--container__label" for="editNotas">Notas</label>
+                  <textarea
+                    id="editNotas"
+                    class="admin-panel--container__textarea"
+                    rows="2"
+                    [value]="editCierreNotas()"
+                    (input)="editCierreNotas.set($any($event.target).value)"
+                  ></textarea>
+                </div>
+
+                <div class="admin-panel--container__modal-actions">
+                  <button
+                    type="button"
+                    class="admin-panel--container__btn admin-panel--container__btn--secondary"
+                    (click)="closeEditCierre()"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    class="admin-panel--container__btn admin-panel--container__btn--primary"
+                    [disabled]="editCierreLoading()"
+                    (click)="saveEditCierre()"
+                  >
+                    @if (editCierreLoading()) {
+                      Guardando...
+                    } @else {
+                      Guardar cambios
+                    }
+                  </button>
+                </div>
+              </div>
             </div>
           }
-        </div>
 
-        <!-- Modal: editar cierre -->
-        @if (editingCierre()) {
-          <div class="admin-panel--container__modal-backdrop" (click)="closeEditCierre()">
-            <div
-              class="admin-panel--container__modal"
-              role="dialog"
-              aria-modal="true"
-              (click)="$event.stopPropagation()"
-            >
-              <div class="admin-panel--container__modal-head">
-                <div>
-                  <h3 class="admin-panel--container__modal-title">Editar cierre</h3>
-                  <p class="admin-panel--container__modal-subtitle">
-                    {{ editingCierre()!.fechaIso }} · {{ editingCierre()!.registradoPorEmail }}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  class="admin-panel--container__modal-close"
-                  (click)="closeEditCierre()"
-                  aria-label="Cerrar"
-                >
-                  ×
-                </button>
-              </div>
-
-              @if (editCierreError()) {
-                <p class="admin-panel--container__error">{{ editCierreError() }}</p>
-              }
-
+          <!-- Modal: confirmar borrado cierre -->
+          @if (deletingCierreId()) {
+            <div class="admin-panel--container__modal-backdrop" (click)="cancelDeleteCierre()">
               <div
-                class="admin-panel--container__form-row admin-panel--container__form-row--cierre"
+                class="admin-panel--container__modal admin-panel--container__modal--compact"
+                role="dialog"
+                aria-modal="true"
+                (click)="$event.stopPropagation()"
               >
-                <div class="admin-panel--container__form-group">
-                  <label class="admin-panel--container__label" for="editEfectivo"
-                    >Efectivo (€)</label
+                <div class="admin-panel--container__modal-head">
+                  <h3 class="admin-panel--container__modal-title">¿Eliminar este cierre?</h3>
+                  <button
+                    type="button"
+                    class="admin-panel--container__modal-close"
+                    (click)="cancelDeleteCierre()"
+                    aria-label="Cerrar"
                   >
-                  <input
-                    id="editEfectivo"
-                    class="admin-panel--container__input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    [value]="editCierreEfectivo()"
-                    (input)="editCierreEfectivo.set($any($event.target).value)"
-                  />
+                    ×
+                  </button>
                 </div>
-                <div class="admin-panel--container__form-group">
-                  <label class="admin-panel--container__label" for="editTarjeta">Tarjeta (€)</label>
-                  <input
-                    id="editTarjeta"
-                    class="admin-panel--container__input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    [value]="editCierreTarjeta()"
-                    (input)="editCierreTarjeta.set($any($event.target).value)"
-                  />
+                <p class="admin-panel--container__modal-subtitle" style="padding-bottom: 0.75rem">
+                  Esta acción no se puede deshacer.
+                </p>
+                <div class="admin-panel--container__modal-actions">
+                  <button
+                    type="button"
+                    class="admin-panel--container__btn admin-panel--container__btn--secondary"
+                    (click)="cancelDeleteCierre()"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    class="admin-panel--container__action-button admin-panel--container__action-button--reject"
+                    [disabled]="deleteCierreLoading()"
+                    (click)="executeDeleteCierre()"
+                  >
+                    @if (deleteCierreLoading()) {
+                      Eliminando...
+                    } @else {
+                      Sí, eliminar
+                    }
+                  </button>
                 </div>
-                <div class="admin-panel--container__form-group">
-                  <label class="admin-panel--container__label" for="editBizum">Bizum (€)</label>
-                  <input
-                    id="editBizum"
-                    class="admin-panel--container__input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    [value]="editCierreBizum()"
-                    (input)="editCierreBizum.set($any($event.target).value)"
-                  />
-                </div>
-              </div>
-
-              <div class="admin-panel--container__form-group" style="margin-top: 0.75rem">
-                <label class="admin-panel--container__label" for="editNotas">Notas</label>
-                <textarea
-                  id="editNotas"
-                  class="admin-panel--container__textarea"
-                  rows="2"
-                  [value]="editCierreNotas()"
-                  (input)="editCierreNotas.set($any($event.target).value)"
-                ></textarea>
-              </div>
-
-              <div class="admin-panel--container__modal-actions">
-                <button
-                  type="button"
-                  class="admin-panel--container__btn admin-panel--container__btn--secondary"
-                  (click)="closeEditCierre()"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  class="admin-panel--container__btn admin-panel--container__btn--primary"
-                  [disabled]="editCierreLoading()"
-                  (click)="saveEditCierre()"
-                >
-                  @if (editCierreLoading()) {
-                    Guardando...
-                  } @else {
-                    Guardar cambios
-                  }
-                </button>
               </div>
             </div>
-          </div>
+          }
         }
 
-        <!-- Modal: confirmar borrado cierre -->
-        @if (deletingCierreId()) {
-          <div class="admin-panel--container__modal-backdrop" (click)="cancelDeleteCierre()">
-            <div
-              class="admin-panel--container__modal admin-panel--container__modal--compact"
-              role="dialog"
-              aria-modal="true"
-              (click)="$event.stopPropagation()"
-            >
-              <div class="admin-panel--container__modal-head">
-                <h3 class="admin-panel--container__modal-title">¿Eliminar este cierre?</h3>
-                <button
-                  type="button"
-                  class="admin-panel--container__modal-close"
-                  (click)="cancelDeleteCierre()"
-                  aria-label="Cerrar"
-                >
-                  ×
-                </button>
-              </div>
-              <p class="admin-panel--container__modal-subtitle" style="padding-bottom: 0.75rem">
-                Esta acción no se puede deshacer.
-              </p>
-              <div class="admin-panel--container__modal-actions">
-                <button
-                  type="button"
-                  class="admin-panel--container__btn admin-panel--container__btn--secondary"
-                  (click)="cancelDeleteCierre()"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  class="admin-panel--container__action-button admin-panel--container__action-button--reject"
-                  [disabled]="deleteCierreLoading()"
-                  (click)="executeDeleteCierre()"
-                >
-                  @if (deleteCierreLoading()) {
-                    Eliminando...
-                  } @else {
-                    Sí, eliminar
-                  }
-                </button>
-              </div>
-            </div>
-          </div>
-        }
+        @if (cierreManagementTab() === 'estadisticas') {
+          <div class="admin-panel--container__section admin-panel--container__cierre-card">
+            <h3 class="admin-panel--container__block-form-title">Estadísticas de caja</h3>
+            <p class="admin-panel--container__hint">
+              Visualiza el dinero generado por semana, mes o año, y compara efectivo, tarjeta,
+              Bizum, digital o total.
+            </p>
 
-        <div class="admin-panel--container__section admin-panel--container__cierre-card">
-          <h3 class="admin-panel--container__block-form-title">Estadísticas de caja</h3>
-          <p class="admin-panel--container__hint">
-            Visualiza el dinero generado por semana, mes o año, y compara efectivo, tarjeta, Bizum,
-            digital o total.
-          </p>
-
-          <div class="admin-panel--container__client-stats-filters">
-            <label class="admin-panel--container__label">
-              Periodo
-              <span class="admin-panel--container__time-select-wrap">
-                <select
-                  class="admin-panel--container__input admin-panel--container__time-select"
-                  [value]="cierreStatsRange()"
-                  (change)="onCierreStatsRangeChange($event)"
-                >
-                  <option value="semana">Semana actual</option>
-                  <option value="mes">Mes actual</option>
-                  <option value="anio">Año actual</option>
-                </select>
-              </span>
-            </label>
-
-            <label class="admin-panel--container__label">
-              Métrica
-              <span class="admin-panel--container__time-select-wrap">
-                <select
-                  class="admin-panel--container__input admin-panel--container__time-select"
-                  [value]="cierreStatsMetric()"
-                  (change)="onCierreStatsMetricChange($event)"
-                >
-                  <option value="efectivo">Efectivo</option>
-                  <option value="tarjeta">Tarjeta</option>
-                  <option value="bizum">Bizum</option>
-                  <option value="digital">Tarjeta + Bizum</option>
-                  <option value="total">Total</option>
-                </select>
-              </span>
-            </label>
-          </div>
-
-          <div class="admin-panel--container__employee-stats-grid">
-            <span class="admin-panel--container__employee-stat-chip">
-              Rango · {{ getCierreStatsRangeLabel() }}
-            </span>
-            <span class="admin-panel--container__employee-stat-chip">
-              Vista · {{ getCierreStatsMetricLabel() }}
-            </span>
-            <span class="admin-panel--container__employee-stat-chip">
-              Total · {{ getCierreStatsTotalAmount() | number: '1.2-2' }} €
-            </span>
-            <span class="admin-panel--container__employee-stat-chip">
-              Cierres · {{ getCierreStatsEntries().length }}
-            </span>
-          </div>
-          @let cierreTimelineRows = getCierreStatsTimelineRows();
-          @let cierrePieData = getCierreStatsPieData();
-
-          <div
-            class="admin-panel--container__client-chart admin-panel--container__client-chart--stats admin-panel--container__section admin-panel--container__cierre-card admin-panel--container__cierre-card--chart"
-          >
-            <div class="admin-panel--container__client-chart-head">
-              <p class="admin-panel--container__employee-history-title">Evolución del dinero</p>
-              <div class="admin-panel--container__client-chart-controls">
-                <span class="admin-panel--container__employee-stat-chip">
-                  Agrupación: {{ getCierreStatsGroupingLabel() }}
+            <div class="admin-panel--container__client-stats-filters">
+              <label class="admin-panel--container__label">
+                Periodo
+                <span class="admin-panel--container__time-select-wrap">
+                  <select
+                    class="admin-panel--container__input admin-panel--container__time-select"
+                    [value]="cierreStatsRange()"
+                    (change)="onCierreStatsRangeChange($event)"
+                  >
+                    <option value="semana">Semana actual</option>
+                    <option value="mes">Mes actual</option>
+                    <option value="anio">Año actual</option>
+                  </select>
                 </span>
-              </div>
+              </label>
+
+              <label class="admin-panel--container__label">
+                Métrica
+                <span class="admin-panel--container__time-select-wrap">
+                  <select
+                    class="admin-panel--container__input admin-panel--container__time-select"
+                    [value]="cierreStatsMetric()"
+                    (change)="onCierreStatsMetricChange($event)"
+                  >
+                    <option value="efectivo">Efectivo</option>
+                    <option value="tarjeta">Tarjeta</option>
+                    <option value="bizum">Bizum</option>
+                    <option value="digital">Tarjeta + Bizum</option>
+                    <option value="total">Total</option>
+                  </select>
+                </span>
+              </label>
             </div>
 
-            @if (cierreTimelineRows.length === 0) {
-              <p class="admin-panel--container__hint">
-                No hay cierres registrados en ese periodo para generar la gráfica de barras.
-              </p>
-            } @else {
-              @let cierreBarTicks = getCierreStatsBarTicks(cierreTimelineRows);
-              <div class="admin-panel--container__client-bar-chart">
-                <div class="admin-panel--container__client-bar-axis">
-                  @for (tick of cierreBarTicks; track $index) {
-                    <span>{{ tick | number: '1.0-0' }}</span>
-                  }
-                </div>
+            <div class="admin-panel--container__employee-stats-grid">
+              <span class="admin-panel--container__employee-stat-chip">
+                Rango · {{ getCierreStatsRangeLabel() }}
+              </span>
+              <span class="admin-panel--container__employee-stat-chip">
+                Vista · {{ getCierreStatsMetricLabel() }}
+              </span>
+              <span class="admin-panel--container__employee-stat-chip">
+                Total · {{ getCierreStatsTotalAmount() | number: '1.2-2' }} €
+              </span>
+              <span class="admin-panel--container__employee-stat-chip">
+                Cierres · {{ getCierreStatsEntries().length }}
+              </span>
+            </div>
+            @let cierreTimelineRows = getCierreStatsTimelineRows();
+            @let cierrePieData = getCierreStatsPieData();
 
-                <div class="admin-panel--container__client-bar-main">
-                  <div class="admin-panel--container__client-bar-scroll">
-                    <div
-                      class="admin-panel--container__client-bar-scroll-inner"
-                      [style.min-width.rem]="
-                        getCierreStatsChartMinWidthRem(cierreTimelineRows.length)
-                      "
-                    >
-                      <div class="admin-panel--container__client-bar-plot">
-                        <div class="admin-panel--container__client-columns">
+            <div
+              class="admin-panel--container__client-chart admin-panel--container__client-chart--stats admin-panel--container__section admin-panel--container__cierre-card admin-panel--container__cierre-card--chart"
+            >
+              <div class="admin-panel--container__client-chart-head">
+                <p class="admin-panel--container__employee-history-title">Evolución del dinero</p>
+                <div class="admin-panel--container__client-chart-controls">
+                  <span class="admin-panel--container__employee-stat-chip">
+                    Agrupación: {{ getCierreStatsGroupingLabel() }}
+                  </span>
+                </div>
+              </div>
+
+              @if (cierreTimelineRows.length === 0) {
+                <p class="admin-panel--container__hint">
+                  No hay cierres registrados en ese periodo para generar la gráfica de barras.
+                </p>
+              } @else {
+                @let cierreBarTicks = getCierreStatsBarTicks(cierreTimelineRows);
+                <div class="admin-panel--container__client-bar-chart">
+                  <div class="admin-panel--container__client-bar-axis">
+                    @for (tick of cierreBarTicks; track $index) {
+                      <span>{{ tick | number: '1.0-0' }}</span>
+                    }
+                  </div>
+
+                  <div class="admin-panel--container__client-bar-main">
+                    <div class="admin-panel--container__client-bar-scroll">
+                      <div
+                        class="admin-panel--container__client-bar-scroll-inner"
+                        [style.min-width.rem]="
+                          getCierreStatsChartMinWidthRem(cierreTimelineRows.length)
+                        "
+                      >
+                        <div class="admin-panel--container__client-bar-plot">
+                          <div class="admin-panel--container__client-columns">
+                            @for (row of cierreTimelineRows; track row.key) {
+                              <div class="admin-panel--container__client-column-item">
+                                <span class="admin-panel--container__client-column-value">
+                                  {{ row.amount | number: '1.0-0' }}
+                                </span>
+                                <div
+                                  class="admin-panel--container__client-column-bar"
+                                  [style.height.%]="row.heightPercent"
+                                  [style.background]="row.color"
+                                  [attr.title]="
+                                    row.tooltipLabel + ' · ' + (row.amount | number: '1.2-2') + ' €'
+                                  "
+                                ></div>
+                              </div>
+                            }
+                          </div>
+                        </div>
+
+                        <div class="admin-panel--container__client-column-labels">
                           @for (row of cierreTimelineRows; track row.key) {
-                            <div class="admin-panel--container__client-column-item">
-                              <span class="admin-panel--container__client-column-value">
-                                {{ row.amount | number: '1.0-0' }}
-                              </span>
-                              <div
-                                class="admin-panel--container__client-column-bar"
-                                [style.height.%]="row.heightPercent"
-                                [style.background]="row.color"
-                                [attr.title]="
-                                  row.tooltipLabel + ' · ' + (row.amount | number: '1.2-2') + ' €'
-                                "
-                              ></div>
-                            </div>
+                            <span
+                              class="admin-panel--container__client-column-label"
+                              [attr.title]="row.tooltipLabel"
+                            >
+                              {{ row.showLabel ? row.shortLabel : '·' }}
+                            </span>
                           }
                         </div>
                       </div>
-
-                      <div class="admin-panel--container__client-column-labels">
-                        @for (row of cierreTimelineRows; track row.key) {
-                          <span
-                            class="admin-panel--container__client-column-label"
-                            [attr.title]="row.tooltipLabel"
-                          >
-                            {{ row.showLabel ? row.shortLabel : '·' }}
-                          </span>
-                        }
-                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            }
-          </div>
-
-          <div
-            class="admin-panel--container__client-chart admin-panel--container__client-chart--stats admin-panel--container__section admin-panel--container__cierre-card admin-panel--container__cierre-card--chart"
-          >
-            <div class="admin-panel--container__client-chart-head">
-              <p class="admin-panel--container__employee-history-title">
-                Reparto por forma de pago
-              </p>
-              <div class="admin-panel--container__client-chart-controls">
-                <span class="admin-panel--container__employee-stat-chip">
-                  Periodo: {{ getCierreStatsRangeLabel() }}
-                </span>
-              </div>
+              }
             </div>
 
-            @if (cierrePieData.total === 0) {
-              <p class="admin-panel--container__hint">
-                No hay importes acumulados para mostrar la gráfica circular.
-              </p>
-            } @else {
-              <div class="admin-panel--container__client-pie-layout">
-                <div
-                  class="admin-panel--container__client-pie-chart admin-panel--container__client-pie-chart--stats"
-                  [style.background]="cierrePieData.gradient"
-                  role="img"
-                  [attr.aria-label]="'Reparto de ingresos. Total: ' + cierrePieData.total"
-                >
-                  <div class="admin-panel--container__client-pie-hole">
-                    <span>Total</span>
-                    <strong>{{ cierrePieData.total | number: '1.0-0' }} €</strong>
-                  </div>
-                </div>
-
-                <div class="admin-panel--container__client-chart-list">
-                  @for (slice of cierrePieData.slices; track slice.name) {
-                    <div class="admin-panel--container__client-chart-row">
-                      <div class="admin-panel--container__client-chart-legend">
-                        <span
-                          class="admin-panel--container__client-chart-dot"
-                          [style.background]="slice.color"
-                        ></span>
-                        <span class="admin-panel--container__client-chart-label">
-                          {{ slice.name }}
-                        </span>
-                      </div>
-                      <span class="admin-panel--container__client-chart-value">
-                        {{ slice.amount | number: '1.2-2' }} € · {{ slice.percentage }}%
-                      </span>
-                    </div>
-                  }
+            <div
+              class="admin-panel--container__client-chart admin-panel--container__client-chart--stats admin-panel--container__section admin-panel--container__cierre-card admin-panel--container__cierre-card--chart"
+            >
+              <div class="admin-panel--container__client-chart-head">
+                <p class="admin-panel--container__employee-history-title">
+                  Reparto por forma de pago
+                </p>
+                <div class="admin-panel--container__client-chart-controls">
+                  <span class="admin-panel--container__employee-stat-chip">
+                    Periodo: {{ getCierreStatsRangeLabel() }}
+                  </span>
                 </div>
               </div>
-            }
+
+              @if (cierrePieData.total === 0) {
+                <p class="admin-panel--container__hint">
+                  No hay importes acumulados para mostrar la gráfica circular.
+                </p>
+              } @else {
+                <div class="admin-panel--container__client-pie-layout">
+                  <div
+                    class="admin-panel--container__client-pie-chart admin-panel--container__client-pie-chart--stats"
+                    [style.background]="cierrePieData.gradient"
+                    role="img"
+                    [attr.aria-label]="'Reparto de ingresos. Total: ' + cierrePieData.total"
+                  >
+                    <div class="admin-panel--container__client-pie-hole">
+                      <span>Total</span>
+                      <strong>{{ cierrePieData.total | number: '1.0-0' }} €</strong>
+                    </div>
+                  </div>
+
+                  <div class="admin-panel--container__client-chart-list">
+                    @for (slice of cierrePieData.slices; track slice.name) {
+                      <div class="admin-panel--container__client-chart-row">
+                        <div class="admin-panel--container__client-chart-legend">
+                          <span
+                            class="admin-panel--container__client-chart-dot"
+                            [style.background]="slice.color"
+                          ></span>
+                          <span class="admin-panel--container__client-chart-label">
+                            {{ slice.name }}
+                          </span>
+                        </div>
+                        <span class="admin-panel--container__client-chart-value">
+                          {{ slice.amount | number: '1.2-2' }} € · {{ slice.percentage }}%
+                        </span>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
           </div>
-        </div>
+        }
       }
 
       @if (activeTab() === 'estadisticas') {
@@ -4992,6 +5416,213 @@
             }
           </button>
         </div>
+      </div>
+    </div>
+  }
+
+  @if (showEditStockModal()) {
+    <div class="admin-panel--container__modal-backdrop" (click)="closeEditStockModal()">
+      <div
+        class="admin-panel--container__modal admin-panel--container__modal--compact"
+        role="dialog"
+        aria-modal="true"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="admin-panel--container__modal-head">
+          <div>
+            <h3 class="admin-panel--container__modal-title">Modificar producto</h3>
+          </div>
+          <button
+            type="button"
+            class="admin-panel--container__modal-close"
+            (click)="closeEditStockModal()"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+
+        <div class="admin-panel--container__form-row">
+          <div class="admin-panel--container__form-group">
+            <label class="admin-panel--container__label">
+              Titulo
+              <input
+                class="admin-panel--container__input"
+                type="text"
+                maxlength="120"
+                [value]="editStockName()"
+                (input)="onEditStockNameInput($event)"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div class="admin-panel--container__form-row">
+          <div class="admin-panel--container__form-group">
+            <label class="admin-panel--container__label">
+              Precio
+              <input
+                class="admin-panel--container__input"
+                type="number"
+                min="0"
+                step="0.01"
+                [value]="editStockPrice()"
+                (input)="onEditStockPriceInput($event)"
+              />
+            </label>
+          </div>
+        </div>
+
+        <label class="admin-panel--container__checkbox-label">
+          <input
+            type="checkbox"
+            [checked]="editStockIsSellable()"
+            (change)="onEditStockIsSellableInput($event)"
+          />
+          Producto para vender
+        </label>
+
+        <div class="admin-panel--container__modal-actions">
+          <button
+            type="button"
+            class="admin-panel--container__btn admin-panel--container__btn--secondary"
+            [disabled]="editStockLoading()"
+            (click)="closeEditStockModal()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__btn admin-panel--container__btn--primary"
+            [disabled]="editStockLoading()"
+            (click)="saveStockProductEdit()"
+          >
+            {{ editStockLoading() ? 'Guardando...' : 'Guardar cambios' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showStockSaleModal()) {
+    <div class="admin-panel--container__modal-backdrop" (click)="closeStockSaleModal()">
+      <div
+        class="admin-panel--container__modal admin-panel--container__modal--compact"
+        role="dialog"
+        aria-modal="true"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="admin-panel--container__modal-head">
+          <div>
+            <h3 class="admin-panel--container__modal-title">Vender producto</h3>
+          </div>
+          <button
+            type="button"
+            class="admin-panel--container__modal-close"
+            (click)="closeStockSaleModal()"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+
+        @if (getSelectedStockSaleProduct(); as selectedProduct) {
+          <div class="admin-panel--container__stock-sale-detail">
+            <h4 class="admin-panel--container__reservation-title">
+              {{ selectedProduct.productName }}
+            </h4>
+            <p class="admin-panel--container__reservation-text">
+              Descripcion: {{ getSelectedStockSaleDescription(selectedProduct) }}
+            </p>
+            <p class="admin-panel--container__reservation-text">
+              Precio unitario: {{ selectedProduct.price | number: '1.2-2' }} EUR
+            </p>
+            <p class="admin-panel--container__reservation-text">
+              Unidades disponibles: {{ selectedProduct.quantity }}
+            </p>
+
+            <div class="admin-panel--container__form-row">
+              <div class="admin-panel--container__form-group">
+                <label class="admin-panel--container__label">
+                  Unidades a vender
+                  <input
+                    class="admin-panel--container__input"
+                    type="number"
+                    min="1"
+                    step="1"
+                    [max]="selectedProduct.quantity"
+                    [value]="stockSaleUnits()"
+                    (input)="onStockSaleUnitsInput($event)"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <p class="admin-panel--container__reservation-text">
+              Total: {{ getStockSaleTotalAmount() | number: '1.2-2' }} EUR
+            </p>
+
+            <div
+              class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact"
+            >
+              <button
+                type="button"
+                class="admin-panel--container__action-button admin-panel--container__action-button--soft admin-panel--container__stock-sale-method-btn"
+                [class.admin-panel--container__stock-sale-method-btn--active]="
+                  stockSalePaymentMethod() === 'efectivo'
+                "
+                (click)="setStockSalePaymentMethod('efectivo')"
+              >
+                💵 Efectivo
+              </button>
+              <button
+                type="button"
+                class="admin-panel--container__action-button admin-panel--container__action-button--soft admin-panel--container__stock-sale-method-btn"
+                [class.admin-panel--container__stock-sale-method-btn--active]="
+                  stockSalePaymentMethod() === 'tarjeta'
+                "
+                (click)="setStockSalePaymentMethod('tarjeta')"
+              >
+                💳 Tarjeta
+              </button>
+              <button
+                type="button"
+                class="admin-panel--container__action-button admin-panel--container__action-button--soft admin-panel--container__stock-sale-method-btn"
+                [class.admin-panel--container__stock-sale-method-btn--active]="
+                  stockSalePaymentMethod() === 'bizum'
+                "
+                (click)="setStockSalePaymentMethod('bizum')"
+              >
+                📱 Bizum
+              </button>
+            </div>
+
+            <div class="admin-panel--container__modal-actions">
+              <button
+                type="button"
+                class="admin-panel--container__btn admin-panel--container__btn--secondary"
+                [disabled]="stockSaleLoading()"
+                (click)="closeStockSaleModal()"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                class="admin-panel--container__btn admin-panel--container__btn--primary"
+                [disabled]="stockSaleLoading() || selectedProduct.quantity === 0"
+                (click)="submitStockSale()"
+              >
+                {{ stockSaleLoading() ? 'Registrando venta...' : 'Cobrar venta' }}
+              </button>
+            </div>
+
+            @if (stockSaleError()) {
+              <p class="admin-panel--container__error">{{ stockSaleError() }}</p>
+            }
+          </div>
+        } @else {
+          <p class="admin-panel--container__hint">Selecciona un producto para vender.</p>
+        }
       </div>
     </div>
   }

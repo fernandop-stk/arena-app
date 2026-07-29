@@ -648,6 +648,17 @@ interface DailyPaymentSummaryItem {
   bizum: number;
   total: number;
   updatedAtIso: string;
+  operationDetails: PaymentOperationDetail[];
+}
+
+interface PaymentOperationDetail {
+  id: string;
+  operationType: 'stock_sale' | 'client_pack_payment' | 'reservation_payment';
+  concept: string;
+  amount: number;
+  paymentMethod: 'efectivo' | 'tarjeta' | 'bizum';
+  performedByEmail: string;
+  createdAtIso: string;
 }
 
 interface ClientCardItem {
@@ -675,6 +686,18 @@ interface StockProductItem {
   createdByEmail: string;
 }
 
+interface StockSaleHistoryItem {
+  id: string;
+  productId: string;
+  productName: string;
+  soldUnits: number;
+  unitPrice: number;
+  totalAmount: number;
+  paymentMethod: 'efectivo' | 'tarjeta' | 'bizum';
+  soldByEmail: string;
+  soldAtIso: string;
+}
+
 interface CierreCajaItem {
   id: string;
   fechaIso: string;
@@ -688,12 +711,14 @@ interface CierreCajaItem {
   // preparado para integración con servicio fiscal externo (ej. Verifactu / API del SII)
   enviadoAlServicioFiscal: boolean;
   idServicioFiscal: string;
+  operationDetails: PaymentOperationDetail[];
 }
 
 const usersByEmail = new Map<string, AppUser>();
 const usersByUsername = new Map<string, AppUser>();
 const clientCardsById = new Map<string, ClientCardItem>();
 const stockProductsById = new Map<string, StockProductItem>();
+const stockSalesById = new Map<string, StockSaleHistoryItem>();
 const cierreCajaById = new Map<string, CierreCajaItem>();
 const dailyPaymentsByDateIso = new Map<string, DailyPaymentSummaryItem>();
 const clientRecoveryTokens = new Map<string, { email: string; expiresAt: number }>();
@@ -703,6 +728,7 @@ const runtimeDataDir = join(process.cwd(), '.runtime-data');
 const usersBackupFilePath = join(runtimeDataDir, 'users.json');
 const clientCardsBackupFilePath = join(runtimeDataDir, 'client-cards.json');
 const stockProductsBackupFilePath = join(runtimeDataDir, 'stock-products.json');
+const stockSalesBackupFilePath = join(runtimeDataDir, 'stock-sales.json');
 const cierreCajaBackupFilePath = join(runtimeDataDir, 'cierre-caja.json');
 const dailyPaymentsBackupFilePath = join(runtimeDataDir, 'daily-payments.json');
 
@@ -1023,6 +1049,8 @@ const buildClientTreatmentId = (): string =>
   `treat-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const buildStockProductId = (): string =>
   `stock-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+const buildStockSaleId = (): string =>
+  `stock-sale-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 const normalizeBirthDateIso = (value: unknown): string => {
   const raw = `${value ?? ''}`.trim();
@@ -1070,6 +1098,29 @@ const normalizeStockProduct = (product: StockProductItem): StockProductItem => {
     quantity: normalizedQuantity,
     price: Number(normalizedPrice.toFixed(2)),
     isSellable: Boolean(product.isSellable),
+  };
+};
+
+const normalizeStockSale = (sale: StockSaleHistoryItem): StockSaleHistoryItem => {
+  const soldUnits = Number.isFinite(sale.soldUnits) ? Math.max(1, Math.floor(sale.soldUnits)) : 1;
+  const unitPrice = Number.isFinite(sale.unitPrice) ? Math.max(0, sale.unitPrice) : 0;
+  const totalAmount = Number.isFinite(sale.totalAmount)
+    ? Math.max(0, sale.totalAmount)
+    : unitPrice * soldUnits;
+
+  return {
+    ...sale,
+    productId: `${sale.productId ?? ''}`.trim(),
+    productName: `${sale.productName ?? ''}`.trim().slice(0, 120),
+    soldUnits,
+    unitPrice: Number(unitPrice.toFixed(2)),
+    totalAmount: Number(totalAmount.toFixed(2)),
+    paymentMethod:
+      sale.paymentMethod === 'tarjeta' || sale.paymentMethod === 'bizum'
+        ? sale.paymentMethod
+        : 'efectivo',
+    soldByEmail: `${sale.soldByEmail ?? ''}`.toLowerCase().trim(),
+    soldAtIso: `${sale.soldAtIso ?? new Date().toISOString()}`,
   };
 };
 
@@ -1134,6 +1185,18 @@ const persistStockProductsToDisk = async (): Promise<void> => {
     await writeFile(stockProductsBackupFilePath, JSON.stringify(products, null, 2), 'utf8');
   } catch (error) {
     console.error('Error guardando backup local de almacén:', error);
+  }
+};
+
+const persistStockSalesToDisk = async (): Promise<void> => {
+  try {
+    await ensureRuntimeDataDir();
+    const sales = Array.from(stockSalesById.values())
+      .map((sale) => normalizeStockSale(sale))
+      .sort((a, b) => b.soldAtIso.localeCompare(a.soldAtIso));
+    await writeFile(stockSalesBackupFilePath, JSON.stringify(sales, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Error guardando backup local de ventas de stock:', error);
   }
 };
 
@@ -1202,10 +1265,85 @@ const loadStockProductsFromDisk = async (): Promise<StockProductItem[]> => {
   }
 };
 
+const loadStockSalesFromDisk = async (): Promise<StockSaleHistoryItem[]> => {
+  try {
+    const raw = await readFile(stockSalesBackupFilePath, 'utf8');
+    const parsed = JSON.parse(raw) as StockSaleHistoryItem[];
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.filter((sale) => Boolean(sale?.id)).map((sale) => normalizeStockSale(sale));
+  } catch {
+    return [];
+  }
+};
+
 // ── Cierre de caja helpers ────────────────────────────────────────────────────
 
 const buildCierreId = (): string =>
   `cierre_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+const buildPaymentOperationId = (): string =>
+  `payop_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+const normalizePaymentOperationDetail = (
+  detail: PaymentOperationDetail,
+): PaymentOperationDetail => {
+  const paymentMethod =
+    detail.paymentMethod === 'tarjeta' || detail.paymentMethod === 'bizum'
+      ? detail.paymentMethod
+      : 'efectivo';
+
+  const operationType =
+    detail.operationType === 'stock_sale' || detail.operationType === 'reservation_payment'
+      ? detail.operationType
+      : 'client_pack_payment';
+
+  return {
+    id: `${detail.id ?? buildPaymentOperationId()}`,
+    operationType,
+    concept: `${detail.concept ?? ''}`.trim().slice(0, 180) || 'Operación',
+    amount: Number(detail.amount) || 0,
+    paymentMethod,
+    performedByEmail: `${detail.performedByEmail ?? ''}`.trim().toLowerCase(),
+    createdAtIso: `${detail.createdAtIso ?? new Date().toISOString()}`,
+  };
+};
+
+const normalizePaymentOperationDetails = (value: unknown): PaymentOperationDetail[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return null;
+      }
+
+      const candidate = item as Partial<PaymentOperationDetail>;
+      return normalizePaymentOperationDetail({
+        id: `${candidate.id ?? ''}`,
+        operationType:
+          candidate.operationType === 'stock_sale' ||
+          candidate.operationType === 'reservation_payment'
+            ? candidate.operationType
+            : 'client_pack_payment',
+        concept: `${candidate.concept ?? ''}`,
+        amount: Number(candidate.amount) || 0,
+        paymentMethod:
+          candidate.paymentMethod === 'tarjeta' || candidate.paymentMethod === 'bizum'
+            ? candidate.paymentMethod
+            : 'efectivo',
+        performedByEmail: `${candidate.performedByEmail ?? ''}`,
+        createdAtIso: `${candidate.createdAtIso ?? new Date().toISOString()}`,
+      });
+    })
+    .filter((detail): detail is PaymentOperationDetail => detail !== null && detail.amount > 0)
+    .sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso));
+};
 
 const normalizeCierre = (cierre: CierreCajaItem): CierreCajaItem => ({
   id: `${cierre.id ?? ''}`,
@@ -1219,7 +1357,23 @@ const normalizeCierre = (cierre: CierreCajaItem): CierreCajaItem => ({
   createdAtIso: `${cierre.createdAtIso ?? new Date().toISOString()}`,
   enviadoAlServicioFiscal: Boolean(cierre.enviadoAlServicioFiscal),
   idServicioFiscal: `${cierre.idServicioFiscal ?? ''}`,
+  operationDetails: normalizePaymentOperationDetails(cierre.operationDetails),
 });
+
+const getLatestCierreForDate = (dateIso: string): CierreCajaItem | null => {
+  const normalizedDateIso = `${dateIso ?? ''}`.trim();
+
+  if (!normalizedDateIso) {
+    return null;
+  }
+
+  const cierresForDate = Array.from(cierreCajaById.values())
+    .map(normalizeCierre)
+    .filter((cierre) => cierre.fechaIso === normalizedDateIso)
+    .sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso));
+
+  return cierresForDate[0] ?? null;
+};
 
 const parseCierreAmount = (value: unknown): number | null => {
   if (value === undefined || value === null || value === '') {
@@ -1270,6 +1424,7 @@ const normalizeDailyPaymentSummary = (item: DailyPaymentSummaryItem): DailyPayme
     bizum,
     total: Number((efectivo + tarjeta + bizum).toFixed(2)),
     updatedAtIso: `${item.updatedAtIso ?? new Date().toISOString()}`,
+    operationDetails: normalizePaymentOperationDetails(item.operationDetails),
   };
 };
 
@@ -1303,6 +1458,11 @@ const addPaymentToDailySummary = (
   dateIso: string,
   paymentMethod: 'efectivo' | 'tarjeta' | 'bizum',
   amount: number,
+  operationDetail: {
+    operationType: 'stock_sale' | 'client_pack_payment' | 'reservation_payment';
+    concept: string;
+    performedByEmail: string;
+  },
 ): DailyPaymentSummaryItem => {
   const current = dailyPaymentsByDateIso.get(dateIso) ?? {
     dateIso,
@@ -1311,12 +1471,24 @@ const addPaymentToDailySummary = (
     bizum: 0,
     total: 0,
     updatedAtIso: new Date().toISOString(),
+    operationDetails: [],
   };
+
+  const detail = normalizePaymentOperationDetail({
+    id: buildPaymentOperationId(),
+    operationType: operationDetail.operationType,
+    concept: operationDetail.concept,
+    amount,
+    paymentMethod,
+    performedByEmail: operationDetail.performedByEmail,
+    createdAtIso: new Date().toISOString(),
+  });
 
   const next: DailyPaymentSummaryItem = {
     ...current,
     [paymentMethod]: Number((current[paymentMethod] + amount).toFixed(2)),
     updatedAtIso: new Date().toISOString(),
+    operationDetails: [detail, ...(current.operationDetails ?? [])],
   };
 
   const normalized = normalizeDailyPaymentSummary(next);
@@ -3123,6 +3295,21 @@ app.get('/api/admin/almacen', (req, res) => {
   return res.status(200).json({ ok: true, products });
 });
 
+app.get('/api/admin/almacen/sales', (req, res) => {
+  seedAuthUsers();
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const sales = Array.from(stockSalesById.values())
+    .map((sale) => normalizeStockSale(sale))
+    .sort((a, b) => b.soldAtIso.localeCompare(a.soldAtIso));
+
+  return res.status(200).json({ ok: true, sales });
+});
+
 app.post('/api/admin/almacen', async (req, res) => {
   seedAuthUsers();
   const session = isAdminRequest(req.headers.cookie);
@@ -3135,13 +3322,14 @@ app.post('/api/admin/almacen', async (req, res) => {
   const brand = `${req.body?.brand ?? ''}`.trim();
   const color = `${req.body?.color ?? ''}`.trim();
   const quantity = Number(req.body?.quantity ?? NaN);
-  const price = Number(req.body?.price ?? NaN);
+  const priceRaw = `${req.body?.price ?? ''}`.trim().replace(',', '.');
+  const price = priceRaw === '' ? 0 : Number(priceRaw);
   const isSellable = Boolean(req.body?.isSellable);
 
-  if (!productName || !brand || !color) {
+  if (!productName || !brand) {
     return res.status(400).json({
       ok: false,
-      error: 'Nombre del producto, marca y color son obligatorios.',
+      error: 'Nombre del producto y marca son obligatorios.',
     });
   }
 
@@ -3186,6 +3374,68 @@ app.post('/api/admin/almacen', async (req, res) => {
   console.log(`[persistencia] stock guardado en DB id=${product.id}`);
 
   return res.status(200).json({ ok: true, product });
+});
+
+app.patch('/api/admin/almacen/:id', async (req, res) => {
+  seedAuthUsers();
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const id = `${req.params['id'] ?? ''}`.trim();
+  const productName = `${req.body?.productName ?? ''}`.trim();
+  const priceRaw = `${req.body?.price ?? ''}`.trim().replace(',', '.');
+  const price = priceRaw === '' ? 0 : Number(priceRaw);
+  const sellableRaw = req.body?.isSellable;
+  const isSellable =
+    typeof sellableRaw === 'string'
+      ? ['1', 'true', 'yes', 'si', 'sí'].includes(sellableRaw.trim().toLowerCase())
+      : Boolean(sellableRaw);
+
+  if (!id) {
+    return res.status(400).json({ ok: false, error: 'ID de producto inválido.' });
+  }
+
+  if (!productName) {
+    return res.status(400).json({ ok: false, error: 'El título del producto es obligatorio.' });
+  }
+
+  if (!Number.isFinite(price) || price < 0) {
+    return res.status(400).json({
+      ok: false,
+      error: 'El precio debe ser un número válido igual o mayor que 0.',
+    });
+  }
+
+  const product = stockProductsById.get(id);
+
+  if (!product) {
+    return res.status(404).json({ ok: false, error: 'Producto no encontrado.' });
+  }
+
+  const updated = normalizeStockProduct({
+    ...product,
+    productName,
+    price,
+    isSellable,
+  });
+
+  try {
+    await saveStockProductToDb(updated);
+  } catch (error) {
+    console.error('Error persistiendo edición de stock en DB:', error);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo actualizar el producto en base de datos. Intenta de nuevo.',
+    });
+  }
+
+  stockProductsById.set(id, updated);
+  void persistStockProductsToDisk();
+
+  return res.status(200).json({ ok: true, product: normalizeStockProduct(updated) });
 });
 
 // ── Cierre de caja ─────────────────────────────────────────────────────────
@@ -3233,6 +3483,103 @@ app.patch('/api/admin/almacen/:id/quantity', async (req, res) => {
   void persistStockProductsToDisk();
 
   return res.status(200).json({ ok: true, product: normalizeStockProduct(updated) });
+});
+
+app.post('/api/admin/almacen/:id/sell', async (req, res) => {
+  seedAuthUsers();
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const id = `${req.params['id'] ?? ''}`.trim();
+  const units = Number(req.body?.units ?? NaN);
+  const paymentMethod = `${req.body?.paymentMethod ?? ''}`.trim();
+
+  if (!id) {
+    return res.status(400).json({ ok: false, error: 'ID de producto inválido.' });
+  }
+
+  if (!Number.isInteger(units) || units <= 0) {
+    return res
+      .status(400)
+      .json({ ok: false, error: 'Las unidades deben ser un entero mayor que 0.' });
+  }
+
+  if (!['efectivo', 'tarjeta', 'bizum'].includes(paymentMethod)) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Método de pago debe ser "efectivo", "tarjeta" o "bizum".',
+    });
+  }
+
+  const product = stockProductsById.get(id);
+
+  if (!product) {
+    return res.status(404).json({ ok: false, error: 'Producto no encontrado.' });
+  }
+
+  if (!product.isSellable) {
+    return res.status(400).json({ ok: false, error: 'Este producto no está marcado para vender.' });
+  }
+
+  if (product.quantity < units) {
+    return res.status(400).json({ ok: false, error: 'No hay suficiente stock para esta venta.' });
+  }
+
+  const totalAmount = Number((product.price * units).toFixed(2));
+  const updated = normalizeStockProduct({
+    ...product,
+    quantity: product.quantity - units,
+  });
+
+  try {
+    await saveStockProductToDb(updated);
+  } catch (error) {
+    console.error('Error persistiendo venta de producto en DB:', error);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo registrar la venta en base de datos. Intenta de nuevo.',
+    });
+  }
+
+  stockProductsById.set(id, updated);
+  void persistStockProductsToDisk();
+
+  const sale = normalizeStockSale({
+    id: buildStockSaleId(),
+    productId: updated.id,
+    productName: updated.productName,
+    soldUnits: units,
+    unitPrice: updated.price,
+    totalAmount,
+    paymentMethod: paymentMethod as 'efectivo' | 'tarjeta' | 'bizum',
+    soldByEmail: session.email,
+    soldAtIso: new Date().toISOString(),
+  });
+  stockSalesById.set(sale.id, sale);
+  void persistStockSalesToDisk();
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  addPaymentToDailySummary(
+    todayIso,
+    paymentMethod as 'efectivo' | 'tarjeta' | 'bizum',
+    totalAmount,
+    {
+      operationType: 'stock_sale',
+      concept: `Venta stock: ${updated.productName} (${units} ud.)`,
+      performedByEmail: session.email,
+    },
+  );
+
+  return res.status(200).json({
+    ok: true,
+    product: normalizeStockProduct(updated),
+    soldUnits: units,
+    totalAmount,
+    paymentMethod,
+  });
 });
 
 app.delete('/api/admin/almacen/:id', async (req, res) => {
@@ -3295,6 +3642,17 @@ app.get('/api/admin/cierre-caja/auto-diario', (req, res) => {
   }
 
   const todayIso = new Date().toISOString().slice(0, 10);
+  const latestCierreToday = getLatestCierreForDate(todayIso);
+
+  if (latestCierreToday) {
+    return res.status(200).json({
+      ok: true,
+      today: null,
+      alreadyClosed: true,
+      cierre: latestCierreToday,
+    });
+  }
+
   const today = dailyPaymentsByDateIso.get(todayIso) ?? {
     dateIso: todayIso,
     efectivo: 0,
@@ -3302,11 +3660,13 @@ app.get('/api/admin/cierre-caja/auto-diario', (req, res) => {
     bizum: 0,
     total: 0,
     updatedAtIso: '',
+    operationDetails: [],
   };
 
   return res.status(200).json({
     ok: true,
     today: normalizeDailyPaymentSummary(today),
+    alreadyClosed: false,
   });
 });
 
@@ -3346,6 +3706,18 @@ app.post('/api/admin/cierre-caja', async (req, res) => {
 
     const now = new Date();
     const fechaIso = now.toISOString().slice(0, 10);
+    const existingCierre = getLatestCierreForDate(fechaIso);
+
+    if (existingCierre) {
+      return res.status(409).json({
+        ok: false,
+        error:
+          'Ya existe un cierre registrado para hoy. Revisa el historial para editarlo o anularlo.',
+      });
+    }
+
+    const dailySummary = dailyPaymentsByDateIso.get(fechaIso);
+    const operationDetails = normalizePaymentOperationDetails(dailySummary?.operationDetails ?? []);
 
     const cierre = normalizeCierre({
       id: buildCierreId(),
@@ -3360,6 +3732,7 @@ app.post('/api/admin/cierre-caja', async (req, res) => {
       // preparado para envío futuro a servicio fiscal (ej. Verifactu/SII)
       enviadoAlServicioFiscal: false,
       idServicioFiscal: '',
+      operationDetails,
     });
 
     try {
@@ -3844,6 +4217,11 @@ app.patch('/api/admin/clientes/:clientId/packs/:treatmentId/payment', async (req
     todayIso,
     paymentMethod as 'efectivo' | 'tarjeta' | 'bizum',
     Number(priceEuro.toFixed(2)),
+    {
+      operationType: 'client_pack_payment',
+      concept: `Pack: ${updatedTreatment.name}`,
+      performedByEmail: session.email,
+    },
   );
 
   return res.status(200).json({ ok: true, card: updatedCard });
@@ -4376,6 +4754,11 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
         todayIso,
         paymentMethod as 'efectivo' | 'tarjeta' | 'bizum',
         resolvedPriceEuro,
+        {
+          operationType: 'reservation_payment',
+          concept: `Reserva: ${reservation.appointmentTypeName}`,
+          performedByEmail: session.email,
+        },
       );
     }
 
@@ -5151,6 +5534,7 @@ const initializeFromDb = async (): Promise<void> => {
         createdAtIso: dbCierre.createdAtIso,
         enviadoAlServicioFiscal: dbCierre.enviadoAlServicioFiscal,
         idServicioFiscal: dbCierre.idServicioFiscal,
+        operationDetails: normalizePaymentOperationDetails(dbCierre.operationDetails),
       };
       cierreCajaById.set(cierre.id, normalizeCierre(cierre));
     }
@@ -5163,6 +5547,7 @@ const initializeFromDb = async (): Promise<void> => {
         bizum: dbDailyPayment.bizum,
         total: dbDailyPayment.total,
         updatedAtIso: dbDailyPayment.updatedAtIso,
+        operationDetails: normalizePaymentOperationDetails(dbDailyPayment.operationDetails),
       };
       dailyPaymentsByDateIso.set(summary.dateIso, normalizeDailyPaymentSummary(summary));
     }
@@ -5185,6 +5570,7 @@ const initializeFromDb = async (): Promise<void> => {
   const diskUsers = await loadUsersFromDisk();
   const diskCards = await loadClientCardsFromDisk();
   const diskStockProducts = await loadStockProductsFromDisk();
+  const diskStockSales = await loadStockSalesFromDisk();
   const diskCierres = await loadCierreCajaFromDisk();
   const diskDailyPayments = await loadDailyPaymentsFromDisk();
 
@@ -5207,6 +5593,12 @@ const initializeFromDb = async (): Promise<void> => {
     }
   }
 
+  for (const sale of diskStockSales) {
+    if (!stockSalesById.has(sale.id)) {
+      stockSalesById.set(sale.id, normalizeStockSale(sale));
+    }
+  }
+
   for (const cierre of diskCierres) {
     if (!cierreCajaById.has(cierre.id)) {
       cierreCajaById.set(cierre.id, normalizeCierre(cierre));
@@ -5223,11 +5615,12 @@ const initializeFromDb = async (): Promise<void> => {
     diskUsers.length > 0 ||
     diskCards.length > 0 ||
     diskStockProducts.length > 0 ||
+    diskStockSales.length > 0 ||
     diskCierres.length > 0 ||
     diskDailyPayments.length > 0
   ) {
     console.log(
-      `DISK: ${diskUsers.length} usuario(s), ${diskCards.length} ficha(s) de cliente, ${diskStockProducts.length} producto(s) de almacén, ${diskCierres.length} cierre(s) y ${diskDailyPayments.length} acumulado(s) diario(s) de cobros cargados.`,
+      `DISK: ${diskUsers.length} usuario(s), ${diskCards.length} ficha(s) de cliente, ${diskStockProducts.length} producto(s) de almacén, ${diskStockSales.length} venta(s) de stock, ${diskCierres.length} cierre(s) y ${diskDailyPayments.length} acumulado(s) diario(s) de cobros cargados.`,
     );
   }
 
@@ -5257,6 +5650,10 @@ const initializeFromDb = async (): Promise<void> => {
     void persistStockProductsToDisk();
   }
 
+  if (stockSalesById.size > 0) {
+    void persistStockSalesToDisk();
+  }
+
   if (cierreCajaById.size > 0) {
     void persistCierreCajaToDisk();
   }
@@ -5282,7 +5679,9 @@ const initializeFromDbWithRetry = async (
       await initializeFromDb();
 
       if (attempt > 1) {
-        console.log(`[persistencia] inicializacion completada en intento ${attempt}/${maxAttempts}`);
+        console.log(
+          `[persistencia] inicializacion completada en intento ${attempt}/${maxAttempts}`,
+        );
       }
 
       return;

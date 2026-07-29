@@ -2109,6 +2109,16 @@ export interface DbStockProduct {
   createdByEmail: string;
 }
 
+export interface DbPaymentOperationDetail {
+  id: string;
+  operationType: 'stock_sale' | 'client_pack_payment' | 'reservation_payment';
+  concept: string;
+  amount: number;
+  paymentMethod: 'efectivo' | 'tarjeta' | 'bizum';
+  performedByEmail: string;
+  createdAtIso: string;
+}
+
 export interface DbCierreCaja {
   id: string;
   fechaIso: string;
@@ -2121,6 +2131,7 @@ export interface DbCierreCaja {
   createdAtIso: string;
   enviadoAlServicioFiscal: boolean;
   idServicioFiscal: string;
+  operationDetails: DbPaymentOperationDetail[];
 }
 
 export interface DbDailyPaymentSummary {
@@ -2130,6 +2141,7 @@ export interface DbDailyPaymentSummary {
   bizum: number;
   total: number;
   updatedAtIso: string;
+  operationDetails: DbPaymentOperationDetail[];
 }
 
 let usersAndCardsSchemaReady = false;
@@ -2201,7 +2213,8 @@ const ensureUsersAndCardsSchema = async (): Promise<void> => {
       registrado_por_email TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       enviado_al_servicio_fiscal BOOLEAN NOT NULL DEFAULT false,
-      id_servicio_fiscal TEXT NOT NULL DEFAULT ''
+      id_servicio_fiscal TEXT NOT NULL DEFAULT '',
+      operation_details JSONB NOT NULL DEFAULT '[]'
     );
   `);
 
@@ -2212,8 +2225,19 @@ const ensureUsersAndCardsSchema = async (): Promise<void> => {
       tarjeta NUMERIC(12,2) NOT NULL DEFAULT 0,
       bizum NUMERIC(12,2) NOT NULL DEFAULT 0,
       total NUMERIC(12,2) NOT NULL DEFAULT 0,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      operation_details JSONB NOT NULL DEFAULT '[]'
     );
+  `);
+
+  await db.query(`
+    ALTER TABLE cierre_caja_entries
+    ADD COLUMN IF NOT EXISTS operation_details JSONB NOT NULL DEFAULT '[]';
+  `);
+
+  await db.query(`
+    ALTER TABLE daily_payment_summaries
+    ADD COLUMN IF NOT EXISTS operation_details JSONB NOT NULL DEFAULT '[]';
   `);
 
   await db.query(`
@@ -2601,8 +2625,9 @@ export const loadAllCierresFromDb = async (): Promise<DbCierreCaja[]> => {
       created_at: string;
       enviado_al_servicio_fiscal: boolean;
       id_servicio_fiscal: string;
+      operation_details: unknown;
     }>(`
-      SELECT id, fecha_iso, efectivo, tarjeta, bizum, total, notas, registrado_por_email, created_at, enviado_al_servicio_fiscal, id_servicio_fiscal
+      SELECT id, fecha_iso, efectivo, tarjeta, bizum, total, notas, registrado_por_email, created_at, enviado_al_servicio_fiscal, id_servicio_fiscal, operation_details
       FROM cierre_caja_entries
     `);
 
@@ -2618,6 +2643,9 @@ export const loadAllCierresFromDb = async (): Promise<DbCierreCaja[]> => {
       createdAtIso: new Date(row.created_at).toISOString(),
       enviadoAlServicioFiscal: Boolean(row.enviado_al_servicio_fiscal),
       idServicioFiscal: row.id_servicio_fiscal ?? '',
+      operationDetails: Array.isArray(row.operation_details)
+        ? (row.operation_details as DbPaymentOperationDetail[])
+        : [],
     }));
   } catch (error) {
     if (enableRuntimeMemoryMode(error)) {
@@ -2654,9 +2682,10 @@ export const saveCierreCajaToDb = async (cierre: DbCierreCaja): Promise<void> =>
         registrado_por_email,
         created_at,
         enviado_al_servicio_fiscal,
-        id_servicio_fiscal
+        id_servicio_fiscal,
+        operation_details
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       ON CONFLICT (id) DO UPDATE SET
         fecha_iso = EXCLUDED.fecha_iso,
         efectivo = EXCLUDED.efectivo,
@@ -2666,7 +2695,8 @@ export const saveCierreCajaToDb = async (cierre: DbCierreCaja): Promise<void> =>
         notas = EXCLUDED.notas,
         registrado_por_email = EXCLUDED.registrado_por_email,
         enviado_al_servicio_fiscal = EXCLUDED.enviado_al_servicio_fiscal,
-        id_servicio_fiscal = EXCLUDED.id_servicio_fiscal
+        id_servicio_fiscal = EXCLUDED.id_servicio_fiscal,
+        operation_details = EXCLUDED.operation_details
       `,
       [
         cierre.id,
@@ -2680,6 +2710,7 @@ export const saveCierreCajaToDb = async (cierre: DbCierreCaja): Promise<void> =>
         cierre.createdAtIso,
         cierre.enviadoAlServicioFiscal,
         cierre.idServicioFiscal,
+        JSON.stringify(cierre.operationDetails ?? []),
       ],
     );
 
@@ -2734,8 +2765,9 @@ export const loadAllDailyPaymentsFromDb = async (): Promise<DbDailyPaymentSummar
       bizum: string;
       total: string;
       updated_at: string;
+      operation_details: unknown;
     }>(`
-      SELECT date_iso, efectivo, tarjeta, bizum, total, updated_at
+      SELECT date_iso, efectivo, tarjeta, bizum, total, updated_at, operation_details
       FROM daily_payment_summaries
     `);
 
@@ -2746,6 +2778,9 @@ export const loadAllDailyPaymentsFromDb = async (): Promise<DbDailyPaymentSummar
       bizum: Number(row.bizum) || 0,
       total: Number(row.total) || 0,
       updatedAtIso: new Date(row.updated_at).toISOString(),
+      operationDetails: Array.isArray(row.operation_details)
+        ? (row.operation_details as DbPaymentOperationDetail[])
+        : [],
     }));
   } catch (error) {
     if (enableRuntimeMemoryMode(error)) {
@@ -2777,15 +2812,17 @@ export const saveDailyPaymentToDb = async (summary: DbDailyPaymentSummary): Prom
         tarjeta,
         bizum,
         total,
-        updated_at
+        updated_at,
+        operation_details
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       ON CONFLICT (date_iso) DO UPDATE SET
         efectivo = EXCLUDED.efectivo,
         tarjeta = EXCLUDED.tarjeta,
         bizum = EXCLUDED.bizum,
         total = EXCLUDED.total,
-        updated_at = EXCLUDED.updated_at
+        updated_at = EXCLUDED.updated_at,
+        operation_details = EXCLUDED.operation_details
       `,
       [
         summary.dateIso,
@@ -2794,6 +2831,7 @@ export const saveDailyPaymentToDb = async (summary: DbDailyPaymentSummary): Prom
         summary.bizum,
         summary.total,
         summary.updatedAtIso,
+        JSON.stringify(summary.operationDetails ?? []),
       ],
     );
 

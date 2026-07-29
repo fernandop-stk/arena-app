@@ -35,7 +35,8 @@ type AdminTab =
 type AgendaManagementTab = 'listado' | 'gestion' | 'bloqueos';
 type AgendaRange = 'hoy' | 'semana' | 'mes';
 type ReservationListRangeTab = 'none' | 'dia' | 'semana' | 'mes' | 'total';
-type StockManagementTab = 'crear' | 'ver';
+type StockManagementTab = 'crear' | 'ver' | 'vender' | 'historial';
+type CierreManagementTab = 'registro' | 'historial' | 'estadisticas';
 type CierreStatsRange = 'semana' | 'mes' | 'anio';
 type CierreStatsMetric = 'efectivo' | 'tarjeta' | 'bizum' | 'digital' | 'total';
 type AdminCardTarget = 'packs' | 'reservas' | 'agenda' | 'clientes' | 'almacen' | 'cierre';
@@ -192,6 +193,28 @@ interface StockProductItem {
   createdByEmail: string;
 }
 
+interface StockSaleHistoryItem {
+  id: string;
+  productId: string;
+  productName: string;
+  soldUnits: number;
+  unitPrice: number;
+  totalAmount: number;
+  paymentMethod: 'efectivo' | 'tarjeta' | 'bizum';
+  soldByEmail: string;
+  soldAtIso: string;
+}
+
+interface CierreOperationDetailItem {
+  id: string;
+  operationType: 'stock_sale' | 'client_pack_payment' | 'reservation_payment';
+  concept: string;
+  amount: number;
+  paymentMethod: 'efectivo' | 'tarjeta' | 'bizum';
+  performedByEmail: string;
+  createdAtIso: string;
+}
+
 interface CierreCajaItem {
   id: string;
   fechaIso: string;
@@ -205,6 +228,7 @@ interface CierreCajaItem {
   // preparado para envío a servicio fiscal externo
   enviadoAlServicioFiscal: boolean;
   idServicioFiscal: string;
+  operationDetails: CierreOperationDetailItem[];
 }
 
 interface CierreAutoDiario {
@@ -214,6 +238,7 @@ interface CierreAutoDiario {
   bizum: number;
   total: number;
   updatedAtIso: string;
+  operationDetails: CierreOperationDetailItem[];
 }
 
 interface ClientTreatmentPieSlice {
@@ -364,6 +389,7 @@ export class AdminPanelComponent implements OnDestroy {
   private readonly globalTreatmentSavedViewsStorageKey =
     'arena-app:admin-panel:global-treatment-saved-views';
   private readonly agendaPreferredViewStorageKey = 'arena-app:admin-panel:agenda-preferred-view';
+  private readonly cierreManagementTabStorageKey = 'arena-app:admin-panel:cierre-management-tab';
   protected readonly clientPackOptions: ClientTreatmentCatalogOption[] = this.tratamientosService
     .getPacks()
     .map((item) => ({
@@ -494,7 +520,25 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly stockDeletingProductId = signal('');
   protected readonly showDeleteStockConfirmModal = signal(false);
   protected readonly deleteStockTargetProductId = signal('');
+  protected readonly showEditStockModal = signal(false);
+  protected readonly editStockTargetProductId = signal('');
+  protected readonly editStockName = signal('');
+  protected readonly editStockPrice = signal('');
+  protected readonly editStockIsSellable = signal(false);
+  protected readonly editStockLoading = signal(false);
   protected readonly stockAdjustError = signal('');
+  protected readonly stockSaleProductId = signal('');
+  protected readonly stockSaleUnits = signal('1');
+  protected readonly stockSalePaymentMethod = signal<'efectivo' | 'tarjeta' | 'bizum' | ''>('');
+  protected readonly stockSaleLoading = signal(false);
+  protected readonly stockSaleError = signal('');
+  protected readonly showStockSaleModal = signal(false);
+  protected readonly stockSalesHistory = signal<StockSaleHistoryItem[]>([]);
+  protected readonly stockSalesHistoryLoading = signal(false);
+  protected readonly stockSalesHistoryDateFilter = signal('');
+  protected readonly stockSalesHistoryMethodFilter = signal<
+    'all' | 'efectivo' | 'tarjeta' | 'bizum'
+  >('all');
 
   // ── Cierre de caja ──────────────────────────────────────────────────────────
   protected readonly cierreEfectivo = signal('');
@@ -504,12 +548,22 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly cierreLoading = signal(false);
   protected readonly cierreError = signal('');
   protected readonly cierreMessage = signal('');
+  protected readonly cierreAlreadyClosedToday = signal(false);
+  protected readonly cierreManagementTab = signal<CierreManagementTab>('registro');
   protected readonly cierreHistorial = signal<CierreCajaItem[]>([]);
   protected readonly isLoadingCierres = signal(false);
   protected readonly cierreAutoDiario = signal<CierreAutoDiario | null>(null);
   protected readonly isLoadingCierreAutoDiario = signal(false);
   protected readonly cierreStatsRange = signal<CierreStatsRange>('mes');
   protected readonly cierreStatsMetric = signal<CierreStatsMetric>('total');
+  protected readonly showCierreDetailsModal = signal(false);
+  protected readonly selectedCierreForDetails = signal<CierreCajaItem | null>(null);
+  protected readonly cierreDetailsMethodFilters = signal({
+    efectivo: true,
+    tarjeta: true,
+    bizum: true,
+  });
+  protected readonly cierreDetailsEmployeeFilter = signal('all');
   // Edición de cierre
   protected readonly editingCierre = signal<CierreCajaItem | null>(null);
   protected readonly editCierreEfectivo = signal('');
@@ -885,9 +939,25 @@ export class AdminPanelComponent implements OnDestroy {
       this.stockManagementTab.set('crear');
       this.loadStockProducts();
     } else if (tab === 'cierre') {
+      this.cierreManagementTab.set(this.getPreferredCierreManagementTab());
       this.cierreError.set('');
       this.cierreMessage.set('');
       this.loadCierres();
+      this.loadCierreAutoDiario();
+    }
+  }
+
+  protected setCierreManagementTab(tab: CierreManagementTab): void {
+    this.cierreManagementTab.set(tab);
+    this.persistCierreManagementTab(tab);
+    this.cierreError.set('');
+    this.cierreMessage.set('');
+
+    if (tab === 'historial' || tab === 'estadisticas') {
+      this.loadCierres();
+    }
+
+    if (tab === 'registro') {
       this.loadCierreAutoDiario();
     }
   }
@@ -900,9 +970,12 @@ export class AdminPanelComponent implements OnDestroy {
     this.closeAgendaManualReserveModal();
     this.showQuickReserveModal.set(false);
     this.closeDeleteStockConfirmModal();
+    this.closeEditStockModal();
+    this.closeStockSaleModal();
     this.closeDeleteClientConfirmModal();
     this.closeClientStatsModal();
     this.closeClientDetailModal();
+    this.closeCierreDetailsModal();
     this.closePaymentModal();
     this.closeDayReservationsModal();
     this.closeClientTypePickerModal();
@@ -1594,9 +1667,19 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected setStockManagementTab(tab: StockManagementTab): void {
     this.stockManagementTab.set(tab);
+    this.stockSaleError.set('');
 
-    if (tab === 'ver') {
+    if (tab === 'ver' || tab === 'vender' || tab === 'historial') {
       this.loadStockProducts();
+
+      if (tab === 'vender' && !this.stockSaleProductId()) {
+        const firstSellable = this.getAvailableSellableStockProducts()[0];
+        this.stockSaleProductId.set(firstSellable?.id ?? '');
+      }
+
+      if (tab === 'historial') {
+        this.loadStockSalesHistory();
+      }
     }
   }
 
@@ -1700,22 +1783,195 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected getSellableStockProducts(): StockProductItem[] {
-    return this.stockProducts().filter((product) => product.isSellable);
+    return this.stockProducts()
+      .filter((product) => product.isSellable)
+      .sort((a, b) => a.productName.localeCompare(b.productName));
+  }
+
+  protected getAvailableSellableStockProducts(): StockProductItem[] {
+    return this.getSellableStockProducts().filter((product) => product.quantity > 0);
+  }
+
+  protected selectStockSaleProduct(productId: string): void {
+    if (!productId) {
+      return;
+    }
+
+    this.stockSaleProductId.set(productId);
+    this.stockSaleUnits.set('1');
+    this.stockSalePaymentMethod.set('');
+    this.stockSaleError.set('');
+  }
+
+  protected openStockSaleModal(productId: string): void {
+    this.selectStockSaleProduct(productId);
+    this.showStockSaleModal.set(true);
+  }
+
+  protected closeStockSaleModal(): void {
+    if (this.stockSaleLoading()) {
+      return;
+    }
+
+    this.showStockSaleModal.set(false);
+    this.stockSaleUnits.set('1');
+    this.stockSalePaymentMethod.set('');
+    this.stockSaleError.set('');
+  }
+
+  protected getSelectedStockSaleProduct(): StockProductItem | null {
+    const productId = this.stockSaleProductId();
+
+    if (!productId) {
+      return null;
+    }
+
+    return this.stockProducts().find((product) => product.id === productId) ?? null;
+  }
+
+  protected getSelectedStockSaleDescription(product: StockProductItem): string {
+    const brand = product.brand.trim();
+    const color = product.color.trim();
+
+    if (brand && color) {
+      return `${brand} · ${color}`;
+    }
+
+    if (brand) {
+      return brand;
+    }
+
+    if (color) {
+      return color;
+    }
+
+    return 'Sin descripcion adicional.';
+  }
+
+  protected onStockSaleUnitsInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.stockSaleUnits.set(target.value);
+  }
+
+  protected setStockSalePaymentMethod(method: 'efectivo' | 'tarjeta' | 'bizum'): void {
+    this.stockSalePaymentMethod.set(method);
+    this.stockSaleError.set('');
+  }
+
+  protected getStockSaleUnitsValue(): number {
+    const units = Number(this.stockSaleUnits().trim());
+    return Number.isInteger(units) ? units : 0;
+  }
+
+  protected getStockSaleTotalAmount(): number {
+    const product = this.getSelectedStockSaleProduct();
+
+    if (!product) {
+      return 0;
+    }
+
+    const units = this.getStockSaleUnitsValue();
+
+    if (units <= 0) {
+      return 0;
+    }
+
+    return Number((product.price * units).toFixed(2));
+  }
+
+  protected submitStockSale(): void {
+    const product = this.getSelectedStockSaleProduct();
+    const units = this.getStockSaleUnitsValue();
+    const paymentMethod = this.stockSalePaymentMethod();
+
+    this.stockSaleError.set('');
+    this.stockError.set('');
+    this.stockMessage.set('');
+
+    if (!product) {
+      this.stockSaleError.set('Selecciona un producto para vender.');
+      return;
+    }
+
+    if (!paymentMethod) {
+      this.stockSaleError.set('Selecciona un metodo de pago.');
+      return;
+    }
+
+    if (!Number.isInteger(units) || units <= 0) {
+      this.stockSaleError.set('Las unidades deben ser un entero mayor que 0.');
+      return;
+    }
+
+    if (units > product.quantity) {
+      this.stockSaleError.set('No hay suficiente stock para esa venta.');
+      return;
+    }
+
+    this.stockSaleLoading.set(true);
+
+    this.http
+      .post<{
+        ok: boolean;
+        product?: StockProductItem;
+        soldUnits?: number;
+        totalAmount?: number;
+        paymentMethod?: 'efectivo' | 'tarjeta' | 'bizum';
+        error?: string;
+      }>(`/api/admin/almacen/${encodeURIComponent(product.id)}/sell`, {
+        units,
+        paymentMethod,
+      })
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.stockSaleError.set(response.error ?? 'No se pudo registrar la venta.');
+            return;
+          }
+
+          if (response.product) {
+            this.stockProducts.update((products) =>
+              products.map((item) => (item.id === response.product?.id ? response.product : item)),
+            );
+          }
+
+          const soldUnits = response.soldUnits ?? units;
+          const totalAmount = Number(response.totalAmount ?? this.getStockSaleTotalAmount());
+          this.stockMessage.set(
+            `Venta registrada: ${soldUnits} ud de ${product.productName} por ${totalAmount.toFixed(2)} EUR (${paymentMethod}).`,
+          );
+          this.stockSaleUnits.set('1');
+          this.stockSalePaymentMethod.set('');
+          this.showStockSaleModal.set(false);
+          this.loadStockSalesHistory();
+          this.loadCierreAutoDiario();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.stockSaleError.set(
+            typeof apiError === 'string' && apiError ? apiError : 'No se pudo registrar la venta.',
+          );
+        },
+        complete: () => {
+          this.stockSaleLoading.set(false);
+        },
+      });
   }
 
   protected createStockProduct(): void {
     const productName = this.stockCreateName().trim();
     const brand = this.stockCreateBrand().trim();
     const quantity = Number(this.stockCreateQuantity());
-    const price = Number(this.stockCreatePrice());
+    const priceRaw = this.stockCreatePrice().trim().replace(',', '.');
+    const price = priceRaw === '' ? 0 : Number(priceRaw);
     const color = this.stockCreateColor().trim();
     const isSellable = this.stockCreateIsSellable();
 
     this.stockError.set('');
     this.stockMessage.set('');
 
-    if (!productName || !brand || !color) {
-      this.stockError.set('Nombre, marca y color son obligatorios.');
+    if (!productName || !brand) {
+      this.stockError.set('Nombre y marca son obligatorios.');
       return;
     }
 
@@ -1846,6 +2102,114 @@ export class AdminPanelComponent implements OnDestroy {
       });
   }
 
+  protected openEditStockModal(product: StockProductItem): void {
+    if (!product || this.editStockLoading()) {
+      return;
+    }
+
+    this.stockError.set('');
+    this.stockMessage.set('');
+    this.stockAdjustError.set('');
+    this.editStockTargetProductId.set(product.id);
+    this.editStockName.set(product.productName);
+    this.editStockPrice.set(`${product.price}`);
+    this.editStockIsSellable.set(product.isSellable);
+    this.showEditStockModal.set(true);
+  }
+
+  protected closeEditStockModal(): void {
+    if (this.editStockLoading()) {
+      return;
+    }
+
+    this.showEditStockModal.set(false);
+    this.editStockTargetProductId.set('');
+    this.editStockName.set('');
+    this.editStockPrice.set('');
+    this.editStockIsSellable.set(false);
+  }
+
+  protected onEditStockNameInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.editStockName.set(target.value);
+  }
+
+  protected onEditStockPriceInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.editStockPrice.set(target.value);
+  }
+
+  protected onEditStockIsSellableInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.editStockIsSellable.set(target.checked);
+  }
+
+  protected saveStockProductEdit(): void {
+    const productId = this.editStockTargetProductId().trim();
+    const productName = this.editStockName().trim();
+    const priceRaw = this.editStockPrice().trim().replace(',', '.');
+    const price = priceRaw === '' ? 0 : Number(priceRaw);
+    const isSellable = this.editStockIsSellable();
+
+    this.stockError.set('');
+    this.stockMessage.set('');
+    this.stockAdjustError.set('');
+
+    if (!productId) {
+      this.stockError.set('Producto inválido para editar.');
+      return;
+    }
+
+    if (!productName) {
+      this.stockError.set('El titulo del producto es obligatorio.');
+      return;
+    }
+
+    if (!Number.isFinite(price) || price < 0) {
+      this.stockError.set('El precio debe ser un número válido igual o mayor que 0.');
+      return;
+    }
+
+    this.editStockLoading.set(true);
+
+    this.http
+      .patch<{ ok: boolean; product?: StockProductItem; error?: string }>(
+        `/api/admin/almacen/${encodeURIComponent(productId)}`,
+        {
+          productName,
+          price,
+          isSellable,
+        },
+      )
+      .subscribe({
+        next: (response) => {
+          if (!response.ok || !response.product) {
+            this.stockError.set(response.error ?? 'No se pudo guardar la edición del producto.');
+            this.editStockLoading.set(false);
+            return;
+          }
+
+          this.stockProducts.update((products) =>
+            products.map((product) =>
+              product.id === response.product?.id ? response.product : product,
+            ),
+          );
+          this.stockMessage.set('Producto actualizado correctamente.');
+          this.editStockLoading.set(false);
+          this.closeEditStockModal();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.stockError.set(
+            typeof apiError === 'string' && apiError
+              ? apiError
+              : 'No se pudo guardar la edición del producto.',
+          );
+          this.editStockLoading.set(false);
+        },
+      });
+  }
+
   protected openDeleteStockConfirmModal(productId: string): void {
     if (!productId || this.stockDeletingProductId()) {
       return;
@@ -1892,6 +2256,73 @@ export class AdminPanelComponent implements OnDestroy {
 
     const brand = product.brand.trim();
     return brand ? `${product.productName} (${brand})` : product.productName;
+  }
+
+  protected onStockSalesHistoryDateFilterInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.stockSalesHistoryDateFilter.set(target.value.trim());
+  }
+
+  protected onStockSalesHistoryMethodFilterChange(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    const next = target.value;
+    this.stockSalesHistoryMethodFilter.set(
+      next === 'efectivo' || next === 'tarjeta' || next === 'bizum' ? next : 'all',
+    );
+  }
+
+  protected clearStockSalesHistoryFilters(): void {
+    this.stockSalesHistoryDateFilter.set('');
+    this.stockSalesHistoryMethodFilter.set('all');
+  }
+
+  protected getFilteredStockSalesHistory(): StockSaleHistoryItem[] {
+    const dateFilter = this.stockSalesHistoryDateFilter();
+    const methodFilter = this.stockSalesHistoryMethodFilter();
+
+    return this.stockSalesHistory().filter((sale) => {
+      if (dateFilter && !sale.soldAtIso.startsWith(dateFilter)) {
+        return false;
+      }
+
+      if (methodFilter !== 'all' && sale.paymentMethod !== methodFilter) {
+        return false;
+      }
+
+      return true;
+    });
+  }
+
+  private loadStockSalesHistory(): void {
+    this.stockSalesHistoryLoading.set(true);
+
+    this.http
+      .get<{
+        ok: boolean;
+        sales?: StockSaleHistoryItem[];
+        error?: string;
+      }>('/api/admin/almacen/sales')
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.stockSaleError.set(response.error ?? 'No se pudo cargar el historial de ventas.');
+            return;
+          }
+
+          this.stockSalesHistory.set(response.sales ?? []);
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.stockSaleError.set(
+            typeof apiError === 'string' && apiError
+              ? apiError
+              : 'No se pudo cargar el historial de ventas.',
+          );
+        },
+        complete: () => {
+          this.stockSalesHistoryLoading.set(false);
+        },
+      });
   }
 
   private getAgendaReservationsInRange(): AdminReservationItem[] {
@@ -5234,7 +5665,20 @@ export class AdminPanelComponent implements OnDestroy {
             return;
           }
 
-          this.stockProducts.set(response.products ?? []);
+          const products = response.products ?? [];
+          this.stockProducts.set(products);
+
+          const selectedId = this.stockSaleProductId();
+          const hasSelected = selectedId
+            ? products.some((product) => product.id === selectedId && product.isSellable)
+            : false;
+
+          if (!hasSelected) {
+            const firstSellable = products.find(
+              (product) => product.isSellable && product.quantity > 0,
+            );
+            this.stockSaleProductId.set(firstSellable?.id ?? '');
+          }
         },
         error: (error) => {
           const apiError = error?.error?.error;
@@ -5313,6 +5757,7 @@ export class AdminPanelComponent implements OnDestroy {
 
       const fiscalStatus = cierre.enviadoAlServicioFiscal ? 'Enviado' : 'Pendiente';
       const notes = cierre.notas?.trim() || 'Sin observaciones.';
+      const details = this.getSortedCierreOperationDetails(cierre);
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(20);
@@ -5369,6 +5814,50 @@ export class AdminPanelComponent implements OnDestroy {
       pdf.setFont('helvetica', 'normal');
       pdf.text(wrappedNotes, marginX + 14, y + 46);
 
+      y += notesHeight + 26;
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      if (y > pageHeight - 110) {
+        pdf.addPage();
+        y = 58;
+      }
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(14);
+      pdf.setTextColor(47, 36, 29);
+      pdf.text('Detalle de operaciones', marginX, y);
+      y += 18;
+
+      if (details.length === 0) {
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(11);
+        pdf.setTextColor(90, 73, 63);
+        pdf.text('No hay operaciones detalladas en este cierre.', marginX, y);
+      } else {
+        details.forEach((detail) => {
+          if (y > pageHeight - 78) {
+            pdf.addPage();
+            y = 58;
+          }
+
+          const timestamp = this.formatDateTime(detail.createdAtIso);
+          const line1 = `${timestamp} · ${detail.concept}`;
+          const line2 = `${this.getPaymentMethodDisplayLabel(detail.paymentMethod)} · ${formatCurrency(detail.amount)} · ${detail.performedByEmail || 'Sin usuario'}`;
+
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(10);
+          pdf.setTextColor(47, 36, 29);
+          pdf.text(line1, marginX, y);
+          y += 13;
+          pdf.setTextColor(90, 73, 63);
+          pdf.text(line2, marginX, y);
+          y += 14;
+          pdf.setDrawColor(240, 229, 219);
+          pdf.line(marginX, y, marginX + contentWidth, y);
+          y += 10;
+        });
+      }
+
       const safeDate = (cierre.fechaIso || 'sin-fecha').replace(/[^\w-]/g, '-');
       pdf.save(`cierre-caja-${safeDate}.pdf`);
       this.cierreMessage.set('PDF exportado correctamente.');
@@ -5416,6 +5905,14 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected registrarCierre(): void {
     if (!this.requirePermission('cierre_registrar', 'Registrar cierre de caja')) return;
+
+    if (this.cierreAlreadyClosedToday()) {
+      this.cierreError.set(
+        'Ya existe un cierre registrado para hoy. Revisa el historial para editarlo o anularlo.',
+      );
+      return;
+    }
+
     this.cierreError.set('');
     this.cierreMessage.set('');
 
@@ -5445,6 +5942,8 @@ export class AdminPanelComponent implements OnDestroy {
           }
 
           this.cierreMessage.set('Cierre registrado correctamente.');
+          this.cierreAlreadyClosedToday.set(true);
+          this.cierreAutoDiario.set(null);
           this.cierreEfectivo.set('');
           this.cierreTarjeta.set('');
           this.cierreBizum.set('');
@@ -5469,6 +5968,10 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected applyCierreAutoDiarioToForm(): void {
+    if (this.cierreAlreadyClosedToday()) {
+      return;
+    }
+
     const auto = this.cierreAutoDiario();
 
     if (!auto) {
@@ -5519,6 +6022,12 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected getCierreStatsEntries(): CierreCajaItem[] {
     return this.getFilteredCierreStatsItems();
+  }
+
+  protected getTodayCierre(): CierreCajaItem | null {
+    const todayIso = this.getTodayIso();
+
+    return this.cierreHistorial().find((cierre) => cierre.fechaIso === todayIso) ?? null;
   }
 
   protected getCierreStatsTotalAmount(): number {
@@ -5637,6 +6146,107 @@ export class AdminPanelComponent implements OnDestroy {
     }
 
     return 'Meses';
+  }
+
+  protected openCierreDetailsModal(cierre: CierreCajaItem): void {
+    this.selectedCierreForDetails.set(cierre);
+    this.cierreDetailsMethodFilters.set({
+      efectivo: true,
+      tarjeta: true,
+      bizum: true,
+    });
+    this.cierreDetailsEmployeeFilter.set('all');
+    this.showCierreDetailsModal.set(true);
+  }
+
+  protected closeCierreDetailsModal(): void {
+    this.showCierreDetailsModal.set(false);
+    this.selectedCierreForDetails.set(null);
+    this.cierreDetailsEmployeeFilter.set('all');
+  }
+
+  protected onCierreDetailsMethodFilterChange(
+    method: 'efectivo' | 'tarjeta' | 'bizum',
+    event: Event,
+  ): void {
+    const target = event.target as HTMLInputElement;
+    this.cierreDetailsMethodFilters.update((current) => ({
+      ...current,
+      [method]: target.checked,
+    }));
+  }
+
+  protected onCierreDetailsEmployeeFilterInput(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    this.cierreDetailsEmployeeFilter.set(target.value || 'all');
+  }
+
+  protected clearCierreDetailsFilters(): void {
+    this.cierreDetailsMethodFilters.set({
+      efectivo: true,
+      tarjeta: true,
+      bizum: true,
+    });
+    this.cierreDetailsEmployeeFilter.set('all');
+  }
+
+  protected getCierreDetailsEmployeeOptions(): string[] {
+    const cierre = this.selectedCierreForDetails();
+    const options = new Set<string>();
+
+    (cierre?.operationDetails ?? []).forEach((detail) => {
+      const email = (detail.performedByEmail || '').trim().toLowerCase();
+      if (email) {
+        options.add(email);
+      }
+    });
+
+    return Array.from(options).sort((a, b) => a.localeCompare(b, 'es'));
+  }
+
+  protected getSelectedCierreDetailItems(): CierreOperationDetailItem[] {
+    const cierre = this.selectedCierreForDetails();
+    const filters = this.cierreDetailsMethodFilters();
+    const employeeFilter = this.cierreDetailsEmployeeFilter();
+
+    if (!cierre) {
+      return [];
+    }
+
+    return this.getSortedCierreOperationDetails(cierre).filter((detail) => {
+      if (!filters[detail.paymentMethod]) {
+        return false;
+      }
+
+      if (employeeFilter !== 'all' && detail.performedByEmail !== employeeFilter) {
+        return false;
+      }
+
+      return true;
+    });
+  }
+
+  protected getSelectedCierreDetailsFilteredTotal(): number {
+    return this.getSelectedCierreDetailItems().reduce((sum, detail) => sum + detail.amount, 0);
+  }
+
+  protected getPaymentMethodDisplayLabel(method: 'efectivo' | 'tarjeta' | 'bizum'): string {
+    if (method === 'tarjeta') {
+      return 'Tarjeta';
+    }
+
+    if (method === 'bizum') {
+      return 'Bizum';
+    }
+
+    return 'Efectivo';
+  }
+
+  private getSortedCierreOperationDetails(cierre: CierreCajaItem): CierreOperationDetailItem[] {
+    return (cierre.operationDetails ?? [])
+      .filter((detail) => Number.isFinite(detail.amount) && detail.amount > 0)
+      .slice()
+      .sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso));
   }
 
   // ── Editar / borrar cierre ─────────────────────────────────────────────────
@@ -5771,11 +6381,13 @@ export class AdminPanelComponent implements OnDestroy {
 
   private loadCierreAutoDiario(): void {
     this.isLoadingCierreAutoDiario.set(true);
+    this.cierreAlreadyClosedToday.set(false);
 
     this.http
       .get<{
         ok: boolean;
         today?: CierreAutoDiario;
+        alreadyClosed?: boolean;
         error?: string;
       }>('/api/admin/cierre-caja/auto-diario')
       .subscribe({
@@ -5784,7 +6396,13 @@ export class AdminPanelComponent implements OnDestroy {
             return;
           }
 
-          this.cierreAutoDiario.set(response.today ?? null);
+          this.cierreAlreadyClosedToday.set(response.alreadyClosed === true);
+          this.cierreAutoDiario.set(response.alreadyClosed ? null : (response.today ?? null));
+          if (response.alreadyClosed) {
+            this.cierreMessage.set(
+              'Hoy ya existe un cierre registrado. Puedes verlo o editarlo desde Historial.',
+            );
+          }
         },
         error: () => {
           // silencioso para no molestar el flujo principal de cierre
@@ -5911,6 +6529,16 @@ export class AdminPanelComponent implements OnDestroy {
       }).format(amount);
 
     const fiscalStatus = cierre.enviadoAlServicioFiscal ? 'Enviado' : 'Pendiente';
+    const details = this.getSortedCierreOperationDetails(cierre);
+    const detailRows =
+      details.length === 0
+        ? '<p class="note">No hay operaciones detalladas en este cierre.</p>'
+        : `<table class="detail-table"><thead><tr><th>Fecha y hora</th><th>Operación</th><th>Método</th><th>Importe</th><th>Realizada por</th></tr></thead><tbody>${details
+            .map(
+              (detail) =>
+                `<tr><td>${escapeHtml(this.formatDateTime(detail.createdAtIso))}</td><td>${escapeHtml(detail.concept)}</td><td>${escapeHtml(this.getPaymentMethodDisplayLabel(detail.paymentMethod))}</td><td><strong>${escapeHtml(formatCurrency(detail.amount))}</strong></td><td>${escapeHtml(detail.performedByEmail || 'Sin usuario')}</td></tr>`,
+            )
+            .join('')}</tbody></table>`;
 
     return `<!doctype html>
       <html lang="es">
@@ -5927,6 +6555,9 @@ export class AdminPanelComponent implements OnDestroy {
             .row:last-child { border-bottom: 0; }
             .total { font-size: 18px; font-weight: 700; color: #b76b54; }
             .note { white-space: pre-wrap; }
+            .detail-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+            .detail-table th, .detail-table td { text-align: left; font-size: 12px; padding: 8px 6px; border-bottom: 1px solid #f0e5db; vertical-align: top; }
+            .detail-table th { color: #6e5b4f; font-weight: 700; }
           </style>
         </head>
         <body>
@@ -5946,6 +6577,10 @@ export class AdminPanelComponent implements OnDestroy {
           <div class="card">
             <p><strong>Notas</strong></p>
             <p class="note">${escapeHtml(cierre.notas || 'Sin observaciones.')}</p>
+          </div>
+          <div class="card">
+            <p><strong>Detalle de operaciones</strong></p>
+            ${detailRows}
           </div>
         </body>
       </html>`;
@@ -6540,6 +7175,28 @@ export class AdminPanelComponent implements OnDestroy {
 
     const rawValue = window.localStorage.getItem(this.agendaPreferredViewStorageKey);
     return rawValue === 'month' ? 'month' : 'week';
+  }
+
+  private persistCierreManagementTab(tab: CierreManagementTab): void {
+    if (!this.canUseLocalStorage()) {
+      return;
+    }
+
+    window.localStorage.setItem(this.cierreManagementTabStorageKey, tab);
+  }
+
+  private getPreferredCierreManagementTab(): CierreManagementTab {
+    if (!this.canUseLocalStorage()) {
+      return 'registro';
+    }
+
+    const rawValue = window.localStorage.getItem(this.cierreManagementTabStorageKey);
+
+    if (rawValue === 'historial' || rawValue === 'estadisticas') {
+      return rawValue;
+    }
+
+    return 'registro';
   }
 
   private shiftAgendaCalendarMonth(offset: number): void {
