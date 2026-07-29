@@ -1904,11 +1904,6 @@
     &__form-row {
       display: grid;
       gap: layout.$space-1;
-
-      &--cierre {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        align-items: end;
-      }
     }
 
     &__form-group {

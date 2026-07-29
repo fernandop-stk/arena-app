@@ -5,7 +5,7 @@ import {
   isMainModule,
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
-import express from 'express';
+import express, { type Response } from 'express';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -71,6 +71,32 @@ const browserDistFolder = join(import.meta.dirname, '../browser');
 const app = express();
 const serverStartedAtIso = new Date().toISOString();
 let notificationsDegradedMode = false;
+const notificationStreamClients = new Set<Response>();
+
+const broadcastNotificationsRefresh = (): void => {
+  const payload = `data: ${JSON.stringify({ updatedAtIso: new Date().toISOString() })}\n\n`;
+
+  Array.from(notificationStreamClients).forEach((client) => {
+    if (client.writableEnded || client.destroyed) {
+      notificationStreamClients.delete(client);
+      return;
+    }
+
+    try {
+      client.write(payload);
+    } catch {
+      notificationStreamClients.delete(client);
+    }
+  });
+};
+
+const createNotificationAndBroadcast = async (
+  payload: Parameters<typeof createNotification>[0],
+): Promise<Awaited<ReturnType<typeof createNotification>>> => {
+  const notification = await createNotification(payload);
+  broadcastNotificationsRefresh();
+  return notification;
+};
 
 const extractHostname = (value: string | undefined): string | null => {
   if (!value) {
@@ -4992,7 +5018,7 @@ app.patch('/api/admin/reservas/:id/status', async (req, res) => {
     // Crear notificaciones según el nuevo estado
     if (status === 'accepted') {
       try {
-        await createNotification({
+        await createNotificationAndBroadcast({
           type: 'reserva_confirmada',
           title: `Reserva confirmada: ${reservation.appointmentTypeName}`,
           message: `Reserva de ${reservation.customerName} confirmada para ${reservation.dateIso} a las ${reservation.startTime}`,
@@ -5004,7 +5030,7 @@ app.patch('/api/admin/reservas/:id/status', async (req, res) => {
       }
     } else if (status === 'rejected') {
       try {
-        await createNotification({
+        await createNotificationAndBroadcast({
           type: 'cancelacion_reserva',
           title: `Reserva cancelada: ${reservation.appointmentTypeName}`,
           message: `Reserva de ${reservation.customerName} para ${reservation.dateIso} a las ${reservation.startTime} ha sido cancelada`,
@@ -5200,7 +5226,7 @@ app.get('/api/reservas/confirmacion', async (req, res) => {
     await notifyFreedSlotAlerts(deletedReservation);
 
     try {
-      await createNotification({
+      await createNotificationAndBroadcast({
         type: 'cancelacion_reserva',
         title: `Cita rechazada por clienta: ${reservation.appointmentTypeName}`,
         message: `${reservation.customerName} rechazó su cita del ${reservation.dateIso} a las ${reservation.startTime}.`,
@@ -5331,7 +5357,7 @@ app.post('/api/reservas/email', async (req, res) => {
     const notificationActionUrl = `/admin/reservas?id=${reservationId}`;
 
     try {
-      await createNotification({
+      await createNotificationAndBroadcast({
         type: 'nueva_reserva',
         title: `Nueva reserva: ${appointmentTypeName}`,
         message: notificationMessage,
@@ -5725,6 +5751,33 @@ app.get('/api/notifications', async (req, res) => {
 });
 
 /**
+ * GET /api/notifications/stream - SSE para refrescar el badge de notificaciones
+ */
+app.get('/api/notifications/stream', (req, res) => {
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  res.status(200);
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+  res.write(`retry: 10000\n\n`);
+
+  notificationStreamClients.add(res);
+
+  req.on('close', () => {
+    notificationStreamClients.delete(res);
+  });
+
+  return;
+});
+
+/**
  * POST /api/notifications - Crea una nueva notificación
  */
 app.post('/api/notifications', async (req, res) => {
@@ -5743,7 +5796,7 @@ app.post('/api/notifications', async (req, res) => {
   }
 
   try {
-    const notification = await createNotification({
+    const notification = await createNotificationAndBroadcast({
       type,
       title,
       message,
@@ -5775,6 +5828,7 @@ app.patch('/api/notifications/:id/read', async (req, res) => {
 
   try {
     await markNotificationAsRead(notificationId);
+    broadcastNotificationsRefresh();
     return res.status(200).json({ ok: true });
   } catch (error) {
     console.error('Error marking notification as read:', error);
@@ -5794,6 +5848,7 @@ app.patch('/api/notifications/read-all', async (req, res) => {
 
   try {
     await markAllNotificationsAsRead();
+    broadcastNotificationsRefresh();
     return res.status(200).json({ ok: true });
   } catch (error) {
     console.error('Error marking all notifications as read:', error);
@@ -5819,6 +5874,7 @@ app.delete('/api/notifications/:id', async (req, res) => {
 
   try {
     await deleteNotification(notificationId);
+    broadcastNotificationsRefresh();
     return res.status(200).json({ ok: true });
   } catch (error) {
     console.error('Error deleting notification:', error);
@@ -5838,6 +5894,7 @@ app.delete('/api/notifications/clear-read', async (req, res) => {
 
   try {
     await clearReadNotifications();
+    broadcastNotificationsRefresh();
     return res.status(200).json({ ok: true });
   } catch (error) {
     console.error('Error clearing read notifications:', error);

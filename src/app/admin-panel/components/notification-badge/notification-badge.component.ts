@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NotificationService } from '../../services/notification.service';
 
@@ -8,6 +8,12 @@ import { NotificationService } from '../../services/notification.service';
   imports: [CommonModule],
   template: `
     <div class="notification-badge-container">
+      @if (notificationService.recentNotificationToast()) {
+        <div class="notification-toast" role="status" aria-live="polite">
+          {{ notificationService.recentNotificationToast() }}
+        </div>
+      }
+
       <button
         class="notification-badge"
         [class.has-unread]="notificationService.unreadCount() > 0"
@@ -82,6 +88,40 @@ import { NotificationService } from '../../services/notification.service';
     .notification-badge-container {
       position: relative;
       display: inline-block;
+    }
+
+    .notification-toast {
+      position: absolute;
+      right: 0;
+      bottom: calc(100% + 10px);
+      min-width: 13rem;
+      max-width: 18rem;
+      padding: 0.65rem 0.85rem;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #c97b63 0%, #d9a441 100%);
+      color: #fff;
+      font-size: 0.82rem;
+      font-weight: 700;
+      line-height: 1.2;
+      box-shadow: 0 10px 22px rgba(121, 92, 69, 0.18);
+      z-index: 1001;
+      animation: notification-toast-in 0.2s ease-out;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+    }
+
+    @keyframes notification-toast-in {
+      from {
+        opacity: 0;
+        transform: translateY(0.35rem) scale(0.98);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
     }
 
     .notification-badge {
@@ -251,9 +291,17 @@ import { NotificationService } from '../../services/notification.service';
     }
   `,
 })
-export class NotificationBadgeComponent implements OnInit {
+export class NotificationBadgeComponent implements OnInit, OnDestroy {
   readonly notificationService = inject(NotificationService);
   protected showPanel = signal(false);
+  private readonly refreshStorageKey = 'arena-app:notifications:refresh';
+  private readonly onStorageChange = (event: StorageEvent): void => {
+    if (event.key !== this.refreshStorageKey) {
+      return;
+    }
+
+    void this.notificationService.initializeNotifications();
+  };
 
   protected toggleNotificationsPanel() {
     this.showPanel.update((current) => !current);
@@ -290,7 +338,18 @@ export class NotificationBadgeComponent implements OnInit {
   ngOnInit() {
     // Inicializar notificaciones al crear el componente
     this.notificationService.initializeNotifications();
+    this.notificationService.startRealtimeUpdates();
     // Poll cada 30 segundos para nuevas notificaciones
     this.notificationService.startPolling(30000);
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', this.onStorageChange);
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('storage', this.onStorageChange);
+    }
   }
 }

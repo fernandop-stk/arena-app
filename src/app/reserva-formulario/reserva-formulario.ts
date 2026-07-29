@@ -5,6 +5,7 @@ import { Router, RouterLink } from '@angular/router';
 import { CitasService } from '../citas/citas.service';
 import { ReservaStateService } from '../reserva-state.service';
 import { ReservaFormularioService } from './reserva-formulario.service';
+import { NotificationService } from '../admin-panel/services/notification.service';
 
 @Component({
   selector: 'app-reserva-formulario',
@@ -18,6 +19,7 @@ export class ReservaFormularioComponent {
   private readonly http = inject(HttpClient);
   private readonly citasService = inject(CitasService);
   private readonly reservaStateService = inject(ReservaStateService);
+  private readonly notificationService = inject(NotificationService);
 
   protected readonly reservaFormularioService = inject(ReservaFormularioService);
   protected readonly title = this.reservaFormularioService.getTitle();
@@ -104,6 +106,7 @@ export class ReservaFormularioComponent {
       next: () => {
         this.successMessage.set(this.reservaFormularioService.getSuccessMessage(nombre));
         this.reservaStateService.clearSelection();
+        void this.notificationService.requestRefresh();
         this.form.disable();
         window.setTimeout(() => {
           if (this.successMessage()) {

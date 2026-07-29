@@ -162,6 +162,9 @@ export async function createNotification(payload: NotificationPayload): Promise<
       );
     } catch (error) {
       console.error('Error creating notification in DB:', error);
+      loadNotificationsFromCache();
+      notificationsMemory.set(id, notification);
+      saveNotificationsToCache();
     }
   } else {
     // Memory mode
@@ -185,7 +188,12 @@ export async function getAllNotifications(): Promise<Notification[]> {
       return result.rows.map(rowToNotification);
     } catch (error) {
       console.error('Error fetching notifications from DB:', error);
-      return [];
+      loadNotificationsFromCache();
+      const notifications = Array.from(notificationsMemory.values());
+      notifications.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+      return notifications;
     }
   } else {
     // Memory mode
@@ -208,7 +216,12 @@ export async function getUnreadNotifications(): Promise<Notification[]> {
       return result.rows.map(rowToNotification);
     } catch (error) {
       console.error('Error fetching unread notifications from DB:', error);
-      return [];
+      loadNotificationsFromCache();
+      const notifications = Array.from(notificationsMemory.values()).filter((n) => !n.read);
+      notifications.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+      return notifications;
     }
   } else {
     // Memory mode
@@ -230,6 +243,13 @@ export async function markNotificationAsRead(notificationId: string): Promise<vo
       ]);
     } catch (error) {
       console.error('Error marking notification as read in DB:', error);
+      loadNotificationsFromCache();
+      const notification = notificationsMemory.get(notificationId);
+      if (notification) {
+        notification.read = true;
+        notificationsMemory.set(notificationId, notification);
+        saveNotificationsToCache();
+      }
     }
   } else {
     // Memory mode
@@ -252,6 +272,11 @@ export async function markAllNotificationsAsRead(): Promise<void> {
       await notificationsPool.query('UPDATE notifications SET read = TRUE');
     } catch (error) {
       console.error('Error marking all notifications as read in DB:', error);
+      loadNotificationsFromCache();
+      notificationsMemory.forEach((notification) => {
+        notification.read = true;
+      });
+      saveNotificationsToCache();
     }
   } else {
     // Memory mode
@@ -272,6 +297,9 @@ export async function deleteNotification(notificationId: string): Promise<void> 
       await notificationsPool.query('DELETE FROM notifications WHERE id = $1', [notificationId]);
     } catch (error) {
       console.error('Error deleting notification from DB:', error);
+      loadNotificationsFromCache();
+      notificationsMemory.delete(notificationId);
+      saveNotificationsToCache();
     }
   } else {
     // Memory mode
@@ -290,6 +318,14 @@ export async function clearReadNotifications(): Promise<void> {
       await notificationsPool.query('DELETE FROM notifications WHERE read = TRUE');
     } catch (error) {
       console.error('Error clearing read notifications from DB:', error);
+      loadNotificationsFromCache();
+      Array.from(notificationsMemory.keys()).forEach((id) => {
+        const notification = notificationsMemory.get(id);
+        if (notification && notification.read) {
+          notificationsMemory.delete(id);
+        }
+      });
+      saveNotificationsToCache();
     }
   } else {
     // Memory mode

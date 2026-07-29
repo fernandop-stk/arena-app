@@ -36,9 +36,14 @@ export interface NotificationPayload {
 })
 export class NotificationService {
   private readonly http = inject(HttpClient);
+  private readonly refreshStorageKey = 'arena-app:notifications:refresh';
+  private notificationStream: EventSource | null = null;
+  private notificationToastTimer: ReturnType<typeof setTimeout> | null = null;
+  private hasLoadedNotifications = false;
 
   private notifications = signal<Notification[]>([]);
   public unreadCount = signal(0);
+  public recentNotificationToast = signal('');
 
   /**
    * Obtiene todas las notificaciones
@@ -59,15 +64,65 @@ export class NotificationService {
    */
   async initializeNotifications(): Promise<void> {
     try {
-      const response = await fetch('/api/notifications');
+      const previousUnreadCount = this.unreadCount();
+      const previousFirstNotificationId = this.notifications()[0]?.id ?? '';
+
+      const response = await fetch('/api/notifications', {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
-        this.notifications.set(data.notifications || []);
+        const notifications = Array.isArray(data.notifications) ? data.notifications : [];
+        this.notifications.set(notifications);
         this.updateUnreadCount();
+
+        if (
+          this.hasLoadedNotifications &&
+          notifications.length > 0 &&
+          notifications[0]?.id &&
+          notifications[0].id !== previousFirstNotificationId &&
+          this.unreadCount() > previousUnreadCount
+        ) {
+          this.showToast(`Nueva notificación: ${notifications[0].title}`);
+        }
+
+        this.hasLoadedNotifications = true;
       }
     } catch (error) {
       console.error('Error loading notifications:', error);
     }
+  }
+
+  async requestRefresh(): Promise<void> {
+    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      window.localStorage.setItem(this.refreshStorageKey, `${Date.now()}`);
+    }
+
+    await this.initializeNotifications();
+  }
+
+  startRealtimeUpdates(): void {
+    if (typeof window === 'undefined' || typeof window.EventSource === 'undefined') {
+      return;
+    }
+
+    if (this.notificationStream) {
+      return;
+    }
+
+    const stream = new EventSource('/api/notifications/stream', {
+      withCredentials: true,
+    });
+
+    stream.onmessage = () => {
+      void this.initializeNotifications();
+    };
+
+    stream.onerror = () => {
+      // El navegador reintenta por sí mismo; mantenemos la conexión abierta.
+    };
+
+    this.notificationStream = stream;
   }
 
   /**
@@ -77,6 +132,7 @@ export class NotificationService {
     try {
       const response = await fetch('/api/notifications', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
@@ -105,6 +161,7 @@ export class NotificationService {
     try {
       await fetch(`/api/notifications/${notificationId}/read`, {
         method: 'PATCH',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
       });
 
@@ -125,6 +182,7 @@ export class NotificationService {
     try {
       await fetch('/api/notifications/read-all', {
         method: 'PATCH',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
       });
 
@@ -143,6 +201,7 @@ export class NotificationService {
     try {
       await fetch(`/api/notifications/${notificationId}`, {
         method: 'DELETE',
+        credentials: 'include',
       });
 
       // Actualizar lista local
@@ -160,6 +219,7 @@ export class NotificationService {
     try {
       await fetch('/api/notifications/clear-read', {
         method: 'DELETE',
+        credentials: 'include',
       });
 
       // Actualizar lista local
@@ -175,6 +235,18 @@ export class NotificationService {
    */
   private updateUnreadCount(): void {
     this.unreadCount.set(this.unreadNotifications.length);
+  }
+
+  private showToast(message: string): void {
+    this.recentNotificationToast.set(message);
+
+    if (this.notificationToastTimer) {
+      clearTimeout(this.notificationToastTimer);
+    }
+
+    this.notificationToastTimer = setTimeout(() => {
+      this.recentNotificationToast.set('');
+    }, 3500);
   }
 
   /**
