@@ -4963,7 +4963,82 @@ app.post('/api/admin/reservas', async (req, res) => {
 
     await updateReservationAdminStatus(created.reservationId, 'accepted');
 
-    return res.status(200).json({ ok: true, reservationId: created.reservationId });
+    let emailSent = false;
+    let emailError: string | undefined;
+
+    try {
+      const apiKey = process.env['RESEND_API_KEY'];
+
+      if (!apiKey) {
+        throw new Error('RESEND_API_KEY no configurada en el servidor.');
+      }
+
+      if (apiKey.includes('xxxxxxxx')) {
+        throw new Error(
+          'RESEND_API_KEY tiene un valor de ejemplo. Configura la key real de Resend.',
+        );
+      }
+
+      const fromEmail = process.env['RESEND_FROM_EMAIL'] ?? 'onboarding@resend.dev';
+      const isValidEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(fromEmail);
+
+      if (fromEmail === 'reservas@tu-dominio.com') {
+        throw new Error(
+          'RESEND_FROM_EMAIL tiene un valor de ejemplo. Usa un remitente verificado en Resend.',
+        );
+      }
+
+      if (!isValidEmail) {
+        throw new Error(
+          'RESEND_FROM_EMAIL no es válido. Debe ser un email real verificado en Resend.',
+        );
+      }
+
+      const provisionalHoldHours =
+        Boolean(requiresReservationSignal) || requiresReservationSignalByName(appointmentTypeName)
+          ? getProvisionalReservationHoursByName(appointmentTypeName) || 48
+          : 0;
+
+      const subject = `Confirmación de cita - ${appointmentTypeName} (${dateIso} ${time})`;
+      const html = buildReservationEmailHtml({
+        customerName,
+        customerPhone,
+        appointmentTypeName,
+        provisionalHoldHours,
+        dateIso,
+        time,
+        establishmentAddress: 'C. de Castilla, 4, 28320 Pinto, Madrid',
+        establishmentPhone: '919521611',
+      });
+
+      const resend = new Resend(apiKey);
+      const customerEmailTarget = resolveEmailRecipient(customerEmail);
+      const sendResult = await resend.emails.send({
+        from: fromEmail,
+        to: customerEmailTarget,
+        subject,
+        html,
+      });
+
+      if (sendResult.error) {
+        throw new Error(sendResult.error.message || 'Resend rechazó el envío del email.');
+      }
+
+      emailSent = true;
+    } catch (sendEmailError) {
+      emailError =
+        sendEmailError instanceof Error
+          ? sendEmailError.message
+          : 'No se pudo enviar el email de confirmación.';
+      console.error('Error enviando email en reserva creada desde agenda admin:', sendEmailError);
+    }
+
+    return res.status(200).json({
+      ok: true,
+      reservationId: created.reservationId,
+      emailSent,
+      ...(emailError ? { emailError } : {}),
+    });
   } catch (error) {
     console.error('Error creando reserva manual admin:', error);
     return res.status(500).json({ ok: false, error: 'No se pudo crear la reserva.' });

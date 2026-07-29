@@ -2973,7 +2973,9 @@
         }
 
         @if (stockManagementTab() === 'vender') {
-          <h3 class="admin-panel--container__reservation-title">Productos para vender</h3>
+          <h3 class="admin-panel--container__reservation-title send-tab-title">
+            Productos para vender
+          </h3>
 
           @if (isLoadingStockProducts()) {
             <p class="admin-panel--container__hint">Cargando stock...</p>
