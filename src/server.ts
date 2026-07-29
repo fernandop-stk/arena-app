@@ -6,6 +6,7 @@ import {
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
 import express, { type Response } from 'express';
+
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -5451,6 +5452,180 @@ app.use(
   }),
 );
 
+// ============================================================================
+// API Endpoints: Notificaciones (Solo para admin/superadmin)
+// Deben registrarse antes del catch-all de Angular.
+// ============================================================================
+
+/**
+ * GET /api/notifications - Obtiene todas las notificaciones
+ */
+app.get('/api/notifications', async (req, res) => {
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  try {
+    const notifications = await getAllNotifications();
+    return res.status(200).json({ ok: true, notifications });
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    return res.status(500).json({ ok: false, error: 'Error al obtener notificaciones.' });
+  }
+});
+
+/**
+ * GET /api/notifications/stream - SSE para refrescar el badge de notificaciones
+ */
+app.get('/api/notifications/stream', (req, res) => {
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  res.status(200);
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+  res.write(`retry: 10000\n\n`);
+
+  notificationStreamClients.add(res);
+
+  req.on('close', () => {
+    notificationStreamClients.delete(res);
+  });
+
+  return;
+});
+
+/**
+ * POST /api/notifications - Crea una nueva notificación
+ */
+app.post('/api/notifications', async (req, res) => {
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const { type, title, message, relatedId, actionUrl } = req.body ?? {};
+
+  if (!type || !title || !message) {
+    return res.status(400).json({ ok: false, error: 'Faltan datos obligatorios.' });
+  }
+
+  try {
+    const notification = await createNotificationAndBroadcast({
+      type,
+      title,
+      message,
+      relatedId,
+      actionUrl,
+    });
+    return res.status(201).json({ ok: true, notification });
+  } catch (error) {
+    console.error('Error creating notification:', error);
+    return res.status(500).json({ ok: false, error: 'Error al crear notificación.' });
+  }
+});
+
+/**
+ * PATCH /api/notifications/:id/read - Marca una notificación como leída
+ */
+app.patch('/api/notifications/:id/read', async (req, res) => {
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const notificationId = req.params['id'] ?? '';
+
+  if (!notificationId) {
+    return res.status(400).json({ ok: false, error: 'ID de notificación inválido.' });
+  }
+
+  try {
+    await markNotificationAsRead(notificationId);
+    broadcastNotificationsRefresh();
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+    return res.status(500).json({ ok: false, error: 'Error al marcar como leído.' });
+  }
+});
+
+/**
+ * PATCH /api/notifications/read-all - Marca todas las notificaciones como leídas
+ */
+app.patch('/api/notifications/read-all', async (req, res) => {
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  try {
+    await markAllNotificationsAsRead();
+    broadcastNotificationsRefresh();
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Error marking all notifications as read:', error);
+    return res.status(500).json({ ok: false, error: 'Error al marcar como leído.' });
+  }
+});
+
+/**
+ * DELETE /api/notifications/:id - Elimina una notificación
+ */
+app.delete('/api/notifications/:id', async (req, res) => {
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const notificationId = req.params['id'] ?? '';
+
+  if (!notificationId) {
+    return res.status(400).json({ ok: false, error: 'ID de notificación inválido.' });
+  }
+
+  try {
+    await deleteNotification(notificationId);
+    broadcastNotificationsRefresh();
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Error deleting notification:', error);
+    return res.status(500).json({ ok: false, error: 'Error al eliminar notificación.' });
+  }
+});
+
+/**
+ * DELETE /api/notifications/clear-read - Elimina todas las notificaciones leídas
+ */
+app.delete('/api/notifications/clear-read', async (req, res) => {
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  try {
+    await clearReadNotifications();
+    broadcastNotificationsRefresh();
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Error clearing read notifications:', error);
+    return res.status(500).json({ ok: false, error: 'Error al eliminar notificaciones leídas.' });
+  }
+});
+
 app.use((req, res, next) => {
   angularApp
     .handle(req)
@@ -5726,181 +5901,6 @@ const initializeFromDbWithRetry = async (
 
   throw lastError ?? new Error('Fallo desconocido al inicializar persistencia.');
 };
-
-// ============================================================================
-// API Endpoints: Notificaciones (Solo para admin/superadmin)
-// ============================================================================
-
-/**
- * GET /api/notifications - Obtiene todas las notificaciones
- */
-app.get('/api/notifications', async (req, res) => {
-  const session = isAdminRequest(req.headers.cookie);
-
-  if (!session.isAdmin) {
-    return res.status(401).json({ ok: false, error: 'No autorizado.' });
-  }
-
-  try {
-    const notifications = await getAllNotifications();
-    return res.status(200).json({ ok: true, notifications });
-  } catch (error) {
-    console.error('Error fetching notifications:', error);
-    return res.status(500).json({ ok: false, error: 'Error al obtener notificaciones.' });
-  }
-});
-
-/**
- * GET /api/notifications/stream - SSE para refrescar el badge de notificaciones
- */
-app.get('/api/notifications/stream', (req, res) => {
-  const session = isAdminRequest(req.headers.cookie);
-
-  if (!session.isAdmin) {
-    return res.status(401).json({ ok: false, error: 'No autorizado.' });
-  }
-
-  res.status(200);
-  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-  res.flushHeaders();
-  res.write(`retry: 10000\n\n`);
-
-  notificationStreamClients.add(res);
-
-  req.on('close', () => {
-    notificationStreamClients.delete(res);
-  });
-
-  return;
-});
-
-/**
- * POST /api/notifications - Crea una nueva notificación
- */
-app.post('/api/notifications', async (req, res) => {
-  // Este endpoint generalmente será llamado internamente desde el servidor
-  // pero podemos permitirlo para admin también
-  const session = isAdminRequest(req.headers.cookie);
-
-  if (!session.isAdmin) {
-    return res.status(401).json({ ok: false, error: 'No autorizado.' });
-  }
-
-  const { type, title, message, relatedId, actionUrl } = req.body ?? {};
-
-  if (!type || !title || !message) {
-    return res.status(400).json({ ok: false, error: 'Faltan datos obligatorios.' });
-  }
-
-  try {
-    const notification = await createNotificationAndBroadcast({
-      type,
-      title,
-      message,
-      relatedId,
-      actionUrl,
-    });
-    return res.status(201).json({ ok: true, notification });
-  } catch (error) {
-    console.error('Error creating notification:', error);
-    return res.status(500).json({ ok: false, error: 'Error al crear notificación.' });
-  }
-});
-
-/**
- * PATCH /api/notifications/:id/read - Marca una notificación como leída
- */
-app.patch('/api/notifications/:id/read', async (req, res) => {
-  const session = isAdminRequest(req.headers.cookie);
-
-  if (!session.isAdmin) {
-    return res.status(401).json({ ok: false, error: 'No autorizado.' });
-  }
-
-  const notificationId = req.params['id'] ?? '';
-
-  if (!notificationId) {
-    return res.status(400).json({ ok: false, error: 'ID de notificación inválido.' });
-  }
-
-  try {
-    await markNotificationAsRead(notificationId);
-    broadcastNotificationsRefresh();
-    return res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error('Error marking notification as read:', error);
-    return res.status(500).json({ ok: false, error: 'Error al marcar como leído.' });
-  }
-});
-
-/**
- * PATCH /api/notifications/read-all - Marca todas las notificaciones como leídas
- */
-app.patch('/api/notifications/read-all', async (req, res) => {
-  const session = isAdminRequest(req.headers.cookie);
-
-  if (!session.isAdmin) {
-    return res.status(401).json({ ok: false, error: 'No autorizado.' });
-  }
-
-  try {
-    await markAllNotificationsAsRead();
-    broadcastNotificationsRefresh();
-    return res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error('Error marking all notifications as read:', error);
-    return res.status(500).json({ ok: false, error: 'Error al marcar como leído.' });
-  }
-});
-
-/**
- * DELETE /api/notifications/:id - Elimina una notificación
- */
-app.delete('/api/notifications/:id', async (req, res) => {
-  const session = isAdminRequest(req.headers.cookie);
-
-  if (!session.isAdmin) {
-    return res.status(401).json({ ok: false, error: 'No autorizado.' });
-  }
-
-  const notificationId = req.params['id'] ?? '';
-
-  if (!notificationId) {
-    return res.status(400).json({ ok: false, error: 'ID de notificación inválido.' });
-  }
-
-  try {
-    await deleteNotification(notificationId);
-    broadcastNotificationsRefresh();
-    return res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error('Error deleting notification:', error);
-    return res.status(500).json({ ok: false, error: 'Error al eliminar notificación.' });
-  }
-});
-
-/**
- * DELETE /api/notifications/clear-read - Elimina todas las notificaciones leídas
- */
-app.delete('/api/notifications/clear-read', async (req, res) => {
-  const session = isAdminRequest(req.headers.cookie);
-
-  if (!session.isAdmin) {
-    return res.status(401).json({ ok: false, error: 'No autorizado.' });
-  }
-
-  try {
-    await clearReadNotifications();
-    broadcastNotificationsRefresh();
-    return res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error('Error clearing read notifications:', error);
-    return res.status(500).json({ ok: false, error: 'Error al limpiar notificaciones.' });
-  }
-});
 
 const startReservationReminderScheduler = (): void => {
   const run = async (): Promise<void> => {
