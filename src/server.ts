@@ -39,6 +39,7 @@ import {
   saveDailyPaymentToDb,
   saveStockProductToDb,
   saveUserToDb,
+  assignReservationToWorker,
   updateReservationAdminStatus,
   updateReservationClientConfirmationStatus,
   updateReservationPaymentReceived,
@@ -166,11 +167,69 @@ const adminEmployeeEmails = new Set(
     .filter(Boolean),
 );
 
-const getPublicAppBaseUrl = (): string => {
-  const configured = process.env['APP_BASE_URL']?.trim();
+const isLocalHostname = (hostname: string): boolean => {
+  const normalized = hostname.trim().toLowerCase();
+  return (
+    normalized === 'localhost' ||
+    normalized === '127.0.0.1' ||
+    normalized === '::1' ||
+    normalized.endsWith('.local')
+  );
+};
 
-  if (configured) {
-    return configured.replace(/\/$/, '');
+const normalizeBaseUrl = (value: string | undefined | null): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    try {
+      if (/^[a-z0-9.-]+(?::\d+)?$/i.test(trimmed)) {
+        const protocol = isLocalHostname(trimmed.split(':')[0] ?? '') ? 'http' : 'https';
+        return new URL(`${protocol}://${trimmed}`).origin;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+};
+
+const getPublicAppBaseUrl = (): string => {
+  const candidates = [
+    process.env['APP_BASE_URL'],
+    process.env['PUBLIC_APP_URL'],
+    process.env['RENDER_EXTERNAL_URL'],
+    process.env['RENDER_EXTERNAL_HOSTNAME'],
+    process.env['VERCEL_URL'],
+    process.env['URL'],
+  ]
+    .map((value) => normalizeBaseUrl(value))
+    .filter((value): value is string => Boolean(value));
+
+  if (candidates.length > 0) {
+    const nonLocalCandidate = candidates.find((candidate) => {
+      try {
+        return !isLocalHostname(new URL(candidate).hostname);
+      } catch {
+        return false;
+      }
+    });
+
+    if (nonLocalCandidate) {
+      return nonLocalCandidate;
+    }
+
+    return candidates[0];
   }
 
   const port = process.env['PORT']?.trim() || '4000';
@@ -321,6 +380,51 @@ async function notifyRejectedReservation(reservation: {
     }
   } catch (error) {
     console.error('Error enviando email de reserva rechazada:', error);
+  }
+}
+
+async function notifyAcceptedReservation(reservation: {
+  customerEmail: string;
+  customerName: string;
+  customerPhone: string;
+  appointmentTypeName: string;
+  dateIso: string;
+  startTime: string;
+}): Promise<void> {
+  try {
+    const apiKey = process.env['RESEND_API_KEY'];
+    const fromEmail = process.env['RESEND_FROM_EMAIL'] ?? 'onboarding@resend.dev';
+
+    if (!apiKey) {
+      return;
+    }
+
+    const resend = new Resend(apiKey);
+    const html = buildReservationEmailHtml({
+      customerName: reservation.customerName,
+      customerPhone: reservation.customerPhone,
+      appointmentTypeName: reservation.appointmentTypeName,
+      provisionalHoldHours: 0,
+      dateIso: reservation.dateIso,
+      time: reservation.startTime,
+      establishmentAddress: 'C. de Castilla, 4, 28320 Pinto, Madrid',
+      establishmentPhone: '919521611',
+    });
+
+    const sendResult = await resend.emails.send({
+      from: fromEmail,
+      to: resolveEmailRecipient(reservation.customerEmail),
+      subject: `Reserva confirmada - ${reservation.appointmentTypeName} (${reservation.dateIso} ${reservation.startTime})`,
+      html,
+    });
+
+    if (sendResult.error) {
+      throw new Error(
+        sendResult.error.message || 'Resend rechazó el envío del email de confirmación.',
+      );
+    }
+  } catch (error) {
+    console.error('Error enviando email de reserva confirmada:', error);
   }
 }
 
@@ -607,6 +711,7 @@ interface EmployeeTrackingInfo {
 type EmployeePermission =
   | 'agenda_ver'
   | 'agenda_gestionar'
+  | 'citas_asignar'
   | 'bloqueos_gestionar'
   | 'reservas_ver'
   | 'reservas_gestionar'
@@ -619,6 +724,7 @@ type EmployeePermission =
 const ALL_EMPLOYEE_PERMISSIONS: EmployeePermission[] = [
   'agenda_ver',
   'agenda_gestionar',
+  'citas_asignar',
   'bloqueos_gestionar',
   'reservas_ver',
   'reservas_gestionar',
@@ -829,6 +935,7 @@ const buildReservationEmailHtml = (data: {
             <h2 style="margin:0 0 10px;font-size:16px;color:#3b2f2a;">Datos del establecimiento</h2>
             <p style="margin:0 0 4px;font-size:14px;line-height:1.5;color:#7a675d;"><strong>Dirección:</strong> ${establishmentAddress}</p>
             <p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#7a675d;"><strong>Teléfono:</strong> ${establishmentPhone}</p>
+            <p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#7a675d;"><strong>Bizum:</strong> 614 716 238</p>
 
             <p style="margin:0;font-size:14px;line-height:1.6;color:#7a675d;">Gracias por confiar en Arena Studio. ¡Te esperamos!</p>
           </td>
@@ -1101,6 +1208,17 @@ const normalizeBirthDateIso = (value: unknown): string => {
   }
 
   return raw;
+};
+
+const isFutureBirthDateIso = (value: unknown): boolean => {
+  const raw = `${value ?? ''}`.trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return false;
+  }
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  return raw > todayIso;
 };
 
 const normalizeClientCard = (card: ClientCardItem): ClientCardItem => ({
@@ -2174,6 +2292,31 @@ const listUsersForSuperadmin = (): AdminEmployeeItem[] =>
       return 0;
     });
 
+const normalizeWorkerEmail = (value: string | null | undefined): string =>
+  `${value ?? ''}`.trim().toLowerCase();
+
+const isAssignableWorkerUser = (user: AppUser | undefined): boolean => {
+  if (!user) {
+    return false;
+  }
+
+  const role = getEffectiveUserRole(user);
+  return role === 'admin' || role === 'superadmin';
+};
+
+const listAssignableWorkerEmails = (): string[] => {
+  seedAuthUsers();
+
+  return Array.from(usersByEmail.values())
+    .filter((user) => isAssignableWorkerUser(user))
+    .map((user) => normalizeWorkerEmail(user.email))
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+};
+
+const getMaxConcurrentReservationsForSlot = (): number =>
+  Math.max(1, listAssignableWorkerEmails().length);
+
 const buildAdminMagicLinkEmailHtml = (magicLink: string): string => {
   const safeLink = escapeHtml(magicLink);
 
@@ -2183,12 +2326,12 @@ const buildAdminMagicLinkEmailHtml = (magicLink: string): string => {
         <tr>
           <td style="background:linear-gradient(135deg,#c97b63 0%,#d9a441 100%);padding:24px;">
             <p style="margin:0 0 6px;color:#fff6ee;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Arena Studio</p>
-            <h1 style="margin:0;color:#ffffff;font-size:22px;line-height:1.25;">Acceso temporal administración</h1>
+            <h1 style="margin:0;color:#ffffff;font-size:22px;line-height:1.25;">Acceso temporal gestión</h1>
           </td>
         </tr>
         <tr>
           <td style="padding:24px;">
-            <p style="margin:0 0 12px;font-size:15px;line-height:1.5;">Has solicitado acceso al panel de administración.</p>
+            <p style="margin:0 0 12px;font-size:15px;line-height:1.5;">Has solicitado acceso al panel de gestión.</p>
             <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#7a675d;">Este enlace caduca en 15 minutos.</p>
 
             <a href="${safeLink}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:linear-gradient(90deg,#c97b63 0%,#d9a441 100%);color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;">Entrar como admin</a>
@@ -2421,10 +2564,18 @@ app.post('/api/auth/logout', (_req, res) => {
 app.post('/api/cliente/registro', async (req, res) => {
   const nombre = `${req.body?.nombre ?? ''}`.trim();
   const apellidos = `${req.body?.apellidos ?? ''}`.trim();
+  const fechaNacimientoRaw = `${req.body?.fechaNacimiento ?? ''}`.trim();
   const fechaNacimiento = normalizeBirthDateIso(req.body?.fechaNacimiento);
   const telefono = `${req.body?.telefono ?? ''}`.trim();
   const email = `${req.body?.email ?? ''}`.trim().toLowerCase();
   const password = `${req.body?.password ?? ''}`.trim();
+
+  if (isFutureBirthDateIso(fechaNacimientoRaw)) {
+    return res.status(400).json({
+      ok: false,
+      error: 'La fecha de nacimiento no puede ser posterior a hoy.',
+    });
+  }
 
   if (!nombre || !apellidos || !fechaNacimiento || !telefono || !email || !password) {
     return res.status(400).json({
@@ -3024,7 +3175,11 @@ app.patch('/api/admin/alertas/:id/aprobar', async (req, res) => {
     await updateAlertApprovalStatus(alertId, 'approved', session.email);
 
     const durationMinutes = getAlertDurationMinutes(alert);
-    const availableSlots = await getAvailableSlotsForDate(alert.dateIso, durationMinutes);
+    const availableSlots = await getAvailableSlotsForDate(
+      alert.dateIso,
+      durationMinutes,
+      getMaxConcurrentReservationsForSlot(),
+    );
     const slotIsAvailable = availableSlots.includes(alert.startTime);
 
     if (slotIsAvailable) {
@@ -3912,8 +4067,16 @@ app.post('/api/admin/clientes', async (req, res) => {
   const fullName = `${req.body?.fullName ?? ''}`.trim();
   const email = `${req.body?.email ?? ''}`.trim().toLowerCase();
   const phone = `${req.body?.phone ?? ''}`.trim();
+  const birthDateRaw = `${req.body?.birthDateIso ?? ''}`.trim();
   const birthDateIso = normalizeBirthDateIso(req.body?.birthDateIso);
   const notes = `${req.body?.notes ?? ''}`.trim().slice(0, 500);
+
+  if (isFutureBirthDateIso(birthDateRaw)) {
+    return res.status(400).json({
+      ok: false,
+      error: 'La fecha de nacimiento no puede ser posterior a hoy.',
+    });
+  }
 
   if (!fullName || !email || !phone || !birthDateIso) {
     return res.status(400).json({
@@ -3979,8 +4142,16 @@ app.patch('/api/admin/clientes/:id', async (req, res) => {
   const fullName = `${req.body?.fullName ?? ''}`.trim();
   const email = `${req.body?.email ?? ''}`.trim().toLowerCase();
   const phone = `${req.body?.phone ?? ''}`.trim();
+  const birthDateRaw = `${req.body?.birthDateIso ?? ''}`.trim();
   const birthDateIso = normalizeBirthDateIso(req.body?.birthDateIso);
   const notes = `${req.body?.notes ?? ''}`.trim().slice(0, 500);
+
+  if (isFutureBirthDateIso(birthDateRaw)) {
+    return res.status(400).json({
+      ok: false,
+      error: 'La fecha de nacimiento no puede ser posterior a hoy.',
+    });
+  }
 
   if (!id || !fullName || !email || !phone || !birthDateIso) {
     return res.status(400).json({
@@ -4256,10 +4427,15 @@ app.patch('/api/admin/clientes/:clientId/packs/:treatmentId/payment', async (req
 
 app.get('/api/admin/empleados', (req, res) => {
   seedAuthUsers();
-  const session = isSuperadminRequest(req.headers.cookie);
+  const session = getAuthSession(req.headers.cookie);
 
-  if (!session.isSuperadmin) {
-    return res.status(403).json({ ok: false, error: 'Solo superadmin puede gestionar empleados.' });
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  if (session.role !== 'superadmin') {
+    const users = listUsersForSuperadmin().filter((user) => user.role === 'admin');
+    return res.status(200).json({ ok: true, users });
   }
 
   return res.status(200).json({
@@ -4856,6 +5032,7 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
       },
       {
         allowClosedSchedule: superadminSession.isSuperadmin,
+        maxConcurrentReservations: getMaxConcurrentReservationsForSlot(),
       },
     );
 
@@ -4893,12 +5070,26 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
 });
 
 app.post('/api/admin/reservas', async (req, res) => {
-  const session = isAdminRequest(req.headers.cookie);
-  const superadminSession = isSuperadminRequest(req.headers.cookie);
+  const session = getAuthSession(req.headers.cookie);
 
   if (!session.isAdmin) {
     return res.status(401).json({ ok: false, error: 'No autorizado.' });
   }
+
+  const currentUser = session.email ? usersByEmail.get(session.email) : null;
+  const isSuperadmin = session.role === 'superadmin';
+  const canCreateManualReservation =
+    isSuperadmin || Boolean(currentUser?.permissions?.includes('agenda_gestionar'));
+
+  if (!canCreateManualReservation) {
+    return res.status(403).json({
+      ok: false,
+      error: 'No tienes permisos para crear citas manuales en agenda.',
+    });
+  }
+
+  const canAssignReservationToWorker =
+    isSuperadmin || Boolean(currentUser?.permissions?.includes('citas_asignar'));
 
   const dateIso = `${req.body?.dateIso ?? ''}`.trim();
   const time = `${req.body?.time ?? ''}`.trim();
@@ -4907,6 +5098,7 @@ app.post('/api/admin/reservas', async (req, res) => {
   const customerName = `${req.body?.customerName ?? ''}`.trim();
   const customerPhone = `${req.body?.customerPhone ?? ''}`.trim();
   const customerEmail = `${req.body?.customerEmail ?? ''}`.trim().toLowerCase();
+  const createdByEmailRaw = `${req.body?.createdByEmail ?? ''}`.trim().toLowerCase();
   const requiresReservationSignal = Boolean(req.body?.requiresReservationSignal);
 
   if (
@@ -4934,6 +5126,24 @@ app.post('/api/admin/reservas', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'Email de cliente inválido.' });
   }
 
+  if (createdByEmailRaw && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(createdByEmailRaw)) {
+    return res.status(400).json({ ok: false, error: 'Email de trabajadora inválido.' });
+  }
+
+  const createdByEmail =
+    canAssignReservationToWorker && createdByEmailRaw ? createdByEmailRaw : session.email;
+
+  if (createdByEmail) {
+    const assigneeUser = usersByEmail.get(createdByEmail);
+
+    if (!assigneeUser || assigneeUser.role === 'client') {
+      return res.status(400).json({
+        ok: false,
+        error: 'La trabajadora asignada no existe o no es válida.',
+      });
+    }
+  }
+
   try {
     const created = await createReservationWithSlots(
       {
@@ -4944,18 +5154,20 @@ app.post('/api/admin/reservas', async (req, res) => {
         customerName,
         customerPhone,
         appointmentTypeName,
+        createdByEmail,
         // Las reservas creadas desde agenda admin deben persistir como cita confirmada internamente.
         requiresReservationSignal: false,
       },
       {
-        allowClosedSchedule: superadminSession.isSuperadmin,
+        allowClosedSchedule: isSuperadmin,
+        maxConcurrentReservations: getMaxConcurrentReservationsForSlot(),
       },
     );
 
     if (!created.ok) {
       return res.status(409).json({
         ok: false,
-        error: superadminSession.isSuperadmin
+        error: isSuperadmin
           ? 'No se pudo crear la reserva porque ya existe un conflicto con otra cita o bloqueo manual.'
           : 'No se pudo crear la reserva porque ese horario está cerrado o ya no está disponible.',
       });
@@ -5046,14 +5258,79 @@ app.post('/api/admin/reservas', async (req, res) => {
 });
 
 app.patch('/api/admin/reservas/:id/status', async (req, res) => {
-  const session = isAdminRequest(req.headers.cookie);
+  const session = getAuthSession(req.headers.cookie);
 
   if (!session.isAdmin) {
+    app.patch('/api/admin/reservas/:id/assign', async (req, res) => {
+      const session = getAuthSession(req.headers.cookie);
+
+      if (!session.isAdmin) {
+        return res.status(401).json({ ok: false, error: 'No autorizado.' });
+      }
+
+      const currentUser = session.email ? usersByEmail.get(session.email) : null;
+      const canAssignReservations =
+        session.role === 'superadmin' ||
+        Boolean(currentUser?.permissions?.includes('citas_asignar'));
+
+      if (!canAssignReservations) {
+        return res.status(403).json({ ok: false, error: 'No tienes permisos para asignar citas.' });
+      }
+
+      const reservationId = `${req.params['id'] ?? ''}`.trim();
+      const assigneeEmail = normalizeWorkerEmail(req.body?.assigneeEmail);
+
+      if (!reservationId || !assigneeEmail) {
+        return res
+          .status(400)
+          .json({ ok: false, error: 'Debes indicar la cita y la trabajadora.' });
+      }
+
+      const assigneeUser = usersByEmail.get(assigneeEmail);
+
+      if (!isAssignableWorkerUser(assigneeUser)) {
+        return res
+          .status(400)
+          .json({ ok: false, error: 'La trabajadora seleccionada no es válida.' });
+      }
+
+      try {
+        const updated = await assignReservationToWorker(reservationId, assigneeEmail);
+
+        if (!updated.ok) {
+          if (updated.reason === 'not-found') {
+            return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+          }
+
+          return res.status(409).json({
+            ok: false,
+            error: 'La trabajadora seleccionada ya tiene otra cita en esa franja.',
+          });
+        }
+
+        return res.status(200).json({ ok: true });
+      } catch (error) {
+        console.error('Error asignando reserva a trabajadora:', error);
+        return res.status(500).json({ ok: false, error: 'No se pudo asignar la cita.' });
+      }
+    });
     return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const currentUser = session.email ? usersByEmail.get(session.email) : null;
+  const canManageReservations =
+    session.role === 'superadmin' ||
+    Boolean(currentUser?.permissions?.includes('reservas_gestionar'));
+
+  if (!canManageReservations) {
+    return res
+      .status(403)
+      .json({ ok: false, error: 'No tienes permisos para confirmar o cancelar reservas.' });
   }
 
   const reservationId = `${req.params['id'] ?? ''}`;
   const status = `${req.body?.status ?? ''}` as AdminReservationStatus;
+  const requestedAssigneeEmail = normalizeWorkerEmail(req.body?.assigneeEmail);
   const validStatuses: AdminReservationStatus[] = ['accepted', 'rejected'];
 
   if (!reservationId || !validStatuses.includes(status)) {
@@ -5071,7 +5348,47 @@ app.patch('/api/admin/reservas/:id/status', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
     }
 
-    const updated = await updateReservationAdminStatus(reservationId, status);
+    const maxConcurrentReservations = getMaxConcurrentReservationsForSlot();
+    const currentAssigneeEmail = normalizeWorkerEmail(reservation.createdByEmail);
+    const targetAssigneeEmail = requestedAssigneeEmail || currentAssigneeEmail;
+
+    if (status === 'accepted' && !targetAssigneeEmail) {
+      return res.status(409).json({
+        ok: false,
+        error: 'Antes de confirmar, debes asignar esta cita a una trabajadora.',
+      });
+    }
+
+    if (status === 'accepted' && targetAssigneeEmail) {
+      const assigneeUser = usersByEmail.get(targetAssigneeEmail);
+
+      if (!isAssignableWorkerUser(assigneeUser)) {
+        return res.status(400).json({
+          ok: false,
+          error: 'La trabajadora asignada no existe o no tiene rol válido.',
+        });
+      }
+
+      const assigningAnotherWorker =
+        Boolean(requestedAssigneeEmail) &&
+        requestedAssigneeEmail !== normalizeWorkerEmail(session.email);
+
+      const canAssignToOthers =
+        session.role === 'superadmin' ||
+        Boolean(currentUser?.permissions?.includes('citas_asignar'));
+
+      if (assigningAnotherWorker && !canAssignToOthers) {
+        return res.status(403).json({
+          ok: false,
+          error: 'No tienes permisos para asignar citas a otras trabajadoras.',
+        });
+      }
+    }
+
+    const updated = await updateReservationAdminStatus(reservationId, status, {
+      maxConcurrentReservations,
+      assigneeEmail: status === 'accepted' ? targetAssigneeEmail : undefined,
+    });
 
     if (!updated.ok) {
       if (updated.reason === 'payment-required') {
@@ -5104,6 +5421,15 @@ app.patch('/api/admin/reservas/:id/status', async (req, res) => {
       } catch (notifError) {
         console.error('Error creating confirmation notification:', notifError);
       }
+
+      await notifyAcceptedReservation({
+        customerEmail: reservation.customerEmail,
+        customerName: reservation.customerName,
+        customerPhone: reservation.customerPhone,
+        appointmentTypeName: reservation.appointmentTypeName,
+        dateIso: reservation.dateIso,
+        startTime: reservation.startTime,
+      });
     } else if (status === 'rejected') {
       try {
         await createNotificationAndBroadcast({
@@ -5195,7 +5521,11 @@ app.get('/api/reservas/disponibilidad', async (req, res) => {
   }
 
   try {
-    const slots = await getAvailableSlotsForDate(dateIso, durationMinutes);
+    const slots = await getAvailableSlotsForDate(
+      dateIso,
+      durationMinutes,
+      getMaxConcurrentReservationsForSlot(),
+    );
 
     return res.status(200).json({
       ok: true,
@@ -5408,16 +5738,21 @@ app.post('/api/reservas/email', async (req, res) => {
       : 0;
 
   try {
-    const created = await createReservationWithSlots({
-      dateIso,
-      time,
-      durationMinutes: Number(durationMinutes),
-      customerEmail,
-      customerName,
-      customerPhone,
-      appointmentTypeName,
-      requiresReservationSignal: Boolean(requiresReservationSignal),
-    });
+    const created = await createReservationWithSlots(
+      {
+        dateIso,
+        time,
+        durationMinutes: Number(durationMinutes),
+        customerEmail,
+        customerName,
+        customerPhone,
+        appointmentTypeName,
+        requiresReservationSignal: Boolean(requiresReservationSignal),
+      },
+      {
+        maxConcurrentReservations: getMaxConcurrentReservationsForSlot(),
+      },
+    );
 
     if (!created.ok) {
       return res.status(409).json({

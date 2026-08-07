@@ -70,12 +70,24 @@
 
         <label class="cliente-registro--label">
           Fecha de nacimiento
-          <input class="cliente-registro--input" type="date" lang="es-ES" formControlName="fechaNacimiento" />
+          <input
+            class="cliente-registro--input"
+            type="date"
+            lang="es-ES"
+            formControlName="fechaNacimiento"
+            [attr.max]="todayDateIso"
+          />
           @if (
             registerForm.get('fechaNacimiento')?.invalid &&
             registerForm.get('fechaNacimiento')?.touched
           ) {
-            <span class="cliente-registro--error"> La fecha de nacimiento es obligatoria. </span>
+            <span class="cliente-registro--error">
+              @if (registerForm.get('fechaNacimiento')?.hasError('required')) {
+                La fecha de nacimiento es obligatoria.
+              } @else if (registerForm.get('fechaNacimiento')?.hasError('futureDate')) {
+                La fecha de nacimiento no puede ser posterior a hoy.
+              }
+            </span>
           }
         </label>
       </div>

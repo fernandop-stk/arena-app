@@ -386,7 +386,6 @@ body.app-menu-open {
     border-top: 1px solid colors.$color-border;
     background: colors.$color-primary-dark;
     position: relative;
-    z-index: 1;
 
     &__container {
       max-width: layout.$max-content-width;

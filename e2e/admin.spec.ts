@@ -1,5 +1,5 @@
 /**
- * Tests E2E — Panel de administración de Arena Hair Studio
+ * Tests E2E — Panel de gestión de Arena Hair Studio
  *
  * Cubre:
  *  - Redirección si no autenticado
@@ -103,7 +103,7 @@ test.describe('Login como superadmin', () => {
     await loginViaUI(page, SUPERADMIN_EMAIL, SUPERADMIN_PASSWORD);
 
     // Comprobación robusta: título del panel + al menos una tarjeta de módulo
-    await expect(page.locator('h1:has-text("Panel de administración")')).toBeVisible({
+    await expect(page.locator('h1:has-text("Panel de gestión")')).toBeVisible({
       timeout: 8000,
     });
     await expect(page.locator('.admin-panel--container__module-card').first()).toBeVisible();

@@ -435,6 +435,16 @@
       }
     }
 
+    &__employee-history {
+      &-item {
+        border: 1px solid colors.$color-secondary;
+        border-radius: 0.85rem;
+        padding: 1rem;
+        background: rgba(201, 123, 99, 0.06);
+        margin: 1rem 0;
+      }
+    }
+
     &__role-confirm-employee {
       margin: 0;
       color: colors.$color-text-soft;
@@ -1239,6 +1249,7 @@
       padding: 0.28rem;
       display: grid;
       gap: 0.3rem;
+      overflow: visible;
     }
 
     &__agenda-slot-closed {
@@ -1350,6 +1361,32 @@
       gap: 0.55rem;
     }
 
+    &__agenda-worker-section {
+      display: grid;
+      gap: 0.6rem;
+      border: 1px solid rgba(201, 123, 99, 0.2);
+      border-radius: 0.7rem;
+      padding: 0.75rem;
+      background: rgba(255, 255, 255, 0.78);
+    }
+
+    &__agenda-worker-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem;
+      padding-bottom: 0.35rem;
+      border-bottom: 1px solid rgba(201, 123, 99, 0.18);
+    }
+
+    &__agenda-worker-title {
+      margin: 0;
+      color: colors.$color-primary-dark;
+      font-size: 0.84rem;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+    }
+
     &__agenda-hour-row {
       display: grid;
       grid-template-columns: minmax(3.7rem, auto) 1fr;
@@ -1372,6 +1409,7 @@
       padding: 0.4rem;
       display: grid;
       gap: 0.45rem;
+      overflow: visible;
     }
 
     &__agenda-hour-empty {
@@ -1380,6 +1418,21 @@
       font-weight: 600;
       align-self: center;
       justify-self: start;
+    }
+
+    &__agenda-slot-occupied {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 1.9rem;
+      border-radius: 0.45rem;
+      border: 1px dashed rgba(201, 123, 99, 0.35);
+      background: rgba(201, 123, 99, 0.08);
+      color: colors.$color-text-soft;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-align: center;
+      padding: 0.2rem 0.35rem;
     }
 
     &__agenda-manual-form {

@@ -2,7 +2,7 @@
 
 ## 📋 Descripción General
 
-Se ha implementado un **sistema de notificaciones en tiempo real** para el panel de administración. Solo los admin y superadmin pueden ver las notificaciones, no los clientes. El sistema muestra un badge circular con el número de notificaciones no leídas (similar a Instagram).
+Se ha implementado un **sistema de notificaciones en tiempo real** para el panel de gestión. Solo los admin y superadmin pueden ver las notificaciones, no los clientes. El sistema muestra un badge circular con el número de notificaciones no leídas (similar a Instagram).
 
 ## 🎯 Funcionalidades Implementadas
 
@@ -91,7 +91,7 @@ Cuando se **crea una nueva reserva**, el sistema automáticamente:
 
 El header ahora tiene dos secciones:
 
-- **Izquierda**: "Panel de administración" + "Acceso activo como..."
+- **Izquierda**: "Panel de gestión" + "Acceso activo como..."
 - **Derecha**: Badge de notificaciones con contador
 
 ### Panel Desplegable

@@ -63,7 +63,7 @@
                   <p>{{ treatment.note }}</p>
                 }
 
-                <small>Registrado por {{ treatment.createdByEmail }}</small>
+                <small>Registrado por {{ getWorkerDisplayName(treatment.createdByEmail) }}</small>
               </article>
             }
           </div>

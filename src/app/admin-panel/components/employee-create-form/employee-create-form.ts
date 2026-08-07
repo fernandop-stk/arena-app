@@ -5,6 +5,7 @@ type EmployeeCreateRole = 'admin' | 'client';
 export type EmployeePermission =
   | 'agenda_ver'
   | 'agenda_gestionar'
+  | 'citas_asignar'
   | 'bloqueos_gestionar'
   | 'reservas_ver'
   | 'reservas_gestionar'
@@ -17,6 +18,7 @@ export type EmployeePermission =
 export const PERMISSION_LABELS: Record<EmployeePermission, string> = {
   agenda_ver: 'Ver agenda',
   agenda_gestionar: 'Gestionar agenda (mover/editar citas)',
+  citas_asignar: 'Asignar citas a trabajadoras',
   bloqueos_gestionar: 'Bloquear horas y días',
   reservas_ver: 'Ver listado de reservas',
   reservas_gestionar: 'Aceptar / rechazar reservas',

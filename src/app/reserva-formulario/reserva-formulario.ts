@@ -14,6 +14,7 @@ import { NotificationService } from '../admin-panel/services/notification.servic
   styleUrl: './reserva-formulario.scss',
 })
 export class ReservaFormularioComponent {
+  private readonly formFieldOrder = ['nombre', 'telefono', 'email'] as const;
   private readonly formBuilder = inject(FormBuilder);
   private readonly router = inject(Router);
   private readonly http = inject(HttpClient);
@@ -76,6 +77,7 @@ export class ReservaFormularioComponent {
   protected submitReservation(): void {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
+      this.scrollToFirstInvalidField();
       return;
     }
 
@@ -140,11 +142,72 @@ export class ReservaFormularioComponent {
 
       if (typeof apiMessage === 'string' && apiMessage.length > 0) {
         this.errorMessage.set(apiMessage);
+        this.scrollToSubmitError();
         return;
       }
     }
 
     this.errorMessage.set(this.reservaFormularioService.getErrorMessage());
+    this.scrollToSubmitError();
+  }
+
+  private scrollToFirstInvalidField(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      const firstInvalidFieldName = this.formFieldOrder.find((fieldName) =>
+        Boolean(this.form.get(fieldName)?.invalid),
+      );
+
+      if (!firstInvalidFieldName) {
+        return;
+      }
+
+      const fieldElement = document.getElementById(firstInvalidFieldName);
+
+      if (!fieldElement) {
+        return;
+      }
+
+      fieldElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      fieldElement.focus({ preventScroll: true });
+      this.triggerTemporaryHighlight(
+        fieldElement,
+        'reserva-formulario--container__input--error-highlight',
+      );
+    });
+  }
+
+  private scrollToSubmitError(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      const submitErrorElement = document.getElementById('reserva-form-submit-error');
+
+      if (!submitErrorElement) {
+        return;
+      }
+
+      submitErrorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      this.triggerTemporaryHighlight(
+        submitErrorElement,
+        'reserva-formulario--container__submit-error--highlight',
+      );
+    });
+  }
+
+  private triggerTemporaryHighlight(element: HTMLElement, className: string): void {
+    element.classList.remove(className);
+    void element.offsetWidth;
+    element.classList.add(className);
+
+    window.setTimeout(() => {
+      element.classList.remove(className);
+    }, 1400);
   }
 
   private getAppointmentTypeName(): string {

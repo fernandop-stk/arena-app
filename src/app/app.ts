@@ -44,7 +44,7 @@ import { AppService } from './app.service';
 
           <div class="app-shell--header__menu" [class.app-shell--header__menu--open]="isMenuOpen()">
             <nav class="app-shell--header__nav">
-              @if (!isSuperadmin()) {
+              @if (!isAdmin()) {
                 <a
                   class="app-shell--header__link"
                   routerLink="/"
@@ -89,7 +89,7 @@ import { AppService } from './app.service';
                   routerLink="/admin"
                   routerLinkActive="app-shell--header__link--active"
                   (click)="onAdminHeaderPanelClick($event)"
-                  >Panel admin</a
+                  >Panel de Gestión</a
                 >
               }
 
@@ -129,7 +129,7 @@ import { AppService } from './app.service';
               }
             </nav>
 
-            @if (!isSuperadmin()) {
+            @if (!isAdmin()) {
               <a class="app-shell--header__cta" routerLink="/reservas" (click)="closeMenu()"
                 >Reservar ahora</a
               >

@@ -14,6 +14,16 @@ interface TimeSlotItem {
   statusLabel: string;
 }
 
+interface CalendarGridCell {
+  key: string;
+  day: {
+    iso: string;
+    dayName: string;
+    dayNumber: number;
+    monthName: string;
+  } | null;
+}
+
 @Component({
   selector: 'app-reserva-calendario',
   imports: [RouterLink],
@@ -31,10 +41,24 @@ export class ReservaCalendarioComponent {
   protected readonly title = this.reservaCalendarioService.getTitle();
   protected readonly description = this.reservaCalendarioService.getDescription();
   protected readonly continueLabel = this.reservaCalendarioService.getContinueButtonLabel();
-  private readonly calendarDaysBatchSize = 14;
-  private readonly allCalendarDays = this.reservaCalendarioService.getCalendarDays(45);
-  protected readonly visibleDaysCount = signal(this.calendarDaysBatchSize);
-  protected readonly days = computed(() => this.allCalendarDays.slice(0, this.visibleDaysCount()));
+  protected readonly visibleMonthDate = signal(this.getMonthStart(new Date()));
+  protected readonly days = computed(() => {
+    const monthStart = this.visibleMonthDate();
+    const year = monthStart.getFullYear();
+    const month = monthStart.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    return Array.from({ length: daysInMonth }, (_, index) => {
+      const date = new Date(year, month, index + 1);
+
+      return {
+        iso: this.toIsoDate(date),
+        dayName: date.toLocaleDateString('es-ES', { weekday: 'short' }),
+        dayNumber: date.getDate(),
+        monthName: date.toLocaleDateString('es-ES', { month: 'short' }),
+      };
+    });
+  });
 
   protected readonly selectedTypeId = signal(
     this.reservaCalendarioService.getSelectedTypeFromQuery(
@@ -54,6 +78,34 @@ export class ReservaCalendarioComponent {
   protected readonly isLoadingSlots = signal(false);
   protected readonly slotsError = signal('');
   protected readonly currentStep = signal(this.route.snapshot.queryParamMap.get('tipo') ? 2 : 1);
+
+  protected readonly visibleMonthLabel = computed(() =>
+    this.visibleMonthDate().toLocaleDateString('es-ES', {
+      month: 'long',
+      year: 'numeric',
+    }),
+  );
+  protected readonly monthGridCells = computed<CalendarGridCell[]>(() => {
+    const monthDays = this.days();
+
+    if (monthDays.length === 0) {
+      return [];
+    }
+
+    const firstDate = new Date(`${monthDays[0].iso}T00:00:00`);
+    const leadingEmptyCells = this.getWeekdayColumnIndex(firstDate);
+    const cells: CalendarGridCell[] = [];
+
+    for (let index = 0; index < leadingEmptyCells; index += 1) {
+      cells.push({ key: `empty-${index}`, day: null });
+    }
+
+    monthDays.forEach((day) => {
+      cells.push({ key: day.iso, day });
+    });
+
+    return cells;
+  });
 
   protected readonly isCreatingAlert = signal(false);
   protected readonly alertError = signal('');
@@ -76,17 +128,25 @@ export class ReservaCalendarioComponent {
     this.currentStep.set(2);
   }
 
-  protected canLoadMoreDays(): boolean {
-    return this.visibleDaysCount() < this.allCalendarDays.length;
+  protected canGoToPreviousMonth(): boolean {
+    const currentMonthStart = this.getMonthStart(new Date());
+    return this.visibleMonthDate().getTime() > currentMonthStart.getTime();
   }
 
-  protected loadMoreDays(): void {
-    if (!this.canLoadMoreDays()) {
+  protected goToPreviousMonth(): void {
+    if (!this.canGoToPreviousMonth()) {
       return;
     }
 
-    this.visibleDaysCount.update((count) =>
-      Math.min(count + this.calendarDaysBatchSize, this.allCalendarDays.length),
+    this.visibleMonthDate.update((currentMonth) =>
+      this.getMonthStart(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)),
+    );
+    this.loadDayAvailability();
+  }
+
+  protected goToNextMonth(): void {
+    this.visibleMonthDate.update((currentMonth) =>
+      this.getMonthStart(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)),
     );
     this.loadDayAvailability();
   }
@@ -233,12 +293,20 @@ export class ReservaCalendarioComponent {
   }
 
   protected isDayUnavailable(dateIso: string): boolean {
+    if (this.isPastDay(dateIso)) {
+      return true;
+    }
+
     const availability = this.dayAvailability()[dateIso];
 
     return availability === false;
   }
 
   protected getDayStatusLabel(dateIso: string): string {
+    if (this.isPastDay(dateIso)) {
+      return 'Pasado';
+    }
+
     return this.reservaCalendarioService.isRecurringClosedDay(dateIso) ? 'Cerrado' : 'Completo';
   }
 
@@ -292,11 +360,20 @@ export class ReservaCalendarioComponent {
 
   private loadDayAvailability(): void {
     const duration = this.selectedDurationMinutes();
+    const todayIso = this.toIsoDate(new Date());
+
+    const daysToCheck = this.days().filter((day) => day.iso >= todayIso);
+
+    if (daysToCheck.length === 0) {
+      this.dayAvailability.set({});
+      this.isLoadingDays.set(false);
+      return;
+    }
 
     this.isLoadingDays.set(true);
 
     forkJoin(
-      this.days().map((day) =>
+      daysToCheck.map((day) =>
         this.reservaCalendarioService.getAvailableTimeSlotsFromApi(day.iso, duration).pipe(
           map((slots) => ({
             iso: day.iso,
@@ -428,6 +505,11 @@ export class ReservaCalendarioComponent {
     return slotMinutes <= nowMinutes;
   }
 
+  private isPastDay(dateIso: string): boolean {
+    const todayIso = this.toIsoDate(new Date());
+    return dateIso < todayIso;
+  }
+
   private getDefaultSelectedTypeDuration(): number {
     const value = this.reservaCalendarioService.getTypeDuration(
       this.appointmentTypes,
@@ -517,5 +599,22 @@ export class ReservaCalendarioComponent {
     }
 
     return `${hours} h ${remainingMinutes} min`;
+  }
+
+  private getMonthStart(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+  }
+
+  private getWeekdayColumnIndex(date: Date): number {
+    const weekDay = date.getDay();
+    return weekDay === 0 ? 6 : weekDay - 1;
+  }
+
+  private toIsoDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
   }
 }

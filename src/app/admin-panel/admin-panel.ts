@@ -87,6 +87,7 @@ interface AdminReservationItem {
   adminStatus: 'pending' | 'accepted' | 'rejected';
   clientConfirmationStatus: 'pending' | 'confirmed';
   clientConfirmationReminderSentAtIso?: string | null;
+  createdByEmail?: string | null;
   createdAtIso: string;
 }
 
@@ -128,6 +129,11 @@ interface AgendaWeekDay {
   alertCount: number;
   pendingAlertCount: number;
   isClosedDay: boolean;
+}
+
+interface AgendaDayWorkerSection {
+  workerKey: string;
+  workerLabel: string;
 }
 
 interface AgendaAlertItem {
@@ -480,12 +486,22 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly agendaDetailSaving = signal(false);
   protected readonly agendaDetailError = signal('');
   protected readonly agendaDetailCancelling = signal(false);
+  protected readonly agendaDetailConfirmAfterPaymentReservationId = signal('');
+  protected readonly showAgendaConfirmReservationModal = signal(false);
+  protected readonly agendaConfirmReservationWorkerEmail = signal('');
+  protected readonly showAgendaUnassignedReservationsModal = signal(false);
+  protected readonly agendaUnassignedAssignReservationId = signal('');
+  protected readonly agendaUnassignedAssignWorkerEmail = signal('');
+  protected readonly agendaUnassignedAssignLoadingId = signal('');
+  protected readonly agendaUnassignedAssignError = signal('');
   protected readonly showQuickReserveModal = signal(false);
   protected readonly showAgendaManualReserveModal = signal(false);
   protected readonly agendaManualReserveLoading = signal(false);
   protected readonly agendaManualReserveError = signal('');
   protected readonly agendaManualReserveDateIso = signal('');
   protected readonly agendaManualReserveTime = signal('');
+  protected readonly agendaManualReserveWorkerEmail = signal('');
+  protected readonly agendaManualReserveAssignToMe = signal(true);
   protected readonly agendaManualReserveCustomerName = signal('');
   protected readonly agendaManualReserveCustomerPhone = signal('');
   protected readonly agendaManualReserveCustomerEmail = signal('');
@@ -499,6 +515,7 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly helpSearch = signal('');
   protected readonly isLoadingBlockedPeriods = signal(false);
   protected readonly ownerEmail = signal('');
+  protected readonly ownerUsername = signal('');
   protected readonly stockManagementTab = signal<StockManagementTab>('crear');
   protected readonly stockProducts = signal<StockProductItem[]>([]);
   protected readonly isLoadingStockProducts = signal(false);
@@ -843,6 +860,7 @@ export class AdminPanelComponent implements OnDestroy {
             }
 
             this.ownerEmail.set(response.email ?? '');
+            this.ownerUsername.set(response.username ?? '');
             this.isSuperadmin.set(response.role === 'superadmin');
             this.myPermissions.set(response.permissions ?? []);
             this.loadReservations();
@@ -850,9 +868,7 @@ export class AdminPanelComponent implements OnDestroy {
             this.loadBlockedPeriods();
             this.loadClientCards();
 
-            if (response.role === 'superadmin') {
-              this.loadEmployeeUsers();
-            }
+            this.loadEmployeeUsers();
 
             const requestedTab = this.route.snapshot.queryParamMap.get('tab');
 
@@ -967,6 +983,7 @@ export class AdminPanelComponent implements OnDestroy {
     this.closeAgendaReservationDetail();
     this.closeAgendaCalendarModal();
     this.closeAgendaWeekScheduleModal();
+    this.closeAgendaUnassignedReservationsModal();
     this.closeAgendaManualReserveModal();
     this.showQuickReserveModal.set(false);
     this.closeDeleteStockConfirmModal();
@@ -1101,6 +1118,43 @@ export class AdminPanelComponent implements OnDestroy {
     this.agendaDraggedReservationId.set('');
   }
 
+  protected getAgendaUnassignedReservations(): AdminReservationItem[] {
+    return this.getAgendaVisibleReservations()
+      .filter(
+        (reservation) =>
+          this.getReservationWorkerKey(reservation.createdByEmail) === '__sin_asignar__',
+      )
+      .sort((a, b) => {
+        const byDate = a.dateIso.localeCompare(b.dateIso);
+
+        if (byDate !== 0) {
+          return byDate;
+        }
+
+        return a.startTime.localeCompare(b.startTime);
+      });
+  }
+
+  protected getAgendaUnassignedReservationsCount(): number {
+    return this.getAgendaUnassignedReservations().length;
+  }
+
+  protected openAgendaUnassignedReservationsModal(): void {
+    if (!this.requirePermission('citas_asignar', 'Asignar citas sin adjudicar')) {
+      return;
+    }
+
+    this.agendaUnassignedAssignError.set('');
+    this.showAgendaUnassignedReservationsModal.set(true);
+  }
+
+  protected closeAgendaUnassignedReservationsModal(): void {
+    this.showAgendaUnassignedReservationsModal.set(false);
+    this.agendaUnassignedAssignReservationId.set('');
+    this.agendaUnassignedAssignWorkerEmail.set('');
+    this.agendaUnassignedAssignError.set('');
+  }
+
   protected goToPreviousAgendaWeek(): void {
     this.shiftAgendaWeek(-7);
   }
@@ -1140,7 +1194,7 @@ export class AdminPanelComponent implements OnDestroy {
     const reservationsByDate = new Map<string, number>();
     const alertsByDate = new Map<string, { total: number; pending: number }>();
 
-    this.getAgendaVisibleReservations().forEach((reservation) => {
+    this.getAgendaCalendarReservations().forEach((reservation) => {
       const current = reservationsByDate.get(reservation.dateIso) ?? 0;
       reservationsByDate.set(reservation.dateIso, current + 1);
     });
@@ -1230,7 +1284,7 @@ export class AdminPanelComponent implements OnDestroy {
     const todayIso = this.getTodayIso();
     const reservationsByDate = new Map<string, number>();
 
-    this.getAgendaVisibleReservations().forEach((reservation) => {
+    this.getAgendaCalendarReservations().forEach((reservation) => {
       const current = reservationsByDate.get(reservation.dateIso) ?? 0;
       reservationsByDate.set(reservation.dateIso, current + 1);
     });
@@ -1277,7 +1331,7 @@ export class AdminPanelComponent implements OnDestroy {
       return [];
     }
 
-    return this.getAgendaVisibleReservations()
+    return this.getAgendaCalendarReservations()
       .filter((reservation) => reservation.dateIso === dateIso)
       .sort((a, b) => a.startTime.localeCompare(b.startTime));
   }
@@ -1292,7 +1346,7 @@ export class AdminPanelComponent implements OnDestroy {
     dateIso: string,
     startTime: string,
   ): AdminReservationItem[] {
-    return this.getAgendaVisibleReservations()
+    return this.getAgendaCalendarReservations()
       .filter(
         (reservation) => reservation.dateIso === dateIso && reservation.startTime === startTime,
       )
@@ -1301,6 +1355,13 @@ export class AdminPanelComponent implements OnDestroy {
 
   private getAgendaVisibleReservations(): AdminReservationItem[] {
     return this.reservations().filter((reservation) => reservation.adminStatus !== 'rejected');
+  }
+
+  private getAgendaCalendarReservations(): AdminReservationItem[] {
+    return this.getAgendaVisibleReservations().filter(
+      (reservation) =>
+        this.getReservationWorkerKey(reservation.createdByEmail) !== '__sin_asignar__',
+    );
   }
 
   private getReservationListVisibleReservations(): AdminReservationItem[] {
@@ -1450,6 +1511,7 @@ export class AdminPanelComponent implements OnDestroy {
         reservation.startTime,
         nextDuration,
         reservation.id,
+        reservation.createdByEmail,
       )
     ) {
       this.showAgendaDropToast('⚠️ Ese ajuste solapa con otra cita existente.');
@@ -1520,6 +1582,7 @@ export class AdminPanelComponent implements OnDestroy {
         targetStartTime,
         reservation.durationMinutes,
         reservation.id,
+        reservation.createdByEmail,
       )
     ) {
       this.showAgendaDropToast(
@@ -1570,6 +1633,7 @@ export class AdminPanelComponent implements OnDestroy {
         targetStartTime,
         reservation.durationMinutes,
         reservation.id,
+        reservation.createdByEmail,
       )
     ) {
       this.showAgendaDropToast(
@@ -3510,8 +3574,53 @@ export class AdminPanelComponent implements OnDestroy {
       return 'Sin empleado';
     }
 
-    const localPart = normalized.split('@')[0] ?? normalized;
-    return localPart.replace(/[._-]+/g, ' ');
+    if (normalized === 'cliente-auto-registro') {
+      return 'Cliente auto-registro';
+    }
+
+    const localPart = normalized.includes('@')
+      ? (normalized.split('@')[0] ?? normalized)
+      : normalized;
+    const cleaned = localPart
+      .replace(/[._-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!cleaned) {
+      return 'Sin empleado';
+    }
+
+    return cleaned
+      .split(' ')
+      .filter(Boolean)
+      .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+      .join(' ');
+  }
+
+  protected getWorkerDisplayName(email: string | null | undefined): string {
+    const normalized = (email ?? '').trim();
+
+    if (!normalized) {
+      return 'Sin usuario';
+    }
+
+    const normalizedLower = normalized.toLowerCase();
+    const matchingEmployee = this.employeeUsers().find(
+      (employee) => employee.email.trim().toLowerCase() === normalizedLower,
+    );
+
+    if (matchingEmployee?.username?.trim()) {
+      return matchingEmployee.username.trim();
+    }
+
+    const ownerEmail = this.ownerEmail().trim().toLowerCase();
+    const ownerUsername = this.ownerUsername().trim();
+
+    if (ownerEmail && ownerUsername && ownerEmail === normalizedLower) {
+      return ownerUsername;
+    }
+
+    return this.formatGlobalTreatmentEmployeeFallbackLabel(normalized);
   }
 
   private getGlobalTreatmentEmployeeDisplayLabel(email: string): string {
@@ -4024,6 +4133,11 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
+    if (this.isBirthDateInFuture(birthDateIso)) {
+      this.clientCardsError.set('La fecha de nacimiento no puede ser posterior a hoy.');
+      return;
+    }
+
     this.clientFormLoading.set(true);
 
     this.http
@@ -4085,6 +4199,11 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
+    if (this.isBirthDateInFuture(birthDateIso)) {
+      this.clientCardsError.set('La fecha de nacimiento no puede ser posterior a hoy.');
+      return;
+    }
+
     this.clientEditLoading.set(true);
 
     this.http
@@ -4120,6 +4239,10 @@ export class AdminPanelComponent implements OnDestroy {
           this.clientEditLoading.set(false);
         },
       });
+  }
+
+  private isBirthDateInFuture(birthDateIso: string): boolean {
+    return /^\d{4}-\d{2}-\d{2}$/.test(birthDateIso) && birthDateIso > this.getTodayIso();
   }
 
   protected openDeleteClientConfirmModal(): void {
@@ -4796,6 +4919,7 @@ export class AdminPanelComponent implements OnDestroy {
 
           if (updatedUser) {
             this.ownerEmail.set(updatedUser.email);
+            this.ownerUsername.set(updatedUser.username);
             this.superadminEditEmail.set(updatedUser.email);
             this.superadminEditUsername.set(updatedUser.username);
           }
@@ -5270,6 +5394,9 @@ export class AdminPanelComponent implements OnDestroy {
             return;
           }
 
+          const shouldConfirmReservationAfterPayment =
+            this.agendaDetailConfirmAfterPaymentReservationId() === reservationId;
+
           this.agendaDetailReservation.update((current) =>
             current && current.id === reservationId
               ? {
@@ -5281,12 +5408,24 @@ export class AdminPanelComponent implements OnDestroy {
 
           this.loadReservations();
           this.loadCierreAutoDiario();
+
+          if (shouldConfirmReservationAfterPayment) {
+            this.agendaDetailConfirmAfterPaymentReservationId.set('');
+            const assigneeEmail = this.agendaConfirmReservationWorkerEmail().trim().toLowerCase();
+            queueMicrotask(() => {
+              this.setReservationStatus(reservationId, 'accepted', assigneeEmail);
+            });
+          }
         },
         error: (error) => {
           const apiError = error?.error?.error;
           this.actionError.set(
             typeof apiError === 'string' && apiError ? apiError : 'No se pudo actualizar el pago.',
           );
+
+          if (this.agendaDetailConfirmAfterPaymentReservationId() === reservationId) {
+            this.agendaDetailConfirmAfterPaymentReservationId.set('');
+          }
         },
         complete: () => {
           this.actionLoadingId.set('');
@@ -5298,16 +5437,24 @@ export class AdminPanelComponent implements OnDestroy {
     this.showPaymentMethodModal.set(false);
     this.paymentMethodReservationId.set('');
     this.selectedPaymentMethod.set('');
+    this.agendaDetailConfirmAfterPaymentReservationId.set('');
   }
 
-  protected setReservationStatus(reservationId: string, status: 'accepted' | 'rejected'): void {
+  protected setReservationStatus(
+    reservationId: string,
+    status: 'accepted' | 'rejected',
+    assigneeEmail = '',
+  ): void {
     if (!this.requirePermission('reservas_gestionar', 'Aceptar / rechazar reservas')) return;
     this.actionError.set('');
     this.actionLoadingId.set(reservationId);
 
+    const normalizedAssignee = assigneeEmail.trim().toLowerCase();
+
     this.http
       .patch<{ ok: boolean; error?: string }>(`/api/admin/reservas/${reservationId}/status`, {
         status,
+        assigneeEmail: status === 'accepted' ? normalizedAssignee : undefined,
       })
       .subscribe({
         next: (response) => {
@@ -5569,7 +5716,11 @@ export class AdminPanelComponent implements OnDestroy {
             return;
           }
 
-          this.reservations.set(response.reservations ?? []);
+          this.reservations.set(
+            (response.reservations ?? []).map((reservation) =>
+              this.normalizeReservationTimeFields(reservation),
+            ),
+          );
         },
         error: (error) => {
           const apiError = error?.error?.error;
@@ -5768,7 +5919,7 @@ export class AdminPanelComponent implements OnDestroy {
       pdf.setFontSize(11);
       pdf.setTextColor(90, 73, 63);
       pdf.text(
-        `Fecha: ${cierre.fechaIso}  |  Registrado por: ${cierre.registradoPorEmail}`,
+        `Fecha: ${cierre.fechaIso}  |  Registrado por: ${this.getWorkerDisplayName(cierre.registradoPorEmail)}`,
         marginX,
         y,
       );
@@ -5842,7 +5993,7 @@ export class AdminPanelComponent implements OnDestroy {
 
           const timestamp = this.formatDateTime(detail.createdAtIso);
           const line1 = `${timestamp} · ${detail.concept}`;
-          const line2 = `${this.getPaymentMethodDisplayLabel(detail.paymentMethod)} · ${formatCurrency(detail.amount)} · ${detail.performedByEmail || 'Sin usuario'}`;
+          const line2 = `${this.getPaymentMethodDisplayLabel(detail.paymentMethod)} · ${formatCurrency(detail.amount)} · ${this.getWorkerDisplayName(detail.performedByEmail)}`;
 
           pdf.setFont('helvetica', 'normal');
           pdf.setFontSize(10);
@@ -6536,7 +6687,7 @@ export class AdminPanelComponent implements OnDestroy {
         : `<table class="detail-table"><thead><tr><th>Fecha y hora</th><th>Operación</th><th>Método</th><th>Importe</th><th>Realizada por</th></tr></thead><tbody>${details
             .map(
               (detail) =>
-                `<tr><td>${escapeHtml(this.formatDateTime(detail.createdAtIso))}</td><td>${escapeHtml(detail.concept)}</td><td>${escapeHtml(this.getPaymentMethodDisplayLabel(detail.paymentMethod))}</td><td><strong>${escapeHtml(formatCurrency(detail.amount))}</strong></td><td>${escapeHtml(detail.performedByEmail || 'Sin usuario')}</td></tr>`,
+                `<tr><td>${escapeHtml(this.formatDateTime(detail.createdAtIso))}</td><td>${escapeHtml(detail.concept)}</td><td>${escapeHtml(this.getPaymentMethodDisplayLabel(detail.paymentMethod))}</td><td><strong>${escapeHtml(formatCurrency(detail.amount))}</strong></td><td>${escapeHtml(this.getWorkerDisplayName(detail.performedByEmail))}</td></tr>`,
             )
             .join('')}</tbody></table>`;
 
@@ -6562,7 +6713,7 @@ export class AdminPanelComponent implements OnDestroy {
         </head>
         <body>
           <h1>Cierre de caja</h1>
-          <p class="meta">Fecha: ${escapeHtml(cierre.fechaIso)} · Registrado por: ${escapeHtml(cierre.registradoPorEmail)}</p>
+          <p class="meta">Fecha: ${escapeHtml(cierre.fechaIso)} · Registrado por: ${escapeHtml(this.getWorkerDisplayName(cierre.registradoPorEmail))}</p>
           <div class="card">
             <div class="row"><span>Efectivo</span><strong>${formatCurrency(cierre.efectivo)}</strong></div>
             <div class="row"><span>Tarjeta</span><strong>${formatCurrency(cierre.tarjeta)}</strong></div>
@@ -6985,7 +7136,7 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly permissionLabels = PERMISSION_LABELS;
 
   private loadEmployeeUsers(): void {
-    if (!this.isSuperadmin()) {
+    if (!this.ownerEmail()) {
       return;
     }
 
@@ -7043,6 +7194,10 @@ export class AdminPanelComponent implements OnDestroy {
 
     if (!this.ownerEmail()) {
       this.ownerEmail.set(superadmin.email);
+    }
+
+    if (!this.ownerUsername()) {
+      this.ownerUsername.set(superadmin.username);
     }
   }
 
@@ -7225,12 +7380,18 @@ export class AdminPanelComponent implements OnDestroy {
     startTime: string,
     durationMinutes: number,
     excludeReservationId: string,
+    workerEmail?: string | null,
   ): boolean {
     const candidateStartMinutes = this.parseTimeToMinutes(startTime);
     const candidateEndMinutes = candidateStartMinutes + durationMinutes;
+    const workerKey = this.getReservationWorkerKey(workerEmail);
 
-    return this.reservations().some((reservation) => {
-      if (reservation.id === excludeReservationId || reservation.dateIso !== dateIso) {
+    const overlappingReservations = this.reservations().filter((reservation) => {
+      if (
+        reservation.id === excludeReservationId ||
+        reservation.dateIso !== dateIso ||
+        reservation.adminStatus === 'rejected'
+      ) {
         return false;
       }
 
@@ -7241,6 +7402,18 @@ export class AdminPanelComponent implements OnDestroy {
         candidateStartMinutes < existingEndMinutes && candidateEndMinutes > existingStartMinutes
       );
     });
+
+    if (overlappingReservations.length >= this.getAgendaMaxConcurrentReservations()) {
+      return true;
+    }
+
+    if (workerKey === '__sin_asignar__') {
+      return false;
+    }
+
+    return overlappingReservations.some(
+      (reservation) => this.getReservationWorkerKey(reservation.createdByEmail) === workerKey,
+    );
   }
 
   private parseTimeToMinutes(time: string): number {
@@ -7369,6 +7542,122 @@ export class AdminPanelComponent implements OnDestroy {
     this.agendaDetailError.set('');
   }
 
+  protected startAgendaReservationConfirmation(reservation: AdminReservationItem): void {
+    this.openAgendaReservationDetail(reservation);
+    this.openAgendaConfirmReservationModal();
+  }
+
+  protected startAgendaUnassignedReservationAssign(reservation: AdminReservationItem): void {
+    const availableWorkers = this.getAgendaAvailableWorkerOptionsForReservation(reservation);
+    this.agendaUnassignedAssignReservationId.set(reservation.id);
+    this.agendaUnassignedAssignWorkerEmail.set(availableWorkers[0]?.email ?? '');
+    this.agendaUnassignedAssignError.set('');
+  }
+
+  protected cancelAgendaUnassignedReservationAssign(): void {
+    this.agendaUnassignedAssignReservationId.set('');
+    this.agendaUnassignedAssignWorkerEmail.set('');
+    this.agendaUnassignedAssignError.set('');
+  }
+
+  protected isAgendaUnassignedAssignExpanded(reservationId: string): boolean {
+    return this.agendaUnassignedAssignReservationId() === reservationId;
+  }
+
+  protected getAgendaUnassignedReservationAvailableWorkers(
+    reservation: AdminReservationItem,
+  ): Array<{ email: string; label: string }> {
+    return this.getAgendaAvailableWorkerOptionsForReservation(reservation);
+  }
+
+  protected canSubmitAgendaUnassignedReservationAssign(reservation: AdminReservationItem): boolean {
+    return (
+      this.isAgendaUnassignedAssignExpanded(reservation.id) &&
+      this.getAgendaUnassignedReservationAvailableWorkers(reservation).length > 0 &&
+      !!this.agendaUnassignedAssignWorkerEmail().trim()
+    );
+  }
+
+  protected assignAgendaUnassignedReservation(reservation: AdminReservationItem): void {
+    const assigneeEmail = this.agendaUnassignedAssignWorkerEmail().trim().toLowerCase();
+
+    if (!assigneeEmail) {
+      this.agendaUnassignedAssignError.set('Selecciona una trabajadora disponible.');
+      return;
+    }
+
+    this.agendaUnassignedAssignError.set('');
+    this.agendaUnassignedAssignLoadingId.set(reservation.id);
+
+    this.http
+      .patch<{ ok: boolean; error?: string }>(`/api/admin/reservas/${reservation.id}/assign`, {
+        assigneeEmail,
+      })
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.agendaUnassignedAssignError.set(response.error ?? 'No se pudo asignar la cita.');
+            return;
+          }
+
+          this.cancelAgendaUnassignedReservationAssign();
+          this.loadReservations();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.agendaUnassignedAssignError.set(
+            typeof apiError === 'string' && apiError ? apiError : 'No se pudo asignar la cita.',
+          );
+        },
+        complete: () => {
+          this.agendaUnassignedAssignLoadingId.set('');
+        },
+      });
+  }
+
+  protected openAgendaConfirmReservationModal(): void {
+    const reservation = this.agendaDetailReservation();
+
+    if (!reservation) {
+      return;
+    }
+
+    if (!this.requirePermission('reservas_gestionar', 'Confirmar cita')) {
+      return;
+    }
+
+    if (reservation.adminStatus === 'accepted') {
+      return;
+    }
+
+    const currentAssignee = `${reservation.createdByEmail ?? ''}`.trim().toLowerCase();
+    const availableWorkers = this.getAgendaAvailableWorkerOptionsForReservation(reservation);
+    const fallbackWorker =
+      availableWorkers.find((worker) => worker.email === currentAssignee)?.email ||
+      availableWorkers[0]?.email ||
+      this.ownerEmail().trim().toLowerCase();
+
+    this.agendaConfirmReservationWorkerEmail.set(currentAssignee || fallbackWorker);
+    this.agendaDetailError.set('');
+
+    this.showAgendaConfirmReservationModal.set(true);
+  }
+
+  protected closeAgendaConfirmReservationModal(): void {
+    this.showAgendaConfirmReservationModal.set(false);
+    this.agendaConfirmReservationWorkerEmail.set('');
+  }
+
+  protected confirmAgendaReservationFromModal(): void {
+    if (!this.canConfirmAgendaReservationFromModal()) {
+      this.agendaDetailError.set('Selecciona una trabajadora disponible para poder confirmar.');
+      return;
+    }
+
+    this.showAgendaConfirmReservationModal.set(false);
+    this.confirmAgendaDetailSignal();
+  }
+
   protected confirmAgendaDetailSignal(): void {
     const reservation = this.agendaDetailReservation();
 
@@ -7376,14 +7665,27 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
-    if (!this.requirePermission('reservas_gestionar', 'Confirmar señal de reservas')) {
+    if (!this.requirePermission('reservas_gestionar', 'Confirmar cita')) {
+      return;
+    }
+
+    if (reservation.adminStatus === 'accepted') {
+      return;
+    }
+
+    const assigneeEmail = this.agendaConfirmReservationWorkerEmail().trim().toLowerCase();
+
+    if (!assigneeEmail) {
+      this.agendaDetailError.set('Selecciona una trabajadora para confirmar la cita.');
       return;
     }
 
     if (reservation.paymentReceived) {
+      this.setReservationStatus(reservation.id, 'accepted', assigneeEmail);
       return;
     }
 
+    this.agendaDetailConfirmAfterPaymentReservationId.set(reservation.id);
     this.markPaymentReceivedDirect(reservation.id);
   }
 
@@ -7439,6 +7741,8 @@ export class AdminPanelComponent implements OnDestroy {
     this.agendaDetailError.set('');
     this.agendaDetailSaving.set(false);
     this.agendaDetailCancelling.set(false);
+    this.showAgendaConfirmReservationModal.set(false);
+    this.agendaConfirmReservationWorkerEmail.set('');
   }
 
   protected startAgendaReservationEdit(): void {
@@ -7484,7 +7788,7 @@ export class AdminPanelComponent implements OnDestroy {
     if (
       !this.isSuperadmin() &&
       nextDuration !== r.durationMinutes &&
-      this.hasReservationConflict(r.dateIso, r.startTime, nextDuration, r.id)
+      this.hasReservationConflict(r.dateIso, r.startTime, nextDuration, r.id, r.createdByEmail)
     ) {
       this.agendaDetailError.set('La nueva duración solapa con otra cita existente.');
       return;
@@ -7591,20 +7895,29 @@ export class AdminPanelComponent implements OnDestroy {
     this.showQuickReserveModal.set(true);
   }
 
-  protected openAgendaManualReserveModal(dateIso?: string, time = ''): void {
-    if (!this.isSuperadmin()) {
-      this.actionError.set('Solo superadmin puede crear reservas manuales desde agenda.');
+  protected openAgendaManualReserveModal(dateIso?: string, time = '', workerEmail = ''): void {
+    if (!this.canCreateAgendaManualReservation()) {
+      this.actionError.set('No tienes permisos para crear reservas manuales desde agenda.');
       return;
     }
 
     const resolvedDateIso = dateIso || this.agendaSelectedDateIso() || this.getTodayIso();
     const defaultPack = this.agendaPackOptions[0];
+    const currentUserEmail = this.ownerEmail().trim().toLowerCase();
+    const canAssignReservation = this.canAssignReservationToWorker();
+    const targetWorkerEmail =
+      this.normalizeAgendaWorkerEmail(workerEmail) ||
+      this.normalizeAgendaWorkerEmail(currentUserEmail) ||
+      currentUserEmail;
 
     this.agendaManualReserveError.set('');
     this.agendaManualReserveDateIso.set(resolvedDateIso);
     this.agendaManualReserveTime.set(
-      time || this.getDefaultAgendaManualReserveTime(resolvedDateIso),
+      this.normalizeAgendaTimeValue(time) ||
+        this.getDefaultAgendaManualReserveTime(resolvedDateIso),
     );
+    this.agendaManualReserveAssignToMe.set(!canAssignReservation);
+    this.agendaManualReserveWorkerEmail.set(targetWorkerEmail);
     this.agendaManualReserveCustomerName.set('');
     this.agendaManualReserveCustomerPhone.set('');
     this.agendaManualReserveCustomerEmail.set('');
@@ -7655,18 +7968,27 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected submitAgendaManualReserve(): void {
-    if (!this.isSuperadmin()) {
-      this.agendaManualReserveError.set('Solo superadmin puede crear reservas manuales.');
+    if (!this.canCreateAgendaManualReservation()) {
+      this.agendaManualReserveError.set('No tienes permisos para crear reservas manuales.');
       return;
     }
 
     const selectedService = this.getAgendaManualReserveSelectedService();
     const dateIso = this.agendaManualReserveDateIso().trim();
-    const time = this.agendaManualReserveTime().trim();
+    const time = this.normalizeAgendaTimeValue(this.agendaManualReserveTime().trim());
     const customerName = this.agendaManualReserveCustomerName().trim();
     const customerPhone = this.agendaManualReserveCustomerPhone().trim();
     const customerEmail = this.agendaManualReserveCustomerEmail().trim().toLowerCase();
     const durationMinutes = this.agendaManualReserveDuration();
+    const canAssignReservation = this.canAssignReservationToWorker();
+    const currentUserEmail = this.ownerEmail().trim().toLowerCase();
+    const selectedWorkerEmail = this.normalizeAgendaWorkerEmail(
+      this.agendaManualReserveWorkerEmail(),
+    );
+    const createdByEmail =
+      this.agendaManualReserveAssignToMe() || !canAssignReservation
+        ? currentUserEmail
+        : selectedWorkerEmail || currentUserEmail;
 
     if (!selectedService) {
       this.agendaManualReserveError.set('Selecciona un servicio válido.');
@@ -7694,6 +8016,7 @@ export class AdminPanelComponent implements OnDestroy {
         customerName,
         customerPhone,
         customerEmail,
+        createdByEmail,
         appointmentTypeName: selectedService.nombre,
         requiresReservationSignal:
           this.agendaManualReserveServiceType() === 'pack' &&
@@ -7721,9 +8044,9 @@ export class AdminPanelComponent implements OnDestroy {
       });
   }
 
-  protected handleAgendaEmptySlotClick(dateIso: string, slot: string): void {
-    if (this.isSuperadmin()) {
-      this.openAgendaManualReserveModal(dateIso, slot);
+  protected handleAgendaEmptySlotClick(dateIso: string, slot: string, workerEmail = ''): void {
+    if (this.canCreateAgendaManualReservation()) {
+      this.openAgendaManualReserveModal(dateIso, slot, workerEmail);
       return;
     }
 
@@ -7821,6 +8144,165 @@ export class AdminPanelComponent implements OnDestroy {
     return options;
   }
 
+  protected getAgendaDayWorkerSections(): AgendaDayWorkerSection[] {
+    const workerOptions = this.getAgendaAssignableWorkerOptions();
+
+    if (workerOptions.length === 0) {
+      return [
+        {
+          workerKey: this.getReservationWorkerKey(this.ownerEmail()),
+          workerLabel: this.getWorkerDisplayName(this.ownerEmail()),
+        },
+      ];
+    }
+
+    const sections = workerOptions.map((worker) => ({
+      workerKey: this.getReservationWorkerKey(worker.email),
+      workerLabel: worker.label,
+    }));
+
+    return sections;
+  }
+
+  protected getAgendaReservationsByWorkerAndStartTime(
+    workerKey: string,
+    startTime: string,
+  ): AdminReservationItem[] {
+    return this.getAgendaDayReservations().filter(
+      (reservation) =>
+        this.getReservationWorkerKey(reservation.createdByEmail) === workerKey &&
+        reservation.startTime === startTime,
+    );
+  }
+
+  private getAgendaMaxConcurrentReservations(): number {
+    return Math.max(1, this.getAgendaAssignableWorkerOptions().length);
+  }
+
+  protected getAgendaAssignableWorkerOptions(): Array<{ email: string; label: string }> {
+    const options = new Map<string, { email: string; label: string }>();
+    const currentOwnerEmail = this.ownerEmail().trim().toLowerCase();
+
+    this.employeeUsers().forEach((user) => {
+      if (user.role !== 'admin') {
+        return;
+      }
+
+      const email = user.email.trim().toLowerCase();
+
+      if (!email) {
+        return;
+      }
+
+      options.set(email, {
+        email,
+        label: this.getWorkerDisplayName(email),
+      });
+    });
+
+    if (currentOwnerEmail && !options.has(currentOwnerEmail)) {
+      options.set(currentOwnerEmail, {
+        email: currentOwnerEmail,
+        label: this.getWorkerDisplayName(currentOwnerEmail),
+      });
+    }
+
+    return Array.from(options.values()).sort((a, b) => {
+      if (a.email === currentOwnerEmail) {
+        return -1;
+      }
+
+      if (b.email === currentOwnerEmail) {
+        return 1;
+      }
+
+      return a.label.localeCompare(b.label);
+    });
+  }
+
+  protected getAgendaAvailableWorkerOptionsForReservation(
+    reservation: AdminReservationItem,
+  ): Array<{ email: string; label: string }> {
+    const assignedEmail = `${reservation.createdByEmail ?? ''}`.trim().toLowerCase();
+    const currentUserEmail = this.ownerEmail().trim().toLowerCase();
+    const canAssignOthers = this.canAssignReservationToWorker();
+
+    return this.getAgendaAssignableWorkerOptions().filter((worker) => {
+      if (!canAssignOthers && worker.email !== currentUserEmail && worker.email !== assignedEmail) {
+        return false;
+      }
+
+      if (worker.email === assignedEmail) {
+        return true;
+      }
+
+      return this.isWorkerAvailableForReservation(worker.email, reservation);
+    });
+  }
+
+  protected canConfirmAgendaReservationFromModal(): boolean {
+    const reservation = this.agendaDetailReservation();
+
+    if (!reservation) {
+      return false;
+    }
+
+    const assigneeEmail = this.agendaConfirmReservationWorkerEmail().trim().toLowerCase();
+
+    if (!assigneeEmail) {
+      return false;
+    }
+
+    const assignedEmail = `${reservation.createdByEmail ?? ''}`.trim().toLowerCase();
+
+    if (assignedEmail === assigneeEmail) {
+      return true;
+    }
+
+    return this.isWorkerAvailableForReservation(assigneeEmail, reservation);
+  }
+
+  protected canAssignReservationToWorker(): boolean {
+    if (this.isSuperadmin()) {
+      return true;
+    }
+
+    return this.hasPermission('citas_asignar');
+  }
+
+  protected onAgendaManualReserveAssignToMeChange(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    const shouldAssignToMe = target.checked;
+    this.agendaManualReserveAssignToMe.set(shouldAssignToMe);
+
+    if (shouldAssignToMe) {
+      this.agendaManualReserveWorkerEmail.set(this.ownerEmail().trim().toLowerCase());
+    }
+  }
+
+  protected isAgendaDaySlotContinuationForWorker(workerKey: string, startTime: string): boolean {
+    const dateIso = this.agendaDayScheduleDateIso();
+
+    if (!dateIso) {
+      return false;
+    }
+
+    return this.isAgendaSlotContinuation(dateIso, startTime, workerKey);
+  }
+
+  protected isAgendaWeekSlotContinuation(dateIso: string, startTime: string): boolean {
+    return this.isAgendaSlotContinuation(dateIso, startTime);
+  }
+
+  protected getAgendaReservationVisualHeightPx(
+    durationMinutes: number,
+    mode: 'day' | 'week',
+  ): number {
+    const slotHeight = mode === 'day' ? 48 : 35;
+    const slots = Math.max(1, Math.ceil(durationMinutes / 30));
+    return Math.max(slotHeight - 6, slotHeight * slots - 6);
+  }
+
   private getAgendaManualReserveSelectedService(): AppointmentType | TratamientoItem | null {
     if (this.agendaManualReserveServiceType() === 'pack') {
       return (
@@ -7847,6 +8329,108 @@ export class AdminPanelComponent implements OnDestroy {
 
   private getDefaultAgendaManualReserveTime(_dateIso: string): string {
     return '10:00';
+  }
+
+  private canCreateAgendaManualReservation(): boolean {
+    if (this.isSuperadmin()) {
+      return true;
+    }
+
+    return this.hasPermission('agenda_gestionar');
+  }
+
+  private normalizeAgendaTimeValue(value: string): string {
+    const normalized = `${value ?? ''}`.trim();
+    const match = normalized.match(/^(\d{1,2}):(\d{2})/);
+
+    if (!match) {
+      return normalized;
+    }
+
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+      return normalized;
+    }
+
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+      return normalized;
+    }
+
+    return `${`${hours}`.padStart(2, '0')}:${`${minutes}`.padStart(2, '0')}`;
+  }
+
+  private normalizeAgendaWorkerEmail(value: string | null | undefined): string {
+    return `${value ?? ''}`.trim().toLowerCase();
+  }
+
+  private normalizeReservationTimeFields(reservation: AdminReservationItem): AdminReservationItem {
+    return {
+      ...reservation,
+      startTime: this.normalizeAgendaTimeValue(reservation.startTime),
+      endTime: this.normalizeAgendaTimeValue(reservation.endTime),
+      createdByEmail: reservation.createdByEmail?.trim().toLowerCase() || null,
+    };
+  }
+
+  private getReservationWorkerKey(workerEmail: string | null | undefined): string {
+    const normalized = `${workerEmail ?? ''}`.trim().toLowerCase();
+    return normalized || '__sin_asignar__';
+  }
+
+  private isWorkerAvailableForReservation(
+    workerEmail: string,
+    reservation: AdminReservationItem,
+  ): boolean {
+    const workerKey = this.getReservationWorkerKey(workerEmail);
+    const candidateStart = this.parseTimeToMinutes(reservation.startTime);
+    const candidateEnd = this.parseTimeToMinutes(reservation.endTime);
+
+    return this.reservations().every((item) => {
+      if (item.id === reservation.id || item.adminStatus === 'rejected') {
+        return true;
+      }
+
+      if (item.dateIso !== reservation.dateIso) {
+        return true;
+      }
+
+      if (this.getReservationWorkerKey(item.createdByEmail) !== workerKey) {
+        return true;
+      }
+
+      const existingStart = this.parseTimeToMinutes(item.startTime);
+      const existingEnd = this.parseTimeToMinutes(item.endTime);
+      return candidateEnd <= existingStart || candidateStart >= existingEnd;
+    });
+  }
+
+  private isAgendaSlotContinuation(
+    dateIso: string,
+    startTime: string,
+    workerKey?: string,
+  ): boolean {
+    const slotMinutes = this.parseTimeToMinutes(startTime);
+
+    if (slotMinutes <= 0) {
+      return false;
+    }
+
+    return this.getAgendaCalendarReservations().some((reservation) => {
+      if (reservation.dateIso !== dateIso || reservation.adminStatus === 'rejected') {
+        return false;
+      }
+
+      if (workerKey && this.getReservationWorkerKey(reservation.createdByEmail) !== workerKey) {
+        return false;
+      }
+
+      const reservationStart = this.parseTimeToMinutes(reservation.startTime);
+      const reservationEnd = this.parseTimeToMinutes(reservation.endTime);
+
+      return slotMinutes > reservationStart && slotMinutes < reservationEnd;
+    });
   }
 
   private getFullDayBlockRange(dateIso: string): { startTime: string; endTime: string } {

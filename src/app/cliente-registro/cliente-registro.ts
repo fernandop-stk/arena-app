@@ -23,12 +23,13 @@ export class ClienteRegistroComponent {
   private readonly formBuilder = inject(FormBuilder);
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
+  protected readonly todayDateIso = this.getTodayDateIso();
 
   protected readonly registerForm = this.formBuilder.group(
     {
       nombre: ['', [Validators.required, Validators.minLength(2)]],
       apellidos: ['', [Validators.required, Validators.minLength(2)]],
-      fechaNacimiento: ['', [Validators.required]],
+      fechaNacimiento: ['', [Validators.required, this.noFutureBirthDateValidator()]],
       telefono: ['', [Validators.required, Validators.pattern(/^\d{9,}$/)]],
       email: ['', [Validators.required, Validators.email]],
       password: [
@@ -199,5 +200,29 @@ export class ClienteRegistroComponent {
 
       return null;
     };
+  }
+
+  private noFutureBirthDateValidator(): ValidatorFn {
+    return (control: AbstractControl): ValidationErrors | null => {
+      const value = `${control.value ?? ''}`.trim();
+
+      if (!value) {
+        return null;
+      }
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return { futureDate: true };
+      }
+
+      return value > this.todayDateIso ? { futureDate: true } : null;
+    };
+  }
+
+  private getTodayDateIso(): string {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = `${now.getMonth() + 1}`.padStart(2, '0');
+    const day = `${now.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 }

@@ -57,6 +57,36 @@ export class ClienteAreaComponent {
   protected readonly hasTreatments = computed(() => this.treatments().length > 0);
   protected readonly hasAlerts = computed(() => this.alerts().length > 0);
 
+  protected getWorkerDisplayName(email: string | null | undefined): string {
+    const normalized = (email ?? '').trim();
+
+    if (!normalized) {
+      return 'Sin usuario';
+    }
+
+    if (normalized === 'cliente-auto-registro') {
+      return 'Cliente auto-registro';
+    }
+
+    const localPart = normalized.includes('@')
+      ? (normalized.split('@')[0] ?? normalized)
+      : normalized;
+    const cleaned = localPart
+      .replace(/[._-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!cleaned) {
+      return 'Sin usuario';
+    }
+
+    return cleaned
+      .split(' ')
+      .filter(Boolean)
+      .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+      .join(' ');
+  }
+
   constructor() {
     this.loadSession();
   }

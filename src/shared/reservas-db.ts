@@ -12,6 +12,7 @@ export interface ReservaPersistRequest {
   customerPhone: string;
   appointmentTypeName: string;
   requiresReservationSignal?: boolean;
+  createdByEmail?: string;
 }
 
 export type AdminReservationStatus = 'pending' | 'accepted' | 'rejected';
@@ -31,6 +32,7 @@ export interface AdminReservationItem {
   adminStatus: AdminReservationStatus;
   clientConfirmationStatus: ClientConfirmationStatus;
   clientConfirmationReminderSentAtIso?: string | null;
+  createdByEmail?: string | null;
   createdAtIso: string;
   expiresAtIso?: string | null;
 }
@@ -89,6 +91,7 @@ const getServiceWindowByDate = (
 
 let pool: Pool | null = null;
 let schemaReady = false;
+let schemaInitPromise: Promise<void> | null = null;
 let fallbackWarningShown = false;
 let runtimeMemoryMode = false;
 
@@ -106,6 +109,7 @@ interface MemoryReservation {
   adminStatus: AdminReservationStatus;
   clientConfirmationStatus: ClientConfirmationStatus;
   clientConfirmationReminderSentAtIso?: string | null;
+  createdByEmail?: string | null;
   createdAtIso: string;
   expiresAtIso?: string | null;
   slots: string[];
@@ -166,19 +170,8 @@ const removeReservationFromMemory = (reservationId: string): void => {
     return;
   }
 
-  const dateSlots = memorySlotsByDate.get(reservation.dateIso);
-
-  if (dateSlots) {
-    reservation.slots.forEach((slot) => dateSlots.delete(slot));
-
-    if (dateSlots.size === 0) {
-      memorySlotsByDate.delete(reservation.dateIso);
-    } else {
-      memorySlotsByDate.set(reservation.dateIso, dateSlots);
-    }
-  }
-
   memoryReservations.delete(reservationId);
+  rebuildMemoryReservationSlotIndex();
 };
 
 const purgeExpiredProvisionalReservationsInMemory = (): boolean => {
@@ -382,83 +375,145 @@ const ensureSchema = async (): Promise<void> => {
     return;
   }
 
-  const db = getPool();
+  if (schemaInitPromise) {
+    await schemaInitPromise;
+    return;
+  }
 
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS reservations (
-      id TEXT PRIMARY KEY,
-      date_iso TEXT NOT NULL,
-      start_time TEXT NOT NULL,
-      end_time TEXT NOT NULL,
-      duration_minutes INTEGER NOT NULL,
-      customer_email TEXT NOT NULL,
-      customer_name TEXT NOT NULL,
-      customer_phone TEXT NOT NULL,
-      appointment_type_name TEXT NOT NULL,
-      payment_received BOOLEAN NOT NULL DEFAULT FALSE,
-      admin_status TEXT NOT NULL DEFAULT 'pending',
-      client_confirmation_status TEXT NOT NULL DEFAULT 'pending',
-      client_confirmation_reminder_sent_at TIMESTAMPTZ NULL,
-      expires_at TIMESTAMPTZ NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
+  schemaInitPromise = (async () => {
+    const db = getPool();
 
-  await db.query(`
-    ALTER TABLE reservations
-    ADD COLUMN IF NOT EXISTS payment_received BOOLEAN NOT NULL DEFAULT FALSE;
-  `);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS reservations (
+        id TEXT PRIMARY KEY,
+        date_iso TEXT NOT NULL,
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        duration_minutes INTEGER NOT NULL,
+        customer_email TEXT NOT NULL,
+        customer_name TEXT NOT NULL,
+        customer_phone TEXT NOT NULL,
+        appointment_type_name TEXT NOT NULL,
+        payment_received BOOLEAN NOT NULL DEFAULT FALSE,
+        admin_status TEXT NOT NULL DEFAULT 'pending',
+        client_confirmation_status TEXT NOT NULL DEFAULT 'pending',
+        client_confirmation_reminder_sent_at TIMESTAMPTZ NULL,
+        expires_at TIMESTAMPTZ NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
 
-  await db.query(`
-    ALTER TABLE reservations
-    ADD COLUMN IF NOT EXISTS admin_status TEXT NOT NULL DEFAULT 'pending';
-  `);
+    await db.query(`
+      ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS payment_received BOOLEAN NOT NULL DEFAULT FALSE;
+    `);
 
-  await db.query(`
-    ALTER TABLE reservations
-    ADD COLUMN IF NOT EXISTS client_confirmation_status TEXT NOT NULL DEFAULT 'pending';
-  `);
+    await db.query(`
+      ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS admin_status TEXT NOT NULL DEFAULT 'pending';
+    `);
 
-  await db.query(`
-    ALTER TABLE reservations
-    ADD COLUMN IF NOT EXISTS client_confirmation_reminder_sent_at TIMESTAMPTZ NULL;
-  `);
+    await db.query(`
+      ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS client_confirmation_status TEXT NOT NULL DEFAULT 'pending';
+    `);
 
-  await db.query(`
-    ALTER TABLE reservations
-    ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NULL;
-  `);
+    await db.query(`
+      ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS client_confirmation_reminder_sent_at TIMESTAMPTZ NULL;
+    `);
 
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS reservation_slots (
-      date_iso TEXT NOT NULL,
-      slot_time TEXT NOT NULL,
-      reservation_id TEXT NOT NULL REFERENCES reservations(id) ON DELETE CASCADE,
-      PRIMARY KEY (date_iso, slot_time)
-    );
-  `);
+    await db.query(`
+      ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS created_by_email TEXT NULL;
+    `);
 
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS admin_block_periods (
-      id TEXT PRIMARY KEY,
-      date_iso TEXT NOT NULL,
-      start_time TEXT NOT NULL,
-      end_time TEXT NOT NULL,
-      reason TEXT NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
+    await db.query(`
+      ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NULL;
+    `);
 
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS admin_blocked_slots (
-      date_iso TEXT NOT NULL,
-      slot_time TEXT NOT NULL,
-      block_id TEXT NOT NULL REFERENCES admin_block_periods(id) ON DELETE CASCADE,
-      PRIMARY KEY (date_iso, slot_time)
-    );
-  `);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS reservation_slots (
+        date_iso TEXT NOT NULL,
+        slot_time TEXT NOT NULL,
+        reservation_id TEXT NOT NULL REFERENCES reservations(id) ON DELETE CASCADE,
+        PRIMARY KEY (date_iso, slot_time, reservation_id)
+      );
+    `);
 
-  schemaReady = true;
+    await db.query(`
+      DO $$
+      DECLARE
+        current_primary_key_definition TEXT;
+      BEGIN
+        SELECT pg_get_constraintdef(oid)
+        INTO current_primary_key_definition
+        FROM pg_constraint
+        WHERE conrelid = 'reservation_slots'::regclass
+          AND contype = 'p'
+        LIMIT 1;
+
+        IF current_primary_key_definition IS NOT NULL
+          AND current_primary_key_definition <> 'PRIMARY KEY (date_iso, slot_time, reservation_id)' THEN
+          EXECUTE 'ALTER TABLE reservation_slots DROP CONSTRAINT ' || quote_ident((
+            SELECT conname
+            FROM pg_constraint
+            WHERE conrelid = 'reservation_slots'::regclass
+              AND contype = 'p'
+            LIMIT 1
+          ));
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conrelid = 'reservation_slots'::regclass
+            AND contype = 'p'
+            AND pg_get_constraintdef(oid) = 'PRIMARY KEY (date_iso, slot_time, reservation_id)'
+        ) THEN
+          ALTER TABLE reservation_slots
+          ADD CONSTRAINT reservation_slots_pkey PRIMARY KEY (date_iso, slot_time, reservation_id);
+        END IF;
+      EXCEPTION
+        WHEN duplicate_object OR invalid_table_definition THEN
+          NULL;
+      END $$;
+    `);
+
+    await db.query(`
+      CREATE INDEX IF NOT EXISTS idx_reservation_slots_date_time
+      ON reservation_slots (date_iso, slot_time);
+    `);
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS admin_block_periods (
+        id TEXT PRIMARY KEY,
+        date_iso TEXT NOT NULL,
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS admin_blocked_slots (
+        date_iso TEXT NOT NULL,
+        slot_time TEXT NOT NULL,
+        block_id TEXT NOT NULL REFERENCES admin_block_periods(id) ON DELETE CASCADE,
+        PRIMARY KEY (date_iso, slot_time)
+      );
+    `);
+
+    schemaReady = true;
+  })();
+
+  try {
+    await schemaInitPromise;
+  } finally {
+    schemaInitPromise = null;
+  }
 };
 
 export const toMinutes = (time: string): number => {
@@ -558,6 +613,76 @@ const getBookedSlotsFromMemory = (dateIso: string): Set<string> =>
       .flatMap((reservation) => reservation.slots),
   );
 
+const normalizeWorkerEmail = (value: string | null | undefined): string =>
+  `${value ?? ''}`.trim().toLowerCase();
+
+const getSlotUsageCountsFromMemory = (dateIso: string): Map<string, number> => {
+  const counts = new Map<string, number>();
+
+  Array.from(memoryReservations.values()).forEach((reservation) => {
+    if (reservation.dateIso !== dateIso || reservation.adminStatus === 'rejected') {
+      return;
+    }
+
+    reservation.slots.forEach((slot) => {
+      counts.set(slot, (counts.get(slot) ?? 0) + 1);
+    });
+  });
+
+  return counts;
+};
+
+const hasWorkerConflictInMemory = (
+  reservationId: string,
+  dateIso: string,
+  slotTimes: string[],
+  workerEmail: string,
+): boolean => {
+  const normalizedWorker = normalizeWorkerEmail(workerEmail);
+
+  if (!normalizedWorker) {
+    return false;
+  }
+
+  return Array.from(memoryReservations.values()).some((reservation) => {
+    if (reservation.id === reservationId) {
+      return false;
+    }
+
+    if (reservation.adminStatus === 'rejected' || reservation.dateIso !== dateIso) {
+      return false;
+    }
+
+    if (normalizeWorkerEmail(reservation.createdByEmail) !== normalizedWorker) {
+      return false;
+    }
+
+    return reservation.slots.some((slot) => slotTimes.includes(slot));
+  });
+};
+
+const hasCapacityConflictInMemory = (
+  reservationId: string,
+  dateIso: string,
+  slotTimes: string[],
+  maxConcurrentReservations: number,
+): boolean => {
+  const maxConcurrent = Math.max(1, Math.floor(maxConcurrentReservations));
+  const counts = getSlotUsageCountsFromMemory(dateIso);
+
+  const reservation = memoryReservations.get(reservationId);
+  const currentSlots =
+    reservation && reservation.adminStatus !== 'rejected' && reservation.dateIso === dateIso
+      ? new Set(reservation.slots)
+      : new Set<string>();
+
+  return slotTimes.some((slot) => {
+    const currentUsage = counts.get(slot) ?? 0;
+    const adjustedUsage = currentSlots.has(slot) ? currentUsage - 1 : currentUsage;
+    return adjustedUsage >= maxConcurrent;
+  });
+};
+
 const getBlockedSlotsFromMemory = (dateIso: string): Set<string> =>
   new Set(memoryBlockedSlotsByDate.get(dateIso) ?? new Set<string>());
 
@@ -583,25 +708,34 @@ const createReservationWithSlotsInMemory = (
   startMinutes: number,
   options?: {
     allowClosedSchedule?: boolean;
+    maxConcurrentReservations?: number;
   },
 ): { ok: true; reservationId: string } | { ok: false; conflict: true } => {
   purgeExpiredProvisionalReservationsInMemory();
 
   const reservationId = `${payload.dateIso}-${startMinutes}-${Date.now()}`;
   const slotTimes = buildSlotTimes(startMinutes, payload.durationMinutes);
-  const dateSlots = getBookedSlotsFromMemory(payload.dateIso);
+  const maxConcurrent = Math.max(1, Math.floor(options?.maxConcurrentReservations ?? 1));
+  const slotUsage = getSlotUsageCountsFromMemory(payload.dateIso);
   const blockedSlots = options?.allowClosedSchedule
     ? getBlockedSlotsFromMemory(payload.dateIso)
     : getEffectiveBlockedSlotsFromMemory(payload.dateIso);
-  const hasConflict = slotTimes.some((slot) => dateSlots.has(slot) || blockedSlots.has(slot));
+
+  const hasCapacityConflict = slotTimes.some((slot) => (slotUsage.get(slot) ?? 0) >= maxConcurrent);
+  const assigneeWorker = normalizeWorkerEmail(payload.createdByEmail);
+  const hasWorkerConflict = hasWorkerConflictInMemory(
+    '',
+    payload.dateIso,
+    slotTimes,
+    assigneeWorker,
+  );
+  const hasConflict =
+    hasCapacityConflict || hasWorkerConflict || slotTimes.some((slot) => blockedSlots.has(slot));
 
   if (hasConflict) {
     return { ok: false, conflict: true };
   }
 
-  const reservedSlots = memorySlotsByDate.get(payload.dateIso) ?? new Set<string>();
-  slotTimes.forEach((slot) => reservedSlots.add(slot));
-  memorySlotsByDate.set(payload.dateIso, reservedSlots);
   const createdAtIso = new Date().toISOString();
 
   memoryReservations.set(reservationId, {
@@ -618,6 +752,7 @@ const createReservationWithSlotsInMemory = (
     adminStatus: 'pending',
     clientConfirmationStatus: 'pending',
     clientConfirmationReminderSentAtIso: null,
+    createdByEmail: payload.createdByEmail?.trim().toLowerCase() || null,
     createdAtIso,
     expiresAtIso: getReservationExpiresAtIso({
       appointmentTypeName: payload.appointmentTypeName,
@@ -627,6 +762,7 @@ const createReservationWithSlotsInMemory = (
     slots: slotTimes,
   });
 
+  rebuildMemoryReservationSlotIndex();
   saveMemoryToFile();
   return { ok: true, reservationId };
 };
@@ -724,22 +860,8 @@ const deleteReservationByIdInMemory = (reservationId: string): void => {
     return;
   }
 
-  const dateSlots = memorySlotsByDate.get(reservation.dateIso);
-
-  if (!dateSlots) {
-    memoryReservations.delete(reservationId);
-    return;
-  }
-
-  reservation.slots.forEach((slot) => dateSlots.delete(slot));
-
-  if (dateSlots.size === 0) {
-    memorySlotsByDate.delete(reservation.dateIso);
-  } else {
-    memorySlotsByDate.set(reservation.dateIso, dateSlots);
-  }
-
   memoryReservations.delete(reservationId);
+  rebuildMemoryReservationSlotIndex();
   saveMemoryToFile();
 };
 
@@ -750,43 +872,52 @@ const releaseReservationSlotsInMemory = (reservationId: string): void => {
     return;
   }
 
-  const dateSlots = memorySlotsByDate.get(reservation.dateIso);
-
-  if (!dateSlots) {
-    return;
-  }
-
-  reservation.slots.forEach((slot) => dateSlots.delete(slot));
-
-  if (dateSlots.size === 0) {
-    memorySlotsByDate.delete(reservation.dateIso);
-  } else {
-    memorySlotsByDate.set(reservation.dateIso, dateSlots);
-  }
+  rebuildMemoryReservationSlotIndex();
 };
 
-const reserveReservationSlotsInMemory = (reservationId: string): boolean => {
+const rebuildMemoryReservationSlotIndex = (): void => {
+  memorySlotsByDate.clear();
+
+  Array.from(memoryReservations.values()).forEach((reservation) => {
+    if (reservation.adminStatus === 'rejected') {
+      return;
+    }
+
+    const dateSlots = memorySlotsByDate.get(reservation.dateIso) ?? new Set<string>();
+    reservation.slots.forEach((slot) => dateSlots.add(slot));
+    memorySlotsByDate.set(reservation.dateIso, dateSlots);
+  });
+};
+
+const reserveReservationSlotsInMemory = (
+  reservationId: string,
+  maxConcurrentReservations = 1,
+): boolean => {
   const reservation = memoryReservations.get(reservationId);
 
   if (!reservation) {
     return false;
   }
 
-  const activeSlots = getBookedSlotsFromMemory(reservation.dateIso);
-
-  if (reservation.slots.some((slot) => activeSlots.has(slot))) {
+  if (
+    hasCapacityConflictInMemory(
+      reservationId,
+      reservation.dateIso,
+      reservation.slots,
+      maxConcurrentReservations,
+    )
+  ) {
     return false;
   }
 
-  const dateSlots = memorySlotsByDate.get(reservation.dateIso) ?? new Set<string>();
-  reservation.slots.forEach((slot) => dateSlots.add(slot));
-  memorySlotsByDate.set(reservation.dateIso, dateSlots);
+  rebuildMemoryReservationSlotIndex();
   return true;
 };
 
 export const getAvailableSlotsForDate = async (
   dateIso: string,
   durationMinutes: number,
+  maxConcurrentReservations = 1,
 ): Promise<string[]> => {
   seedMockReservationsInMemory();
   await cleanupExpiredProvisionalReservations();
@@ -801,24 +932,29 @@ export const getAvailableSlotsForDate = async (
     return [];
   }
 
-  let bookedSet: Set<string>;
+  const maxConcurrent = Math.max(1, Math.floor(maxConcurrentReservations));
+  let bookedCountBySlot = new Map<string, number>();
   let blockedSet: Set<string>;
 
   if (shouldUseDatabase()) {
     try {
       await ensureSchema();
       const db = getPool();
-      const booked = await db.query<{ slot_time: string }>(
+      const booked = await db.query<{ slot_time: string; usage_count: string }>(
         `
-        SELECT rs.slot_time
+        SELECT rs.slot_time, COUNT(*)::text AS usage_count
         FROM reservation_slots rs
         INNER JOIN reservations r ON r.id = rs.reservation_id
         WHERE rs.date_iso = $1 AND r.admin_status <> 'rejected'
+        GROUP BY rs.slot_time
         `,
         [dateIso],
       );
 
-      bookedSet = new Set(booked.rows.map((row) => row.slot_time));
+      bookedCountBySlot = booked.rows.reduce((acc, row) => {
+        acc.set(row.slot_time, Number(row.usage_count) || 0);
+        return acc;
+      }, new Map<string, number>());
       const blocked = await db.query<{ slot_time: string }>(
         'SELECT slot_time FROM admin_blocked_slots WHERE date_iso = $1',
         [dateIso],
@@ -830,11 +966,11 @@ export const getAvailableSlotsForDate = async (
         throw error;
       }
 
-      bookedSet = getBookedSlotsFromMemory(dateIso);
+      bookedCountBySlot = getSlotUsageCountsFromMemory(dateIso);
       blockedSet = getEffectiveBlockedSlotsFromMemory(dateIso);
     }
   } else {
-    bookedSet = getBookedSlotsFromMemory(dateIso);
+    bookedCountBySlot = getSlotUsageCountsFromMemory(dateIso);
     blockedSet = getEffectiveBlockedSlotsFromMemory(dateIso);
   }
 
@@ -845,7 +981,9 @@ export const getAvailableSlotsForDate = async (
 
   for (let start = firstStartMinutes; start <= lastStartMinutes; start += STEP_MINUTES) {
     const neededSlots = buildSlotTimes(start, durationMinutes);
-    const hasConflict = neededSlots.some((slot) => bookedSet.has(slot) || blockedSet.has(slot));
+    const hasConflict = neededSlots.some(
+      (slot) => (bookedCountBySlot.get(slot) ?? 0) >= maxConcurrent || blockedSet.has(slot),
+    );
 
     if (!hasConflict) {
       availableSlots.push(toTime(start));
@@ -859,6 +997,7 @@ export const createReservationWithSlots = async (
   payload: ReservaPersistRequest,
   options?: {
     allowClosedSchedule?: boolean;
+    maxConcurrentReservations?: number;
   },
 ): Promise<{ ok: true; reservationId: string } | { ok: false; conflict: true }> => {
   seedMockReservationsInMemory();
@@ -879,6 +1018,8 @@ export const createReservationWithSlots = async (
   }
 
   const effectiveAllowClosedSchedule = options?.allowClosedSchedule === true;
+  const maxConcurrent = Math.max(1, Math.floor(options?.maxConcurrentReservations ?? 1));
+  const normalizedWorkerEmail = normalizeWorkerEmail(payload.createdByEmail);
 
   if (!shouldUseDatabase()) {
     return createReservationWithSlotsInMemory(payload, startMinutes, options);
@@ -926,22 +1067,50 @@ export const createReservationWithSlots = async (
       return { ok: false, conflict: true };
     }
 
-    const activeReservationConflict = await client.query<{ slot_time: string }>(
+    const activeReservationConflict = await client.query<{
+      slot_time: string;
+      usage_count: string;
+    }>(
       `
-      SELECT rs.slot_time
+      SELECT rs.slot_time, COUNT(*)::text AS usage_count
       FROM reservation_slots rs
       INNER JOIN reservations r ON r.id = rs.reservation_id
       WHERE rs.date_iso = $1
         AND rs.slot_time = ANY($2::text[])
         AND r.admin_status <> 'rejected'
-      LIMIT 1
+      GROUP BY rs.slot_time
       `,
       [payload.dateIso, slotTimes],
     );
 
-    if (activeReservationConflict.rowCount && activeReservationConflict.rowCount > 0) {
+    const hasCapacityConflict = activeReservationConflict.rows.some(
+      (row) => (Number(row.usage_count) || 0) >= maxConcurrent,
+    );
+
+    if (hasCapacityConflict) {
       await client.query('ROLLBACK');
       return { ok: false, conflict: true };
+    }
+
+    if (normalizedWorkerEmail) {
+      const workerConflict = await client.query<{ slot_time: string }>(
+        `
+        SELECT rs.slot_time
+        FROM reservation_slots rs
+        INNER JOIN reservations r ON r.id = rs.reservation_id
+        WHERE rs.date_iso = $1
+          AND rs.slot_time = ANY($2::text[])
+          AND r.admin_status <> 'rejected'
+          AND LOWER(COALESCE(r.created_by_email, '')) = $3
+        LIMIT 1
+        `,
+        [payload.dateIso, slotTimes, normalizedWorkerEmail],
+      );
+
+      if (workerConflict.rowCount && workerConflict.rowCount > 0) {
+        await client.query('ROLLBACK');
+        return { ok: false, conflict: true };
+      }
     }
 
     await client.query(
@@ -957,9 +1126,10 @@ export const createReservationWithSlots = async (
         customer_phone,
         appointment_type_name,
         client_confirmation_status,
+        created_by_email,
         expires_at
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
       `,
       [
         reservationId,
@@ -972,6 +1142,7 @@ export const createReservationWithSlots = async (
         payload.customerPhone,
         payload.appointmentTypeName,
         'pending',
+        payload.createdByEmail?.trim().toLowerCase() || null,
         expiresAtIso,
       ],
     );
@@ -1058,6 +1229,7 @@ const mapMemoryReservationToAdminItem = (reservation: MemoryReservation): AdminR
   adminStatus: reservation.adminStatus,
   clientConfirmationStatus: reservation.clientConfirmationStatus ?? 'pending',
   clientConfirmationReminderSentAtIso: reservation.clientConfirmationReminderSentAtIso ?? null,
+  createdByEmail: reservation.createdByEmail ?? null,
   createdAtIso: reservation.createdAtIso,
 });
 
@@ -1090,6 +1262,7 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
       admin_status: string;
       client_confirmation_status: string;
       client_confirmation_reminder_sent_at: string | null;
+      created_by_email: string | null;
       expires_at: string | null;
       created_at: string;
     }>(`
@@ -1107,6 +1280,7 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
         admin_status,
         client_confirmation_status,
         client_confirmation_reminder_sent_at,
+        created_by_email,
         expires_at,
         created_at
       FROM reservations
@@ -1127,6 +1301,7 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
       adminStatus: row.admin_status as AdminReservationStatus,
       clientConfirmationStatus: row.client_confirmation_status as ClientConfirmationStatus,
       clientConfirmationReminderSentAtIso: row.client_confirmation_reminder_sent_at,
+      createdByEmail: row.created_by_email,
       expiresAtIso: row.expires_at,
       createdAtIso: new Date(row.created_at).toISOString(),
     }));
@@ -1320,10 +1495,16 @@ export const updateReservationPaymentReceived = async (
 export const updateReservationAdminStatus = async (
   reservationId: string,
   status: AdminReservationStatus,
+  options?: {
+    maxConcurrentReservations?: number;
+    assigneeEmail?: string | null;
+  },
 ): Promise<
   { ok: true } | { ok: false; reason: 'not-found' | 'payment-required' | 'slot-conflict' }
 > => {
   await cleanupExpiredProvisionalReservations();
+  const maxConcurrent = Math.max(1, Math.floor(options?.maxConcurrentReservations ?? 1));
+  const normalizedAssignee = normalizeWorkerEmail(options?.assigneeEmail);
 
   if (!shouldUseDatabase()) {
     const reservation = memoryReservations.get(reservationId);
@@ -1336,8 +1517,36 @@ export const updateReservationAdminStatus = async (
       return { ok: false, reason: 'payment-required' };
     }
 
+    const targetWorkerEmail =
+      normalizedAssignee || normalizeWorkerEmail(reservation.createdByEmail);
+
+    if (
+      status === 'accepted' &&
+      hasCapacityConflictInMemory(
+        reservationId,
+        reservation.dateIso,
+        reservation.slots,
+        maxConcurrent,
+      )
+    ) {
+      return { ok: false, reason: 'slot-conflict' };
+    }
+
+    if (
+      status === 'accepted' &&
+      targetWorkerEmail &&
+      hasWorkerConflictInMemory(
+        reservationId,
+        reservation.dateIso,
+        reservation.slots,
+        targetWorkerEmail,
+      )
+    ) {
+      return { ok: false, reason: 'slot-conflict' };
+    }
+
     if (status === 'accepted' && reservation.adminStatus === 'rejected') {
-      const reserved = reserveReservationSlotsInMemory(reservationId);
+      const reserved = reserveReservationSlotsInMemory(reservationId, maxConcurrent);
 
       if (!reserved) {
         return { ok: false, reason: 'slot-conflict' };
@@ -1346,6 +1555,10 @@ export const updateReservationAdminStatus = async (
 
     if (status === 'rejected') {
       releaseReservationSlotsInMemory(reservationId);
+    }
+
+    if (normalizedAssignee) {
+      reservation.createdByEmail = normalizedAssignee;
     }
 
     reservation.adminStatus = status;
@@ -1363,8 +1576,9 @@ export const updateReservationAdminStatus = async (
       date_iso: string;
       start_time: string;
       duration_minutes: number;
+      created_by_email: string | null;
     }>(
-      'SELECT payment_received, admin_status, date_iso, start_time, duration_minutes FROM reservations WHERE id = $1',
+      'SELECT payment_received, admin_status, date_iso, start_time, duration_minutes, created_by_email FROM reservations WHERE id = $1',
       [reservationId],
     );
 
@@ -1377,31 +1591,55 @@ export const updateReservationAdminStatus = async (
     }
 
     const currentReservation = current.rows[0];
+    const slotTimes = buildSlotTimes(
+      toMinutes(currentReservation.start_time),
+      currentReservation.duration_minutes,
+    );
+    const targetWorkerEmail =
+      normalizedAssignee || normalizeWorkerEmail(currentReservation.created_by_email);
 
-    if (status === 'accepted' && currentReservation?.admin_status === 'rejected') {
-      const slotTimes = buildSlotTimes(
-        toMinutes(currentReservation.start_time),
-        currentReservation.duration_minutes,
-      );
-
-      const conflict = await db.query<{ slot_time: string }>(
+    if (status === 'accepted') {
+      const slotUsage = await db.query<{ slot_time: string; usage_count: string }>(
         `
-        SELECT rs.slot_time
+        SELECT rs.slot_time, COUNT(*)::text AS usage_count
         FROM reservation_slots rs
         INNER JOIN reservations r ON r.id = rs.reservation_id
         WHERE rs.date_iso = $1
           AND rs.slot_time = ANY($2::text[])
           AND rs.reservation_id <> $3
           AND r.admin_status <> 'rejected'
-        LIMIT 1
+        GROUP BY rs.slot_time
         `,
         [currentReservation.date_iso, slotTimes, reservationId],
       );
 
-      if (conflict.rowCount && conflict.rowCount > 0) {
+      if (slotUsage.rows.some((row) => (Number(row.usage_count) || 0) >= maxConcurrent)) {
         return { ok: false, reason: 'slot-conflict' };
       }
 
+      if (targetWorkerEmail) {
+        const workerConflict = await db.query<{ slot_time: string }>(
+          `
+          SELECT rs.slot_time
+          FROM reservation_slots rs
+          INNER JOIN reservations r ON r.id = rs.reservation_id
+          WHERE rs.date_iso = $1
+            AND rs.slot_time = ANY($2::text[])
+            AND rs.reservation_id <> $3
+            AND r.admin_status <> 'rejected'
+            AND LOWER(COALESCE(r.created_by_email, '')) = $4
+          LIMIT 1
+          `,
+          [currentReservation.date_iso, slotTimes, reservationId, targetWorkerEmail],
+        );
+
+        if (workerConflict.rowCount && workerConflict.rowCount > 0) {
+          return { ok: false, reason: 'slot-conflict' };
+        }
+      }
+    }
+
+    if (status === 'accepted' && currentReservation?.admin_status === 'rejected') {
       await db.query(
         `
         INSERT INTO reservation_slots (date_iso, slot_time, reservation_id)
@@ -1414,6 +1652,13 @@ export const updateReservationAdminStatus = async (
 
     if (status === 'rejected') {
       await db.query('DELETE FROM reservation_slots WHERE reservation_id = $1', [reservationId]);
+    }
+
+    if (normalizedAssignee) {
+      await db.query('UPDATE reservations SET created_by_email = $2 WHERE id = $1', [
+        reservationId,
+        normalizedAssignee,
+      ]);
     }
 
     await db.query('UPDATE reservations SET admin_status = $2 WHERE id = $1', [
@@ -1433,8 +1678,36 @@ export const updateReservationAdminStatus = async (
         return { ok: false, reason: 'payment-required' };
       }
 
+      const targetWorkerEmail =
+        normalizedAssignee || normalizeWorkerEmail(reservation.createdByEmail);
+
+      if (
+        status === 'accepted' &&
+        hasCapacityConflictInMemory(
+          reservationId,
+          reservation.dateIso,
+          reservation.slots,
+          maxConcurrent,
+        )
+      ) {
+        return { ok: false, reason: 'slot-conflict' };
+      }
+
+      if (
+        status === 'accepted' &&
+        targetWorkerEmail &&
+        hasWorkerConflictInMemory(
+          reservationId,
+          reservation.dateIso,
+          reservation.slots,
+          targetWorkerEmail,
+        )
+      ) {
+        return { ok: false, reason: 'slot-conflict' };
+      }
+
       if (status === 'accepted' && reservation.adminStatus === 'rejected') {
-        const reserved = reserveReservationSlotsInMemory(reservationId);
+        const reserved = reserveReservationSlotsInMemory(reservationId, maxConcurrent);
 
         if (!reserved) {
           return { ok: false, reason: 'slot-conflict' };
@@ -1445,6 +1718,10 @@ export const updateReservationAdminStatus = async (
         releaseReservationSlotsInMemory(reservationId);
       }
 
+      if (normalizedAssignee) {
+        reservation.createdByEmail = normalizedAssignee;
+      }
+
       reservation.adminStatus = status;
       memoryReservations.set(reservationId, reservation);
       saveMemoryToFile();
@@ -1452,6 +1729,147 @@ export const updateReservationAdminStatus = async (
     }
 
     throw error;
+  }
+};
+
+export const assignReservationToWorker = async (
+  reservationId: string,
+  workerEmail: string,
+): Promise<{ ok: true } | { ok: false; reason: 'not-found' | 'slot-conflict' }> => {
+  await cleanupExpiredProvisionalReservations();
+  const normalizedWorkerEmail = normalizeWorkerEmail(workerEmail);
+
+  if (!normalizedWorkerEmail) {
+    return { ok: false, reason: 'slot-conflict' };
+  }
+
+  if (!shouldUseDatabase()) {
+    const reservation = memoryReservations.get(reservationId);
+
+    if (!reservation) {
+      return { ok: false, reason: 'not-found' };
+    }
+
+    if (
+      reservation.adminStatus !== 'rejected' &&
+      hasWorkerConflictInMemory(
+        reservationId,
+        reservation.dateIso,
+        reservation.slots,
+        normalizedWorkerEmail,
+      )
+    ) {
+      return { ok: false, reason: 'slot-conflict' };
+    }
+
+    reservation.createdByEmail = normalizedWorkerEmail;
+    memoryReservations.set(reservationId, reservation);
+    saveMemoryToFile();
+    return { ok: true };
+  }
+
+  let client: PoolClient | null = null;
+
+  try {
+    await ensureSchema();
+    const db = getPool();
+    client = await db.connect();
+
+    if (!client) {
+      throw new Error('No se pudo obtener conexión de base de datos.');
+    }
+
+    await client.query('BEGIN');
+
+    const current = await client.query<{
+      date_iso: string;
+      start_time: string;
+      duration_minutes: number;
+      admin_status: string;
+    }>(
+      `
+      SELECT date_iso, start_time, duration_minutes, admin_status
+      FROM reservations
+      WHERE id = $1
+      FOR UPDATE
+      `,
+      [reservationId],
+    );
+
+    if (current.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return { ok: false, reason: 'not-found' };
+    }
+
+    const reservation = current.rows[0];
+
+    if (reservation.admin_status !== 'rejected') {
+      const slotTimes = buildSlotTimes(
+        toMinutes(reservation.start_time),
+        reservation.duration_minutes,
+      );
+
+      const workerConflict = await client.query<{ slot_time: string }>(
+        `
+        SELECT rs.slot_time
+        FROM reservation_slots rs
+        INNER JOIN reservations r ON r.id = rs.reservation_id
+        WHERE rs.date_iso = $1
+          AND rs.slot_time = ANY($2::text[])
+          AND rs.reservation_id <> $3
+          AND r.admin_status <> 'rejected'
+          AND LOWER(COALESCE(r.created_by_email, '')) = $4
+        LIMIT 1
+        `,
+        [reservation.date_iso, slotTimes, reservationId, normalizedWorkerEmail],
+      );
+
+      if (workerConflict.rowCount && workerConflict.rowCount > 0) {
+        await client.query('ROLLBACK');
+        return { ok: false, reason: 'slot-conflict' };
+      }
+    }
+
+    await client.query('UPDATE reservations SET created_by_email = $2 WHERE id = $1', [
+      reservationId,
+      normalizedWorkerEmail,
+    ]);
+
+    await client.query('COMMIT');
+    return { ok: true };
+  } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK').catch(() => undefined);
+    }
+
+    if (enableRuntimeMemoryMode(error)) {
+      const reservation = memoryReservations.get(reservationId);
+
+      if (!reservation) {
+        return { ok: false, reason: 'not-found' };
+      }
+
+      if (
+        reservation.adminStatus !== 'rejected' &&
+        hasWorkerConflictInMemory(
+          reservationId,
+          reservation.dateIso,
+          reservation.slots,
+          normalizedWorkerEmail,
+        )
+      ) {
+        return { ok: false, reason: 'slot-conflict' };
+      }
+
+      reservation.createdByEmail = normalizedWorkerEmail;
+      memoryReservations.set(reservationId, reservation);
+      saveMemoryToFile();
+      return { ok: true };
+    }
+
+    throw error;
+  } finally {
+    client?.release();
   }
 };
 
@@ -1468,6 +1886,7 @@ export const updateReservationByAdmin = async (
   },
   options?: {
     allowClosedSchedule?: boolean;
+    maxConcurrentReservations?: number;
   },
 ): Promise<
   | { ok: true }
@@ -1494,6 +1913,7 @@ export const updateReservationByAdmin = async (
   const endTime = toTime(endMinutes);
   const nextSlots = buildSlotTimes(startMinutes, payload.durationMinutes);
   const effectiveAllowClosedSchedule = options?.allowClosedSchedule === true;
+  const maxConcurrent = Math.max(1, Math.floor(options?.maxConcurrentReservations ?? 1));
 
   if (!shouldUseDatabase()) {
     const reservation = memoryReservations.get(reservationId);
@@ -1510,38 +1930,23 @@ export const updateReservationByAdmin = async (
       return { ok: false, reason: 'blocked-conflict' };
     }
 
-    const hasSlotConflict = Array.from(memoryReservations.values()).some((item) => {
-      if (
-        item.id === reservationId ||
-        item.adminStatus === 'rejected' ||
-        item.dateIso !== payload.dateIso
-      ) {
-        return false;
-      }
+    const hasSlotConflict = hasCapacityConflictInMemory(
+      reservationId,
+      payload.dateIso,
+      nextSlots,
+      maxConcurrent,
+    );
 
-      return item.slots.some((slot) => nextSlots.includes(slot));
-    });
+    const assignedWorker = normalizeWorkerEmail(reservation.createdByEmail);
+    const hasWorkerConflict = hasWorkerConflictInMemory(
+      reservationId,
+      payload.dateIso,
+      nextSlots,
+      assignedWorker,
+    );
 
-    if (reservation.adminStatus !== 'rejected' && hasSlotConflict) {
+    if (reservation.adminStatus !== 'rejected' && (hasSlotConflict || hasWorkerConflict)) {
       return { ok: false, reason: 'slot-conflict' };
-    }
-
-    if (reservation.adminStatus !== 'rejected') {
-      const previousDateSlots = memorySlotsByDate.get(reservation.dateIso);
-
-      if (previousDateSlots) {
-        reservation.slots.forEach((slot) => previousDateSlots.delete(slot));
-
-        if (previousDateSlots.size === 0) {
-          memorySlotsByDate.delete(reservation.dateIso);
-        } else {
-          memorySlotsByDate.set(reservation.dateIso, previousDateSlots);
-        }
-      }
-
-      const nextDateSlots = memorySlotsByDate.get(payload.dateIso) ?? new Set<string>();
-      nextSlots.forEach((slot) => nextDateSlots.add(slot));
-      memorySlotsByDate.set(payload.dateIso, nextDateSlots);
     }
 
     reservation.dateIso = payload.dateIso;
@@ -1555,6 +1960,7 @@ export const updateReservationByAdmin = async (
     reservation.slots = nextSlots;
 
     memoryReservations.set(reservationId, reservation);
+    rebuildMemoryReservationSlotIndex();
     saveMemoryToFile();
     return { ok: true };
   }
@@ -1609,21 +2015,43 @@ export const updateReservationByAdmin = async (
     const adminStatus = (current.rows[0]?.admin_status ?? 'pending') as AdminReservationStatus;
 
     if (adminStatus !== 'rejected') {
-      const slotConflict = await client.query<{ slot_time: string }>(
+      const slotConflict = await client.query<{ slot_time: string; usage_count: string }>(
         `
-        SELECT rs.slot_time
+        SELECT rs.slot_time, COUNT(*)::text AS usage_count
         FROM reservation_slots rs
         INNER JOIN reservations r ON r.id = rs.reservation_id
         WHERE rs.date_iso = $1
           AND rs.slot_time = ANY($2::text[])
           AND rs.reservation_id <> $3
           AND r.admin_status <> 'rejected'
+        GROUP BY rs.slot_time
+        `,
+        [payload.dateIso, nextSlots, reservationId],
+      );
+
+      if (slotConflict.rows.some((row) => (Number(row.usage_count) || 0) >= maxConcurrent)) {
+        await client.query('ROLLBACK');
+        return { ok: false, reason: 'slot-conflict' };
+      }
+
+      const workerConflict = await client.query<{ slot_time: string }>(
+        `
+        SELECT rs.slot_time
+        FROM reservation_slots rs
+        INNER JOIN reservations r ON r.id = rs.reservation_id
+        INNER JOIN reservations current_reservation ON current_reservation.id = $3
+        WHERE rs.date_iso = $1
+          AND rs.slot_time = ANY($2::text[])
+          AND rs.reservation_id <> $3
+          AND r.admin_status <> 'rejected'
+          AND LOWER(COALESCE(r.created_by_email, '')) = LOWER(COALESCE(current_reservation.created_by_email, ''))
+          AND COALESCE(current_reservation.created_by_email, '') <> ''
         LIMIT 1
         `,
         [payload.dateIso, nextSlots, reservationId],
       );
 
-      if (slotConflict.rowCount && slotConflict.rowCount > 0) {
+      if (workerConflict.rowCount && workerConflict.rowCount > 0) {
         await client.query('ROLLBACK');
         return { ok: false, reason: 'slot-conflict' };
       }
@@ -1695,38 +2123,23 @@ export const updateReservationByAdmin = async (
         return { ok: false, reason: 'blocked-conflict' };
       }
 
-      const hasSlotConflict = Array.from(memoryReservations.values()).some((item) => {
-        if (
-          item.id === reservationId ||
-          item.adminStatus === 'rejected' ||
-          item.dateIso !== payload.dateIso
-        ) {
-          return false;
-        }
+      const hasSlotConflict = hasCapacityConflictInMemory(
+        reservationId,
+        payload.dateIso,
+        nextSlots,
+        maxConcurrent,
+      );
 
-        return item.slots.some((slot) => nextSlots.includes(slot));
-      });
+      const assignedWorker = normalizeWorkerEmail(reservation.createdByEmail);
+      const hasWorkerConflict = hasWorkerConflictInMemory(
+        reservationId,
+        payload.dateIso,
+        nextSlots,
+        assignedWorker,
+      );
 
-      if (reservation.adminStatus !== 'rejected' && hasSlotConflict) {
+      if (reservation.adminStatus !== 'rejected' && (hasSlotConflict || hasWorkerConflict)) {
         return { ok: false, reason: 'slot-conflict' };
-      }
-
-      if (reservation.adminStatus !== 'rejected') {
-        const previousDateSlots = memorySlotsByDate.get(reservation.dateIso);
-
-        if (previousDateSlots) {
-          reservation.slots.forEach((slot) => previousDateSlots.delete(slot));
-
-          if (previousDateSlots.size === 0) {
-            memorySlotsByDate.delete(reservation.dateIso);
-          } else {
-            memorySlotsByDate.set(reservation.dateIso, previousDateSlots);
-          }
-        }
-
-        const nextDateSlots = memorySlotsByDate.get(payload.dateIso) ?? new Set<string>();
-        nextSlots.forEach((slot) => nextDateSlots.add(slot));
-        memorySlotsByDate.set(payload.dateIso, nextDateSlots);
       }
 
       reservation.dateIso = payload.dateIso;
@@ -1740,6 +2153,7 @@ export const updateReservationByAdmin = async (
       reservation.slots = nextSlots;
 
       memoryReservations.set(reservationId, reservation);
+      rebuildMemoryReservationSlotIndex();
       return { ok: true };
     }
 

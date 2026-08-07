@@ -190,39 +190,68 @@
             <span class="reserva-calendario--container__legend-dot"></span>
             <span class="reserva-calendario--container__legend-text">Rojo = día completo</span>
           </div>
-          <div class="reserva-calendario--container__calendar">
-            @for (day of days(); track day.iso) {
-              <button
-                type="button"
-                class="reserva-calendario--container__day"
-                [class.reserva-calendario--container__day--selected]="selectedDateIso() === day.iso"
-                [class.reserva-calendario--container__day--disabled]="isDayUnavailable(day.iso)"
-                [disabled]="isDayUnavailable(day.iso)"
-                (click)="onSelectDay(day.iso)"
-              >
-                <span class="reserva-calendario--container__day-name">{{ day.dayName }}</span>
-                <span class="reserva-calendario--container__day-number">{{ day.dayNumber }}</span>
-                <span class="reserva-calendario--container__day-month">{{ day.monthName }}</span>
-                @if (isDayUnavailable(day.iso)) {
-                  <span class="reserva-calendario--container__day-status">
-                    {{ getDayStatusLabel(day.iso) }}
-                  </span>
-                }
-              </button>
+          <div class="reserva-calendario--container__month-nav" aria-label="Navegación por meses">
+            <button
+              type="button"
+              class="reserva-calendario--container__month-arrow"
+              [disabled]="!canGoToPreviousMonth()"
+              (click)="goToPreviousMonth()"
+              aria-label="Mes anterior"
+            >
+              ←
+            </button>
+            <p class="reserva-calendario--container__month-label">{{ visibleMonthLabel() }}</p>
+            <button
+              type="button"
+              class="reserva-calendario--container__month-arrow"
+              (click)="goToNextMonth()"
+              aria-label="Mes siguiente"
+            >
+              →
+            </button>
+          </div>
+          <div class="reserva-calendario--container__calendar-weekdays" aria-hidden="true">
+            @for (weekday of ['L', 'M', 'X', 'J', 'V', 'S', 'D']; track weekday) {
+              <span>{{ weekday }}</span>
             }
           </div>
-
-          @if (canLoadMoreDays()) {
-            <div class="reserva-calendario--container__calendar-more">
-              <button
-                type="button"
-                class="reserva-calendario--container__back"
-                (click)="loadMoreDays()"
-              >
-                Ver más fechas
-              </button>
-            </div>
-          }
+          <div class="reserva-calendario--container__calendar">
+            @for (cell of monthGridCells(); track cell.key) {
+              @if (cell.day) {
+                <button
+                  type="button"
+                  class="reserva-calendario--container__day"
+                  [class.reserva-calendario--container__day--selected]="
+                    selectedDateIso() === cell.day.iso
+                  "
+                  [class.reserva-calendario--container__day--disabled]="
+                    isDayUnavailable(cell.day.iso)
+                  "
+                  [disabled]="isDayUnavailable(cell.day.iso)"
+                  (click)="onSelectDay(cell.day.iso)"
+                >
+                  <span class="reserva-calendario--container__day-name">{{
+                    cell.day.dayName
+                  }}</span>
+                  <span class="reserva-calendario--container__day-number">{{
+                    cell.day.dayNumber
+                  }}</span>
+                  <span class="reserva-calendario--container__day-month">{{
+                    cell.day.monthName
+                  }}</span>
+                  @if (isDayUnavailable(cell.day.iso)) {
+                    <span class="reserva-calendario--container__day-status">
+                      {{ getDayStatusLabel(cell.day.iso) }}
+                    </span>
+                  }
+                </button>
+              } @else {
+                <div
+                  class="reserva-calendario--container__day reserva-calendario--container__day--ghost"
+                ></div>
+              }
+            }
+          </div>
         }
 
         <div class="reserva-calendario--container__nav">

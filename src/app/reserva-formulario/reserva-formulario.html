@@ -77,7 +77,9 @@
     </form>
 
     @if (errorMessage()) {
-      <p class="reserva-formulario--container__submit-error">{{ errorMessage() }}</p>
+      <p id="reserva-form-submit-error" class="reserva-formulario--container__submit-error">
+        {{ errorMessage() }}
+      </p>
     }
 
     <section class="reserva-formulario--container__client-cta" aria-label="Área cliente">
