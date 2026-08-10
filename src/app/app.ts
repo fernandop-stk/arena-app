@@ -111,9 +111,6 @@ import { AppService } from './app.service';
                     >Mi cuenta</a
                   >
                 }
-                <span class="app-shell--header__link app-shell--header__link--user"
-                  >Hola, {{ username() }}</span
-                >
                 @if (isAdmin() && !isSuperadmin()) {
                   <button
                     type="button"
@@ -126,6 +123,9 @@ import { AppService } from './app.service';
                 <button type="button" class="app-shell--header__link" (click)="logout()">
                   Cerrar sesión
                 </button>
+                <span class="app-shell--header__link app-shell--header__link--user"
+                  >Hola, {{ username() }}</span
+                >
               }
             </nav>
 

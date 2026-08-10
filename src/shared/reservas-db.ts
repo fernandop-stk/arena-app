@@ -1499,9 +1499,7 @@ export const updateReservationAdminStatus = async (
     maxConcurrentReservations?: number;
     assigneeEmail?: string | null;
   },
-): Promise<
-  { ok: true } | { ok: false; reason: 'not-found' | 'payment-required' | 'slot-conflict' }
-> => {
+): Promise<{ ok: true } | { ok: false; reason: 'not-found' | 'slot-conflict' }> => {
   await cleanupExpiredProvisionalReservations();
   const maxConcurrent = Math.max(1, Math.floor(options?.maxConcurrentReservations ?? 1));
   const normalizedAssignee = normalizeWorkerEmail(options?.assigneeEmail);
@@ -1511,10 +1509,6 @@ export const updateReservationAdminStatus = async (
 
     if (!reservation) {
       return { ok: false, reason: 'not-found' };
-    }
-
-    if (status === 'accepted' && !reservation.paymentReceived) {
-      return { ok: false, reason: 'payment-required' };
     }
 
     const targetWorkerEmail =
@@ -1584,10 +1578,6 @@ export const updateReservationAdminStatus = async (
 
     if (current.rowCount === 0) {
       return { ok: false, reason: 'not-found' };
-    }
-
-    if (status === 'accepted' && !current.rows[0]?.payment_received) {
-      return { ok: false, reason: 'payment-required' };
     }
 
     const currentReservation = current.rows[0];
@@ -1672,10 +1662,6 @@ export const updateReservationAdminStatus = async (
 
       if (!reservation) {
         return { ok: false, reason: 'not-found' };
-      }
-
-      if (status === 'accepted' && !reservation.paymentReceived) {
-        return { ok: false, reason: 'payment-required' };
       }
 
       const targetWorkerEmail =

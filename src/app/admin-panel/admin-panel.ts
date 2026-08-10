@@ -486,7 +486,6 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly agendaDetailSaving = signal(false);
   protected readonly agendaDetailError = signal('');
   protected readonly agendaDetailCancelling = signal(false);
-  protected readonly agendaDetailConfirmAfterPaymentReservationId = signal('');
   protected readonly showAgendaConfirmReservationModal = signal(false);
   protected readonly agendaConfirmReservationWorkerEmail = signal('');
   protected readonly showAgendaUnassignedReservationsModal = signal(false);
@@ -5394,9 +5393,6 @@ export class AdminPanelComponent implements OnDestroy {
             return;
           }
 
-          const shouldConfirmReservationAfterPayment =
-            this.agendaDetailConfirmAfterPaymentReservationId() === reservationId;
-
           this.agendaDetailReservation.update((current) =>
             current && current.id === reservationId
               ? {
@@ -5408,24 +5404,12 @@ export class AdminPanelComponent implements OnDestroy {
 
           this.loadReservations();
           this.loadCierreAutoDiario();
-
-          if (shouldConfirmReservationAfterPayment) {
-            this.agendaDetailConfirmAfterPaymentReservationId.set('');
-            const assigneeEmail = this.agendaConfirmReservationWorkerEmail().trim().toLowerCase();
-            queueMicrotask(() => {
-              this.setReservationStatus(reservationId, 'accepted', assigneeEmail);
-            });
-          }
         },
         error: (error) => {
           const apiError = error?.error?.error;
           this.actionError.set(
             typeof apiError === 'string' && apiError ? apiError : 'No se pudo actualizar el pago.',
           );
-
-          if (this.agendaDetailConfirmAfterPaymentReservationId() === reservationId) {
-            this.agendaDetailConfirmAfterPaymentReservationId.set('');
-          }
         },
         complete: () => {
           this.actionLoadingId.set('');
@@ -5437,7 +5421,6 @@ export class AdminPanelComponent implements OnDestroy {
     this.showPaymentMethodModal.set(false);
     this.paymentMethodReservationId.set('');
     this.selectedPaymentMethod.set('');
-    this.agendaDetailConfirmAfterPaymentReservationId.set('');
   }
 
   protected setReservationStatus(
@@ -7680,13 +7663,7 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
-    if (reservation.paymentReceived) {
-      this.setReservationStatus(reservation.id, 'accepted', assigneeEmail);
-      return;
-    }
-
-    this.agendaDetailConfirmAfterPaymentReservationId.set(reservation.id);
-    this.markPaymentReceivedDirect(reservation.id);
+    this.setReservationStatus(reservation.id, 'accepted', assigneeEmail);
   }
 
   protected getAgendaDetailClientCardId(): string {

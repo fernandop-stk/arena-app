@@ -402,13 +402,12 @@ async function notifyAcceptedReservation(reservation: {
     const resend = new Resend(apiKey);
     const html = buildReservationEmailHtml({
       customerName: reservation.customerName,
-      customerPhone: reservation.customerPhone,
       appointmentTypeName: reservation.appointmentTypeName,
       provisionalHoldHours: 0,
       dateIso: reservation.dateIso,
       time: reservation.startTime,
       establishmentAddress: 'C. de Castilla, 4, 28320 Pinto, Madrid',
-      establishmentPhone: '919521611',
+      establishmentPhone: '614716238',
     });
 
     const sendResult = await resend.emails.send({
@@ -875,7 +874,6 @@ const escapeHtml = (value: string): string =>
 
 const buildReservationEmailHtml = (data: {
   customerName: string;
-  customerPhone: string;
   appointmentTypeName: string;
   provisionalHoldHours?: number;
   dateIso: string;
@@ -885,7 +883,6 @@ const buildReservationEmailHtml = (data: {
   observaciones?: string;
 }): string => {
   const customerName = escapeHtml(data.customerName);
-  const customerPhone = escapeHtml(data.customerPhone);
   const appointmentTypeName = escapeHtml(data.appointmentTypeName);
   const dateIso = escapeHtml(data.dateIso);
   const time = escapeHtml(data.time);
@@ -927,7 +924,7 @@ const buildReservationEmailHtml = (data: {
                 <td style="padding:14px 16px;border-bottom:1px solid #e8d8c9;font-size:14px;"><strong>Hora</strong><br><span style="color:#7a675d;">${time}</span></td>
               </tr>
               <tr>
-                <td style="padding:14px 16px;font-size:14px;"><strong>Teléfono de contacto</strong><br><span style="color:#7a675d;">${customerPhone}</span></td>
+                <td style="padding:14px 16px;font-size:14px;"><strong>Teléfono de contacto</strong><br><span style="color:#7a675d;">${establishmentPhone}</span></td>
               </tr>
               ${observacionesRow}
             </table>
@@ -935,7 +932,7 @@ const buildReservationEmailHtml = (data: {
             <h2 style="margin:0 0 10px;font-size:16px;color:#3b2f2a;">Datos del establecimiento</h2>
             <p style="margin:0 0 4px;font-size:14px;line-height:1.5;color:#7a675d;"><strong>Dirección:</strong> ${establishmentAddress}</p>
             <p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#7a675d;"><strong>Teléfono:</strong> ${establishmentPhone}</p>
-            <p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#7a675d;"><strong>Bizum:</strong> 614 716 238</p>
+            <p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#7a675d;"><strong>Bizum:</strong> ${establishmentPhone}</p>
 
             <p style="margin:0;font-size:14px;line-height:1.6;color:#7a675d;">Gracias por confiar en Arena Studio. ¡Te esperamos!</p>
           </td>
@@ -5214,13 +5211,12 @@ app.post('/api/admin/reservas', async (req, res) => {
       const subject = `Confirmación de cita - ${appointmentTypeName} (${dateIso} ${time})`;
       const html = buildReservationEmailHtml({
         customerName,
-        customerPhone,
         appointmentTypeName,
         provisionalHoldHours,
         dateIso,
         time,
         establishmentAddress: 'C. de Castilla, 4, 28320 Pinto, Madrid',
-        establishmentPhone: '919521611',
+        establishmentPhone: '614716238',
       });
 
       const resend = new Resend(apiKey);
@@ -5257,63 +5253,59 @@ app.post('/api/admin/reservas', async (req, res) => {
   }
 });
 
+app.patch('/api/admin/reservas/:id/assign', async (req, res) => {
+  const session = getAuthSession(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const currentUser = session.email ? usersByEmail.get(session.email) : null;
+  const canAssignReservations =
+    session.role === 'superadmin' || Boolean(currentUser?.permissions?.includes('citas_asignar'));
+
+  if (!canAssignReservations) {
+    return res.status(403).json({ ok: false, error: 'No tienes permisos para asignar citas.' });
+  }
+
+  const reservationId = `${req.params['id'] ?? ''}`.trim();
+  const assigneeEmail = normalizeWorkerEmail(req.body?.assigneeEmail);
+
+  if (!reservationId || !assigneeEmail) {
+    return res.status(400).json({ ok: false, error: 'Debes indicar la cita y la trabajadora.' });
+  }
+
+  const assigneeUser = usersByEmail.get(assigneeEmail);
+
+  if (!isAssignableWorkerUser(assigneeUser)) {
+    return res.status(400).json({ ok: false, error: 'La trabajadora seleccionada no es válida.' });
+  }
+
+  try {
+    const updated = await assignReservationToWorker(reservationId, assigneeEmail);
+
+    if (!updated.ok) {
+      if (updated.reason === 'not-found') {
+        return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+      }
+
+      return res.status(409).json({
+        ok: false,
+        error: 'La trabajadora seleccionada ya tiene otra cita en esa franja.',
+      });
+    }
+
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Error asignando reserva a trabajadora:', error);
+    return res.status(500).json({ ok: false, error: 'No se pudo asignar la cita.' });
+  }
+});
+
 app.patch('/api/admin/reservas/:id/status', async (req, res) => {
   const session = getAuthSession(req.headers.cookie);
 
   if (!session.isAdmin) {
-    app.patch('/api/admin/reservas/:id/assign', async (req, res) => {
-      const session = getAuthSession(req.headers.cookie);
-
-      if (!session.isAdmin) {
-        return res.status(401).json({ ok: false, error: 'No autorizado.' });
-      }
-
-      const currentUser = session.email ? usersByEmail.get(session.email) : null;
-      const canAssignReservations =
-        session.role === 'superadmin' ||
-        Boolean(currentUser?.permissions?.includes('citas_asignar'));
-
-      if (!canAssignReservations) {
-        return res.status(403).json({ ok: false, error: 'No tienes permisos para asignar citas.' });
-      }
-
-      const reservationId = `${req.params['id'] ?? ''}`.trim();
-      const assigneeEmail = normalizeWorkerEmail(req.body?.assigneeEmail);
-
-      if (!reservationId || !assigneeEmail) {
-        return res
-          .status(400)
-          .json({ ok: false, error: 'Debes indicar la cita y la trabajadora.' });
-      }
-
-      const assigneeUser = usersByEmail.get(assigneeEmail);
-
-      if (!isAssignableWorkerUser(assigneeUser)) {
-        return res
-          .status(400)
-          .json({ ok: false, error: 'La trabajadora seleccionada no es válida.' });
-      }
-
-      try {
-        const updated = await assignReservationToWorker(reservationId, assigneeEmail);
-
-        if (!updated.ok) {
-          if (updated.reason === 'not-found') {
-            return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
-          }
-
-          return res.status(409).json({
-            ok: false,
-            error: 'La trabajadora seleccionada ya tiene otra cita en esa franja.',
-          });
-        }
-
-        return res.status(200).json({ ok: true });
-      } catch (error) {
-        console.error('Error asignando reserva a trabajadora:', error);
-        return res.status(500).json({ ok: false, error: 'No se pudo asignar la cita.' });
-      }
-    });
     return res.status(401).json({ ok: false, error: 'No autorizado.' });
   }
 
@@ -5391,13 +5383,6 @@ app.patch('/api/admin/reservas/:id/status', async (req, res) => {
     });
 
     if (!updated.ok) {
-      if (updated.reason === 'payment-required') {
-        return res.status(409).json({
-          ok: false,
-          error: 'No puedes aceptar la reserva sin marcar pago recibido.',
-        });
-      }
-
       if (updated.reason === 'slot-conflict') {
         return res.status(409).json({
           ok: false,
@@ -5783,7 +5768,6 @@ app.post('/api/reservas/email', async (req, res) => {
     const subject = `Confirmación de cita - ${appointmentTypeName} (${dateIso} ${time})`;
     const html = buildReservationEmailHtml({
       customerName,
-      customerPhone,
       appointmentTypeName,
       provisionalHoldHours,
       dateIso,

@@ -1184,6 +1184,14 @@
                       Confirmar cita
                     }
                   </button>
+                  <button
+                    type="button"
+                    class="admin-panel--container__action-button"
+                    [disabled]="actionLoadingId() !== ''"
+                    (click)="markPaymentReceivedDirect(agendaDetailReservation()!.id)"
+                  >
+                    Pago
+                  </button>
                   @if (getAgendaDetailClientCardId()) {
                     <button
                       type="button"
