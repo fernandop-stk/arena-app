@@ -7972,12 +7972,12 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
-    if (!dateIso || !time || !customerName || !customerPhone || !customerEmail) {
+    if (!dateIso || !time || !customerName || !customerPhone) {
       this.agendaManualReserveError.set('Completa todos los datos de la reserva.');
       return;
     }
 
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(customerEmail)) {
+    if (customerEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(customerEmail)) {
       this.agendaManualReserveError.set('Introduce un email válido.');
       return;
     }

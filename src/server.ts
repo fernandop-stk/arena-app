@@ -355,8 +355,9 @@ async function notifyRejectedReservation(reservation: {
   try {
     const apiKey = process.env['RESEND_API_KEY'];
     const fromEmail = process.env['RESEND_FROM_EMAIL'] ?? 'onboarding@resend.dev';
+    const recipientEmail = reservation.customerEmail.trim().toLowerCase();
 
-    if (!apiKey) {
+    if (!apiKey || !recipientEmail) {
       return;
     }
 
@@ -370,7 +371,7 @@ async function notifyRejectedReservation(reservation: {
 
     const sendResult = await resend.emails.send({
       from: fromEmail,
-      to: resolveEmailRecipient(reservation.customerEmail),
+      to: resolveEmailRecipient(recipientEmail),
       subject: `Reserva no confirmada - ${reservation.appointmentTypeName} (${reservation.dateIso} ${reservation.startTime})`,
       html,
     });
@@ -394,8 +395,9 @@ async function notifyAcceptedReservation(reservation: {
   try {
     const apiKey = process.env['RESEND_API_KEY'];
     const fromEmail = process.env['RESEND_FROM_EMAIL'] ?? 'onboarding@resend.dev';
+    const recipientEmail = reservation.customerEmail.trim().toLowerCase();
 
-    if (!apiKey) {
+    if (!apiKey || !recipientEmail) {
       return;
     }
 
@@ -412,7 +414,7 @@ async function notifyAcceptedReservation(reservation: {
 
     const sendResult = await resend.emails.send({
       from: fromEmail,
-      to: resolveEmailRecipient(reservation.customerEmail),
+      to: resolveEmailRecipient(recipientEmail),
       subject: `Reserva confirmada - ${reservation.appointmentTypeName} (${reservation.dateIso} ${reservation.startTime})`,
       html,
     });
@@ -5011,7 +5013,7 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'Hora inválida. Usa formato HH:mm.' });
   }
 
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(customerEmail)) {
+  if (customerEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(customerEmail)) {
     return res.status(400).json({ ok: false, error: 'Email de cliente inválido.' });
   }
 
@@ -5105,8 +5107,7 @@ app.post('/api/admin/reservas', async (req, res) => {
     durationMinutes <= 0 ||
     !appointmentTypeName ||
     !customerName ||
-    !customerPhone ||
-    !customerEmail
+    !customerPhone
   ) {
     return res.status(400).json({ ok: false, error: 'Faltan datos para crear la reserva.' });
   }
@@ -5119,7 +5120,7 @@ app.post('/api/admin/reservas', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'Hora inválida. Usa formato HH:mm.' });
   }
 
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(customerEmail)) {
+  if (customerEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(customerEmail)) {
     return res.status(400).json({ ok: false, error: 'Email de cliente inválido.' });
   }
 
@@ -5133,7 +5134,7 @@ app.post('/api/admin/reservas', async (req, res) => {
   if (createdByEmail) {
     const assigneeUser = usersByEmail.get(createdByEmail);
 
-    if (!assigneeUser || assigneeUser.role === 'client') {
+    if (!isAssignableWorkerUser(assigneeUser)) {
       return res.status(400).json({
         ok: false,
         error: 'La trabajadora asignada no existe o no es válida.',
@@ -5203,36 +5204,38 @@ app.post('/api/admin/reservas', async (req, res) => {
         );
       }
 
-      const provisionalHoldHours =
-        Boolean(requiresReservationSignal) || requiresReservationSignalByName(appointmentTypeName)
-          ? getProvisionalReservationHoursByName(appointmentTypeName) || 48
-          : 0;
+      if (customerEmail) {
+        const provisionalHoldHours =
+          Boolean(requiresReservationSignal) || requiresReservationSignalByName(appointmentTypeName)
+            ? getProvisionalReservationHoursByName(appointmentTypeName) || 48
+            : 0;
 
-      const subject = `Confirmación de cita - ${appointmentTypeName} (${dateIso} ${time})`;
-      const html = buildReservationEmailHtml({
-        customerName,
-        appointmentTypeName,
-        provisionalHoldHours,
-        dateIso,
-        time,
-        establishmentAddress: 'C. de Castilla, 4, 28320 Pinto, Madrid',
-        establishmentPhone: '614716238',
-      });
+        const subject = `Confirmación de cita - ${appointmentTypeName} (${dateIso} ${time})`;
+        const html = buildReservationEmailHtml({
+          customerName,
+          appointmentTypeName,
+          provisionalHoldHours,
+          dateIso,
+          time,
+          establishmentAddress: 'C. de Castilla, 4, 28320 Pinto, Madrid',
+          establishmentPhone: '614716238',
+        });
 
-      const resend = new Resend(apiKey);
-      const customerEmailTarget = resolveEmailRecipient(customerEmail);
-      const sendResult = await resend.emails.send({
-        from: fromEmail,
-        to: customerEmailTarget,
-        subject,
-        html,
-      });
+        const resend = new Resend(apiKey);
+        const customerEmailTarget = resolveEmailRecipient(customerEmail);
+        const sendResult = await resend.emails.send({
+          from: fromEmail,
+          to: customerEmailTarget,
+          subject,
+          html,
+        });
 
-      if (sendResult.error) {
-        throw new Error(sendResult.error.message || 'Resend rechazó el envío del email.');
+        if (sendResult.error) {
+          throw new Error(sendResult.error.message || 'Resend rechazó el envío del email.');
+        }
+
+        emailSent = true;
       }
-
-      emailSent = true;
     } catch (sendEmailError) {
       emailError =
         sendEmailError instanceof Error
