@@ -362,7 +362,7 @@ async function notifyRejectedReservation(reservation: {
     }
 
     const resend = new Resend(apiKey);
-    const websiteUrl = `${getPublicAppBaseUrl()}/reservas`;
+    const websiteUrl = 'https://www.www.arenahairstudio.com/reservas';
     const html = buildReservationRejectedEmailHtml({
       customerName: reservation.customerName,
       appointmentTypeName: reservation.appointmentTypeName,
@@ -1074,10 +1074,10 @@ const buildReservationRejectedEmailHtml = (data: {
                 <td style="padding:14px 16px;font-size:14px;"><strong>Hora</strong><br><span style="color:#7a675d;">${startTime}</span></td>
               </tr>
             </table>
-            <p style="margin:0 0 10px;font-size:14px;line-height:1.6;color:#7a675d;">Si este horario sigue libre, puedes volver a reservarlo desde la web.</p>
+           <p style="margin:0;font-size:14px;line-height:1.6;color:#7a675d;">Ponte en contacto con nosotros si quieres saber más información.</p>
             <p style="margin:0 0 10px;font-size:14px;line-height:1.6;color:#7a675d;"><strong>Teléfono de contacto:</strong> ${establishmentPhone}</p>
             <p style="margin:0 0 10px;font-size:14px;line-height:1.6;color:#7a675d;"><strong>Web:</strong> <a href="${websiteUrl}" style="color:#b86a6a;text-decoration:underline;">${websiteUrl}</a></p>
-            <p style="margin:0;font-size:14px;line-height:1.6;color:#7a675d;">Ponte en contacto con nosotros si quieres saber más información.</p>
+            
           </td>
         </tr>
       </table>
