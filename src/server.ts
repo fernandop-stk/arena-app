@@ -362,11 +362,14 @@ async function notifyRejectedReservation(reservation: {
     }
 
     const resend = new Resend(apiKey);
+    const websiteUrl = `${getPublicAppBaseUrl()}/reservas`;
     const html = buildReservationRejectedEmailHtml({
       customerName: reservation.customerName,
       appointmentTypeName: reservation.appointmentTypeName,
       dateIso: reservation.dateIso,
       startTime: reservation.startTime,
+      establishmentPhone: '614716238',
+      websiteUrl,
     });
 
     const sendResult = await resend.emails.send({
@@ -1037,11 +1040,15 @@ const buildReservationRejectedEmailHtml = (data: {
   appointmentTypeName: string;
   dateIso: string;
   startTime: string;
+  establishmentPhone: string;
+  websiteUrl: string;
 }): string => {
   const customerName = escapeHtml(data.customerName);
   const appointmentTypeName = escapeHtml(data.appointmentTypeName);
   const dateIso = escapeHtml(data.dateIso);
   const startTime = escapeHtml(data.startTime);
+  const establishmentPhone = escapeHtml(data.establishmentPhone);
+  const websiteUrl = escapeHtml(data.websiteUrl);
 
   return `
     <div style="background:#fcf3ea;padding:24px;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;color:#3b2f2a;">
@@ -1068,6 +1075,8 @@ const buildReservationRejectedEmailHtml = (data: {
               </tr>
             </table>
             <p style="margin:0 0 10px;font-size:14px;line-height:1.6;color:#7a675d;">Si este horario sigue libre, puedes volver a reservarlo desde la web.</p>
+            <p style="margin:0 0 10px;font-size:14px;line-height:1.6;color:#7a675d;"><strong>Teléfono de contacto:</strong> ${establishmentPhone}</p>
+            <p style="margin:0 0 10px;font-size:14px;line-height:1.6;color:#7a675d;"><strong>Web:</strong> <a href="${websiteUrl}" style="color:#b86a6a;text-decoration:underline;">${websiteUrl}</a></p>
             <p style="margin:0;font-size:14px;line-height:1.6;color:#7a675d;">Ponte en contacto con nosotros si quieres saber más información.</p>
           </td>
         </tr>
