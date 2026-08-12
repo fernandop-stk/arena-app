@@ -1,0 +1,285 @@
+@use '../../../../styles/variables/colors' as colors;
+@use '../../../../styles/variables/layout' as layout;
+
+.client-reservation-modal {
+  &__backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(39, 24, 16, 0.4);
+    backdrop-filter: blur(2px);
+    display: grid;
+    place-items: center;
+    z-index: 50;
+    padding: 1rem;
+  }
+
+  &__card {
+    width: min(36rem, 100%);
+    border: 1px solid colors.$color-border;
+    border-radius: layout.$radius-md;
+    background: #fff;
+    box-shadow: 0 16px 36px rgba(57, 39, 28, 0.2);
+    padding: 1rem;
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  &__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  &__title {
+    margin: 0;
+    color: colors.$color-primary-dark;
+    font-size: 1rem;
+    font-weight: 800;
+  }
+
+  &__subtitle {
+    margin: 0.2rem 0 0;
+    color: colors.$color-text-soft;
+    font-size: 0.84rem;
+    line-height: 1.45;
+  }
+
+  &__close {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    border: 1px solid colors.$color-border;
+    background: #fff;
+    color: colors.$color-primary-dark;
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  &__client {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.8rem 0.9rem;
+    border: 1px solid rgba(201, 123, 99, 0.16);
+    border-radius: 0.8rem;
+    background: rgba(252, 243, 234, 0.55);
+  }
+
+  &__client-name {
+    margin: 0;
+    color: colors.$color-primary-dark;
+    font-size: 0.96rem;
+    font-weight: 800;
+  }
+
+  &__client-meta {
+    margin: 0.15rem 0 0;
+    color: colors.$color-text-soft;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  &__client-badge {
+    padding: 0.35rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid rgba(201, 123, 99, 0.22);
+    background: rgba(255, 255, 255, 0.72);
+    color: colors.$color-primary-dark;
+    font-size: 0.72rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  &__field--full {
+    grid-column: 1 / -1;
+  }
+
+  &__field {
+    display: grid;
+    gap: 0.35rem;
+    color: colors.$color-primary-dark;
+    font-weight: 700;
+  }
+
+  &__field-label {
+    color: colors.$color-primary-dark;
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  &__time-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(4.2rem, 1fr));
+    gap: 0.45rem;
+    max-height: 14.5rem;
+    overflow: auto;
+    padding-right: 0.1rem;
+  }
+
+  &__time-slot {
+    min-height: 2.3rem;
+    border-radius: 0.55rem;
+    border: 1px solid rgba(153, 129, 112, 0.42);
+    background: rgba(255, 255, 255, 0.78);
+    color: colors.$color-primary-dark;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      transform 0.15s ease,
+      opacity 0.15s ease;
+
+    &:hover:not(:disabled) {
+      background: rgba(201, 123, 99, 0.08);
+      border-color: rgba(201, 123, 99, 0.55);
+      transform: translateY(-1px);
+    }
+
+    &--active {
+      background: rgba(185, 176, 167, 0.38);
+      border-color: rgba(144, 129, 114, 0.65);
+      box-shadow: inset 0 0 0 1px rgba(144, 129, 114, 0.18);
+    }
+
+    &--disabled {
+      opacity: 0.38;
+      background: rgba(230, 225, 219, 0.8);
+      color: rgba(112, 92, 81, 0.72);
+      border-style: dashed;
+      cursor: not-allowed;
+      transform: none;
+    }
+  }
+
+  &__time-grid--loading {
+    opacity: 0.8;
+  }
+
+  &__input {
+    min-height: 2.55rem;
+    border-radius: 0.7rem;
+    border: 1px solid colors.$color-border;
+    background: #fff;
+    color: colors.$color-primary-dark;
+    padding: 0 0.75rem;
+    font-weight: 700;
+
+    &:focus {
+      outline: none;
+      border-color: rgba(201, 123, 99, 0.62);
+      box-shadow: 0 0 0 2px rgba(201, 123, 99, 0.14);
+    }
+
+    &--select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background: linear-gradient(180deg, #fff 0%, rgba(252, 243, 234, 0.88) 100%);
+    }
+
+    &:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+  }
+
+  &__tabs {
+    display: flex;
+    gap: 0.5rem;
+    padding-bottom: 0.2rem;
+    border-bottom: 1px solid rgba(201, 123, 99, 0.18);
+  }
+
+  &__tab {
+    min-height: 2.3rem;
+    border-radius: 999px;
+    border: 1px solid rgba(153, 129, 112, 0.5);
+    background: rgba(255, 255, 255, 0.6);
+    color: colors.$color-primary-dark;
+    padding: 0 1rem;
+    font-size: 0.84rem;
+    font-weight: 700;
+    cursor: pointer;
+
+    &--active {
+      background: rgba(185, 176, 167, 0.34);
+      border-color: rgba(144, 129, 114, 0.45);
+    }
+  }
+
+  &__selection {
+    margin: 0;
+    color: colors.$color-text-soft;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  &__selection--muted {
+    color: rgba(112, 92, 81, 0.82);
+    font-style: italic;
+  }
+
+  &__error {
+    margin: 0;
+    color: colors.$color-error;
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    padding-top: 0.2rem;
+  }
+
+  &__btn {
+    min-height: 2.35rem;
+    border-radius: 999px;
+    padding: 0 1rem;
+    border: 1px solid colors.$color-border;
+    background: #fff;
+    color: colors.$color-primary-dark;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+
+    &--soft {
+      background: rgba(201, 123, 99, 0.1);
+      border-color: rgba(201, 123, 99, 0.35);
+    }
+
+    &--primary {
+      background: colors.$color-primary;
+      border: none;
+      color: #fff;
+    }
+  }
+
+  @media (max-width: 640px) {
+    &__grid {
+      grid-template-columns: 1fr;
+    }
+
+    &__client {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    &__client-badge {
+      width: fit-content;
+    }
+  }
+}

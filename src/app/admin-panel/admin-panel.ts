@@ -1,5 +1,5 @@
 import { DecimalPipe } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Component, OnDestroy, afterNextRender, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CitasService, type AppointmentType } from '../citas/citas.service';
@@ -7,6 +7,7 @@ import { getPackPriceByName } from '../../shared/pack-prices';
 import { TratamientosService, type TratamientoItem } from '../tratamientos/tratamientos.service';
 import { AgendaPackPickerModalComponent } from './components/agenda-pack-picker-modal/agenda-pack-picker-modal';
 import { PaymentFlowModalComponent } from './components/payment-flow-modal/payment-flow-modal';
+import { ClientReservationModalComponent } from './components/client-reservation-modal/client-reservation-modal';
 import { ClientManagementTabsComponent } from './components/client-management-tabs/client-management-tabs';
 import { ClientSummaryListComponent } from './components/client-summary-list/client-summary-list';
 import { EmployeeManagementTabsComponent } from './components/employee-management-tabs/employee-management-tabs';
@@ -83,7 +84,14 @@ interface AdminReservationItem {
   customerName: string;
   customerPhone: string;
   appointmentTypeName: string;
+  additionalComments: string;
+  signalAmountEuro: number;
+  signalPaymentMethod: 'efectivo' | 'tarjeta' | 'bizum' | null;
+  signalReceivedAtIso?: string | null;
+  signalRegisteredByEmail?: string | null;
   paymentReceived: boolean;
+  paymentMethod: 'efectivo' | 'tarjeta' | 'bizum' | null;
+  paymentAmountEuro: number;
   adminStatus: 'pending' | 'accepted' | 'rejected';
   clientConfirmationStatus: 'pending' | 'confirmed';
   clientConfirmationReminderSentAtIso?: string | null;
@@ -370,6 +378,7 @@ interface ClientTreatmentCatalogOption {
     DecimalPipe,
     AgendaPackPickerModalComponent,
     PaymentFlowModalComponent,
+    ClientReservationModalComponent,
     ClientManagementTabsComponent,
     ClientSummaryListComponent,
     EmployeeManagementTabsComponent,
@@ -483,16 +492,30 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly agendaDetailMode = signal<'view' | 'edit'>('view');
   protected readonly agendaEditDraftName = signal('');
   protected readonly agendaEditDraftDuration = signal(0);
+  protected readonly agendaEditDraftAdditionalComments = signal('');
   protected readonly agendaDetailSaving = signal(false);
   protected readonly agendaDetailError = signal('');
   protected readonly agendaDetailCancelling = signal(false);
   protected readonly showAgendaConfirmReservationModal = signal(false);
   protected readonly agendaConfirmReservationWorkerEmail = signal('');
+  protected readonly agendaReservationInfoModalReservation = signal<AdminReservationItem | null>(
+    null,
+  );
+  protected readonly showSenalModal = signal(false);
+  protected readonly senalPaymentMethod = signal<
+    'efectivo' | 'tarjeta' | 'bizum' | 'sin_senal' | ''
+  >('');
+  protected readonly senalLoading = signal(false);
+  protected readonly senalError = signal('');
+  protected readonly SENAL_AMOUNT = 20;
   protected readonly showAgendaUnassignedReservationsModal = signal(false);
   protected readonly agendaUnassignedAssignReservationId = signal('');
   protected readonly agendaUnassignedAssignWorkerEmail = signal('');
   protected readonly agendaUnassignedAssignLoadingId = signal('');
   protected readonly agendaUnassignedAssignError = signal('');
+  protected readonly agendaDeleteReservationTarget = signal<AdminReservationItem | null>(null);
+  protected readonly agendaDeleteReservationLoadingId = signal('');
+  protected readonly agendaDeleteReservationError = signal('');
   protected readonly showQuickReserveModal = signal(false);
   protected readonly showAgendaManualReserveModal = signal(false);
   protected readonly agendaManualReserveLoading = signal(false);
@@ -700,7 +723,9 @@ export class AdminPanelComponent implements OnDestroy {
       return 0;
     }
 
-    return this.getPackPriceByName(reservation.appointmentTypeName);
+    const totalPrice = this.getPackPriceByName(reservation.appointmentTypeName);
+    const signalAmount = Math.max(0, Number(reservation.signalAmountEuro ?? 0));
+    return Math.max(0, Number((totalPrice - signalAmount).toFixed(2)));
   });
   protected readonly blockDateIso = signal('');
   protected readonly calendarMonthIso = signal('');
@@ -790,6 +815,15 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly clientTreatmentName = signal('');
   protected readonly clientTreatmentNote = signal('');
   protected readonly clientTreatmentLoading = signal(false);
+  protected readonly showClientReservationModal = signal(false);
+  protected readonly clientReservationServiceType = signal<'pack' | 'treatment'>('pack');
+  protected readonly clientReservationServiceId = signal(0);
+  protected readonly clientReservationDateIso = signal('');
+  protected readonly clientReservationTime = signal('');
+  protected readonly clientReservationTimeOptions = signal<string[]>([]);
+  protected readonly clientReservationAvailabilityLoading = signal(false);
+  protected readonly clientReservationLoading = signal(false);
+  protected readonly clientReservationError = signal('');
   protected readonly paymentModalOpen = signal(false);
   protected readonly paymentSelectTreatmentOpen = signal(false);
   protected readonly selectedTreatmentForPayment = signal<{
@@ -2464,6 +2498,9 @@ export class AdminPanelComponent implements OnDestroy {
     this.clientTreatmentName.set('');
     this.clientTreatmentNote.set('');
     this.clientChartType.set('pie');
+    this.showClientReservationModal.set(false);
+    this.clientReservationLoading.set(false);
+    this.clientReservationError.set('');
   }
 
   protected openClientStatsModal(): void {
@@ -2473,6 +2510,7 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected closeClientDetailModal(): void {
     this.showClientDetailModal.set(false);
+    this.showClientReservationModal.set(false);
     this.showDeleteClientConfirmModal.set(false);
     this.selectedClientId.set('');
     this.clientEditFullName.set('');
@@ -2485,6 +2523,8 @@ export class AdminPanelComponent implements OnDestroy {
     this.clientTreatmentName.set('');
     this.clientTreatmentNote.set('');
     this.clientChartType.set('pie');
+    this.clientReservationLoading.set(false);
+    this.clientReservationError.set('');
   }
 
   protected closeClientStatsModal(): void {
@@ -4366,6 +4406,202 @@ export class AdminPanelComponent implements OnDestroy {
       });
   }
 
+  protected openClientReservationModal(): void {
+    const selected = this.getSelectedClientCard();
+
+    if (!selected) {
+      this.clientCardsError.set('Selecciona una ficha de clienta válida.');
+      return;
+    }
+
+    const defaultService = this.agendaPackOptions[0] ?? this.agendaTreatmentCatalog[0] ?? null;
+
+    this.clientReservationServiceType.set('pack');
+    this.clientReservationServiceId.set(defaultService?.id ?? 1);
+    this.clientReservationDateIso.set(this.agendaSelectedDateIso() || this.getTodayIso());
+    this.clientReservationTime.set('');
+    this.clientReservationTimeOptions.set([]);
+    this.clientReservationLoading.set(false);
+    this.clientReservationError.set('');
+    this.showClientReservationModal.set(true);
+    this.loadClientReservationAvailability();
+  }
+
+  protected closeClientReservationModal(): void {
+    this.showClientReservationModal.set(false);
+    this.clientReservationLoading.set(false);
+    this.clientReservationAvailabilityLoading.set(false);
+    this.clientReservationError.set('');
+  }
+
+  protected onClientReservationServiceTypeChange(type: 'pack' | 'treatment'): void {
+    const nextDefault =
+      type === 'pack' ? this.agendaPackOptions[0] : this.agendaTreatmentCatalog[0];
+
+    this.clientReservationServiceType.set(type);
+    this.clientReservationServiceId.set(nextDefault?.id ?? 1);
+    this.loadClientReservationAvailability();
+  }
+
+  protected onClientReservationServiceIdChange(selection: {
+    id: number;
+    type: 'pack' | 'treatment';
+  }): void {
+    this.clientReservationServiceType.set(selection.type);
+    this.clientReservationServiceId.set(selection.id);
+    this.loadClientReservationAvailability();
+  }
+
+  protected onClientReservationDateInput(value: string): void {
+    this.clientReservationDateIso.set(value);
+    this.loadClientReservationAvailability();
+  }
+
+  protected onClientReservationTimeInput(value: string): void {
+    this.clientReservationTime.set(value);
+  }
+
+  protected submitClientReservation(): void {
+    const selected = this.getSelectedClientCard();
+    const service = this.getClientReservationSelectedService();
+    const dateIso = this.clientReservationDateIso().trim();
+    const time = this.normalizeAgendaTimeValue(this.clientReservationTime().trim());
+
+    if (!selected) {
+      this.clientReservationError.set('Selecciona una ficha de clienta válida.');
+      return;
+    }
+
+    if (!service) {
+      this.clientReservationError.set('Selecciona un pack o tratamiento válido.');
+      return;
+    }
+
+    if (!dateIso || !time) {
+      this.clientReservationError.set('Indica la fecha y la hora de la cita.');
+      return;
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
+      this.clientReservationError.set('La fecha no es válida.');
+      return;
+    }
+
+    const availableSlots = this.clientReservationTimeOptions();
+
+    if (!availableSlots.includes(time)) {
+      this.clientReservationError.set('Selecciona una hora disponible.');
+      this.clientReservationTime.set('');
+      return;
+    }
+
+    this.clientReservationLoading.set(true);
+    this.clientReservationError.set('');
+
+    this.http
+      .post<{ ok: boolean; reservationId?: string; error?: string; emailSent?: boolean }>(
+        '/api/admin/reservas',
+        {
+          dateIso,
+          time,
+          durationMinutes: service.duracionMinutos,
+          customerName: selected.fullName,
+          customerPhone: selected.phone,
+          customerEmail: selected.email,
+          createdByEmail: this.ownerEmail().trim().toLowerCase(),
+          appointmentTypeName: service.nombre,
+          requiresReservationSignal:
+            this.clientReservationServiceType() === 'pack' &&
+            Boolean(service.requiresReservationSignal),
+        },
+      )
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.clientReservationError.set(response.error ?? 'No se pudo crear la reserva.');
+            this.loadClientReservationAvailability(this.clientReservationTime());
+            return;
+          }
+
+          this.clientCardsMessage.set('Reserva creada y enviada a la agenda.');
+          this.closeClientReservationModal();
+          this.closeClientDetailModal();
+          this.setActiveTab('agenda');
+          this.agendaSelectedDateIso.set(dateIso);
+          this.agendaCalendarMonthIso.set(dateIso.slice(0, 7));
+          this.loadReservations();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+
+          this.clientReservationLoading.set(false);
+
+          if (error?.status === 409) {
+            this.clientReservationTime.set('');
+            this.loadClientReservationAvailability();
+            this.clientReservationError.set(
+              'Ese horario ya no está disponible. Elige otra hora de la lista.',
+            );
+            return;
+          }
+
+          this.clientReservationError.set(
+            typeof apiError === 'string' && apiError ? apiError : 'No se pudo crear la reserva.',
+          );
+        },
+        complete: () => {
+          this.clientReservationLoading.set(false);
+        },
+      });
+  }
+
+  private loadClientReservationAvailability(preferredTime = ''): void {
+    const service = this.getClientReservationSelectedService();
+    const dateIso = this.clientReservationDateIso().trim();
+
+    if (!service || !dateIso) {
+      return;
+    }
+
+    this.clientReservationAvailabilityLoading.set(true);
+
+    const params = new HttpParams()
+      .set('dateIso', dateIso)
+      .set('durationMinutes', `${service.duracionMinutos}`);
+
+    this.http
+      .get<{ ok: boolean; slots: string[] }>('/api/reservas/disponibilidad', { params })
+      .subscribe({
+        next: (response) => {
+          const slots = response.slots ?? [];
+          this.clientReservationTimeOptions.set(slots);
+
+          const nextTime = preferredTime && slots.includes(preferredTime) ? preferredTime : '';
+
+          this.clientReservationTime.set(nextTime);
+
+          if (slots.length === 0) {
+            this.clientReservationError.set(
+              'No hay huecos disponibles para ese día y ese servicio.',
+            );
+          } else if (
+            this.clientReservationError() ===
+            'No hay huecos disponibles para ese día y ese servicio.'
+          ) {
+            this.clientReservationError.set('');
+          }
+        },
+        error: () => {
+          this.clientReservationTimeOptions.set([]);
+          this.clientReservationTime.set('');
+          this.clientReservationError.set('No se pudo consultar la disponibilidad.');
+        },
+        complete: () => {
+          this.clientReservationAvailabilityLoading.set(false);
+        },
+      });
+  }
+
   protected openPaymentModal(): void {
     this.paymentSelectTreatmentOpen.set(true);
     this.selectedTreatmentForPayment.set(null);
@@ -5150,6 +5386,49 @@ export class AdminPanelComponent implements OnDestroy {
     return `${Math.floor(hours)} h ${minutes % 60} min`;
   }
 
+  protected hasReservationSignal(reservation: AdminReservationItem): boolean {
+    return Number(reservation.signalAmountEuro ?? 0) > 0;
+  }
+
+  protected getReservationSignalBadgeLabel(reservation: AdminReservationItem): string {
+    const amount = Math.max(0, Number(reservation.signalAmountEuro ?? 0));
+
+    if (amount <= 0) {
+      return '';
+    }
+
+    const methodLabel = reservation.signalPaymentMethod
+      ? ` · ${reservation.signalPaymentMethod}`
+      : '';
+    const dateLabel = reservation.signalReceivedAtIso
+      ? ` · ${new Date(reservation.signalReceivedAtIso).toISOString().slice(0, 10)}`
+      : '';
+
+    return `Señal ${amount.toFixed(2)} €${methodLabel}${dateLabel}`;
+  }
+
+  protected openAgendaReservationInfoModal(reservation: AdminReservationItem): void {
+    this.agendaReservationInfoModalReservation.set(reservation);
+  }
+
+  protected closeAgendaReservationInfoModal(): void {
+    this.agendaReservationInfoModalReservation.set(null);
+  }
+
+  protected getReservationFinalPaymentLabel(reservation: AdminReservationItem): string {
+    if (!reservation.paymentReceived) {
+      return 'Pendiente';
+    }
+
+    const amount = Math.max(0, Number(reservation.paymentAmountEuro ?? 0));
+    const methodLabel = reservation.paymentMethod
+      ? ` · ${this.getPaymentMethodDisplayLabel(reservation.paymentMethod)}`
+      : '';
+    const amountLabel = amount > 0 ? ` · ${amount.toFixed(2)} €` : '';
+
+    return `Recibido${methodLabel}${amountLabel}`;
+  }
+
   protected formatDate(dateIso: string): string {
     const date = new Date(`${dateIso}T00:00:00`);
 
@@ -5398,6 +5677,8 @@ export class AdminPanelComponent implements OnDestroy {
               ? {
                   ...current,
                   paymentReceived: true,
+                  paymentMethod,
+                  paymentAmountEuro: priceEuro,
                 }
               : current,
           );
@@ -7543,6 +7824,53 @@ export class AdminPanelComponent implements OnDestroy {
     this.agendaUnassignedAssignError.set('');
   }
 
+  protected openAgendaDeleteReservationModal(reservation: AdminReservationItem): void {
+    this.agendaDeleteReservationTarget.set(reservation);
+    this.agendaDeleteReservationError.set('');
+  }
+
+  protected closeAgendaDeleteReservationModal(): void {
+    this.agendaDeleteReservationTarget.set(null);
+    this.agendaDeleteReservationError.set('');
+    this.agendaDeleteReservationLoadingId.set('');
+  }
+
+  protected deleteAgendaUnassignedReservation(): void {
+    const reservation = this.agendaDeleteReservationTarget();
+
+    if (!reservation) {
+      return;
+    }
+
+    this.agendaDeleteReservationLoadingId.set(reservation.id);
+    this.agendaDeleteReservationError.set('');
+
+    this.http
+      .delete<{ ok: boolean; error?: string }>(`/api/admin/reservas/${reservation.id}`)
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.agendaDeleteReservationError.set(
+              response.error ?? 'No se pudo eliminar la reserva.',
+            );
+            this.agendaDeleteReservationLoadingId.set('');
+            return;
+          }
+
+          this.closeAgendaDeleteReservationModal();
+          this.cancelAgendaUnassignedReservationAssign();
+          this.loadReservations();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.agendaDeleteReservationError.set(
+            typeof apiError === 'string' && apiError ? apiError : 'No se pudo eliminar la reserva.',
+          );
+          this.agendaDeleteReservationLoadingId.set('');
+        },
+      });
+  }
+
   protected isAgendaUnassignedAssignExpanded(reservationId: string): boolean {
     return this.agendaUnassignedAssignReservationId() === reservationId;
   }
@@ -7638,7 +7966,69 @@ export class AdminPanelComponent implements OnDestroy {
     }
 
     this.showAgendaConfirmReservationModal.set(false);
-    this.confirmAgendaDetailSignal();
+
+    // Open the señal modal before confirming
+    this.senalPaymentMethod.set('');
+    this.senalError.set('');
+    this.showSenalModal.set(true);
+  }
+
+  protected closeSenalModal(): void {
+    this.showSenalModal.set(false);
+    this.senalPaymentMethod.set('');
+    this.senalError.set('');
+    this.senalLoading.set(false);
+  }
+
+  protected submitSenalAndConfirm(): void {
+    const method = this.senalPaymentMethod();
+
+    if (!method) {
+      this.senalError.set('Elige una opción antes de continuar.');
+      return;
+    }
+
+    if (method === 'sin_senal') {
+      this.closeSenalModal();
+      this.confirmAgendaDetailSignal();
+      return;
+    }
+
+    const reservation = this.agendaDetailReservation();
+
+    if (!reservation) {
+      this.closeSenalModal();
+      return;
+    }
+
+    this.senalLoading.set(true);
+    this.senalError.set('');
+
+    this.http
+      .post<{ ok: boolean; error?: string }>(`/api/admin/reservas/${reservation.id}/senal`, {
+        paymentMethod: method,
+        amount: this.SENAL_AMOUNT,
+      })
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.senalError.set(response.error ?? 'No se pudo registrar la señal.');
+            this.senalLoading.set(false);
+            return;
+          }
+
+          this.closeSenalModal();
+          this.loadCierreAutoDiario();
+          this.confirmAgendaDetailSignal();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.senalError.set(
+            typeof apiError === 'string' && apiError ? apiError : 'No se pudo registrar la señal.',
+          );
+          this.senalLoading.set(false);
+        },
+      });
   }
 
   protected confirmAgendaDetailSignal(): void {
@@ -7715,6 +8105,7 @@ export class AdminPanelComponent implements OnDestroy {
   protected closeAgendaReservationDetail(): void {
     this.agendaDetailReservation.set(null);
     this.agendaDetailMode.set('view');
+    this.agendaEditDraftAdditionalComments.set('');
     this.agendaDetailError.set('');
     this.agendaDetailSaving.set(false);
     this.agendaDetailCancelling.set(false);
@@ -7729,6 +8120,7 @@ export class AdminPanelComponent implements OnDestroy {
     }
     this.agendaEditDraftName.set(r.appointmentTypeName);
     this.agendaEditDraftDuration.set(r.durationMinutes);
+    this.agendaEditDraftAdditionalComments.set(r.additionalComments ?? '');
     this.agendaDetailError.set('');
     this.agendaDetailMode.set('edit');
   }
@@ -7740,17 +8132,41 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected onAgendaEditDraftDurationChange(event: Event): void {
     const target = event.target as HTMLSelectElement;
-    this.agendaEditDraftDuration.set(Number(target.value));
+    const parsedDuration = Number(target.value);
+
+    if (!Number.isFinite(parsedDuration)) {
+      return;
+    }
+
+    this.agendaEditDraftDuration.set(parsedDuration);
   }
 
-  protected saveAgendaReservationEdit(): void {
+  protected onAgendaEditDraftAdditionalCommentsInput(event: Event): void {
+    const target = event.target as HTMLTextAreaElement;
+    this.agendaEditDraftAdditionalComments.set(target.value);
+  }
+
+  protected saveAgendaReservationEdit(
+    nextNameRaw?: string,
+    nextDurationRaw?: string | number,
+    nextAdditionalCommentsRaw?: string,
+  ): void {
     const r = this.agendaDetailReservation();
     if (!r) {
       return;
     }
 
-    const nextName = this.agendaEditDraftName().trim();
-    const nextDuration = this.agendaEditDraftDuration();
+    const nextName = `${nextNameRaw ?? this.agendaEditDraftName()}`.trim();
+    const nextDuration = Number(nextDurationRaw ?? this.agendaEditDraftDuration());
+    const nextAdditionalComments = `${
+      nextAdditionalCommentsRaw ?? this.agendaEditDraftAdditionalComments()
+    }`
+      .trim()
+      .slice(0, 500);
+
+    this.agendaEditDraftName.set(nextName);
+    this.agendaEditDraftDuration.set(nextDuration);
+    this.agendaEditDraftAdditionalComments.set(nextAdditionalComments);
 
     if (!nextName) {
       this.agendaDetailError.set('Selecciona un tratamiento.');
@@ -7783,11 +8199,13 @@ export class AdminPanelComponent implements OnDestroy {
         customerName: r.customerName,
         customerPhone: r.customerPhone,
         customerEmail: r.customerEmail,
+        additionalComments: nextAdditionalComments,
       })
       .subscribe({
         next: (response) => {
           if (!response.ok) {
             this.agendaDetailError.set(response.error ?? 'No se pudo guardar los cambios.');
+            this.agendaDetailSaving.set(false);
             return;
           }
 
@@ -7799,6 +8217,7 @@ export class AdminPanelComponent implements OnDestroy {
             ...r,
             appointmentTypeName: nextName,
             durationMinutes: nextDuration,
+            additionalComments: nextAdditionalComments,
             endTime: nextEndTime,
           };
 
@@ -7814,6 +8233,7 @@ export class AdminPanelComponent implements OnDestroy {
           this.agendaDetailError.set(
             typeof apiError === 'string' && apiError ? apiError : 'No se pudo guardar los cambios.',
           );
+          this.agendaDetailSaving.set(false);
         },
         complete: () => {
           this.agendaDetailSaving.set(false);
@@ -8294,6 +8714,22 @@ export class AdminPanelComponent implements OnDestroy {
     );
   }
 
+  private getClientReservationSelectedService():
+    | (AppointmentType & { requiresReservationSignal?: boolean })
+    | (TratamientoItem & { requiresReservationSignal?: boolean })
+    | null {
+    if (this.clientReservationServiceType() === 'pack') {
+      return (
+        this.agendaPackOptions.find((item) => item.id === this.clientReservationServiceId()) ?? null
+      );
+    }
+
+    return (
+      this.agendaTreatmentCatalog.find((item) => item.id === this.clientReservationServiceId()) ??
+      null
+    );
+  }
+
   private syncAgendaManualReserveDurationFromSelectedService(): void {
     const selectedService = this.getAgendaManualReserveSelectedService();
 
@@ -8347,6 +8783,23 @@ export class AdminPanelComponent implements OnDestroy {
       ...reservation,
       startTime: this.normalizeAgendaTimeValue(reservation.startTime),
       endTime: this.normalizeAgendaTimeValue(reservation.endTime),
+      additionalComments: `${reservation.additionalComments ?? ''}`,
+      signalAmountEuro: Math.max(0, Number(reservation.signalAmountEuro ?? 0)),
+      signalPaymentMethod:
+        reservation.signalPaymentMethod === 'efectivo' ||
+        reservation.signalPaymentMethod === 'tarjeta' ||
+        reservation.signalPaymentMethod === 'bizum'
+          ? reservation.signalPaymentMethod
+          : null,
+      paymentMethod:
+        reservation.paymentMethod === 'efectivo' ||
+        reservation.paymentMethod === 'tarjeta' ||
+        reservation.paymentMethod === 'bizum'
+          ? reservation.paymentMethod
+          : null,
+      paymentAmountEuro: Math.max(0, Number(reservation.paymentAmountEuro ?? 0)),
+      signalReceivedAtIso: reservation.signalReceivedAtIso ?? null,
+      signalRegisteredByEmail: reservation.signalRegisteredByEmail ?? null,
       createdByEmail: reservation.createdByEmail?.trim().toLowerCase() || null,
     };
   }

@@ -43,6 +43,7 @@ import {
   updateReservationAdminStatus,
   updateReservationClientConfirmationStatus,
   updateReservationPaymentReceived,
+  registerReservationSignalPayment,
   createAlert,
   getAllAlerts,
   getAlertById,
@@ -368,7 +369,7 @@ async function notifyRejectedReservation(reservation: {
       appointmentTypeName: reservation.appointmentTypeName,
       dateIso: reservation.dateIso,
       startTime: reservation.startTime,
-      establishmentPhone: '614716238',
+      establishmentPhone: '919521611',
       websiteUrl,
     });
 
@@ -412,7 +413,8 @@ async function notifyAcceptedReservation(reservation: {
       dateIso: reservation.dateIso,
       time: reservation.startTime,
       establishmentAddress: 'C. de Castilla, 4, 28320 Pinto, Madrid',
-      establishmentPhone: '614716238',
+      establishmentPhone: '919521611',
+      bizumPhone: '614716238',
     });
 
     const sendResult = await resend.emails.send({
@@ -885,6 +887,7 @@ const buildReservationEmailHtml = (data: {
   time: string;
   establishmentAddress: string;
   establishmentPhone: string;
+  bizumPhone: string;
   observaciones?: string;
 }): string => {
   const customerName = escapeHtml(data.customerName);
@@ -893,6 +896,7 @@ const buildReservationEmailHtml = (data: {
   const time = escapeHtml(data.time);
   const establishmentAddress = escapeHtml(data.establishmentAddress);
   const establishmentPhone = escapeHtml(data.establishmentPhone);
+  const bizumPhone = escapeHtml(data.bizumPhone);
   const provisionalHoldHours = data.provisionalHoldHours ?? 0;
   const provisionalNotice =
     provisionalHoldHours > 0
@@ -937,7 +941,7 @@ const buildReservationEmailHtml = (data: {
             <h2 style="margin:0 0 10px;font-size:16px;color:#3b2f2a;">Datos del establecimiento</h2>
             <p style="margin:0 0 4px;font-size:14px;line-height:1.5;color:#7a675d;"><strong>Dirección:</strong> ${establishmentAddress}</p>
             <p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#7a675d;"><strong>Teléfono:</strong> ${establishmentPhone}</p>
-            <p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#7a675d;"><strong>Bizum:</strong> ${establishmentPhone}</p>
+            <p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#7a675d;"><strong>Bizum:</strong> ${bizumPhone}</p>
 
             <p style="margin:0;font-size:14px;line-height:1.6;color:#7a675d;">Gracias por confiar en Arena Studio. ¡Te esperamos!</p>
           </td>
@@ -4929,7 +4933,7 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
   const reservationId = `${req.params['id'] ?? ''}`;
   const paymentReceived = Boolean(req.body?.paymentReceived);
   const paymentMethod = req.body?.paymentMethod as string | undefined;
-  const requestPriceEuro = Number(req.body?.priceEuro ?? NaN);
+  const paymentAmountEuroRaw = Number(req.body?.priceEuro ?? NaN);
 
   if (!reservationId) {
     return res.status(400).json({ ok: false, error: 'ID de reserva inválido.' });
@@ -4943,31 +4947,58 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
     }
 
-    const resolvedPriceEuro =
-      Number.isFinite(requestPriceEuro) && requestPriceEuro >= 0
-        ? Number(requestPriceEuro.toFixed(2))
-        : Number(getPackPriceByName(reservation.appointmentTypeName).toFixed(2));
+    const resolvedPriceEuro = Number(
+      getPackPriceByName(reservation.appointmentTypeName).toFixed(2),
+    );
+    const paymentAmountEuro =
+      Number.isFinite(paymentAmountEuroRaw) && paymentAmountEuroRaw >= 0
+        ? Number(paymentAmountEuroRaw.toFixed(2))
+        : resolvedPriceEuro;
+    const signalAmountEuro = Math.max(0, Number(reservation.signalAmountEuro ?? 0));
+    const finalChargeEuro = Math.max(0, Number((resolvedPriceEuro - signalAmountEuro).toFixed(2)));
     const shouldAccumulate =
       paymentReceived &&
       !reservation.paymentReceived &&
       paymentMethod &&
       ['efectivo', 'tarjeta', 'bizum'].includes(paymentMethod);
 
-    const updated = await updateReservationPaymentReceived(reservationId, paymentReceived);
+    const updated = await updateReservationPaymentReceived(reservationId, paymentReceived, {
+      paymentMethod:
+        paymentMethod === 'efectivo' || paymentMethod === 'tarjeta' || paymentMethod === 'bizum'
+          ? paymentMethod
+          : undefined,
+      paymentAmountEuro,
+    });
 
     if (!updated.ok) {
       return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
     }
 
-    if (shouldAccumulate) {
+    if (shouldAccumulate && finalChargeEuro > 0) {
       const todayIso = new Date().toISOString().slice(0, 10);
+      const signalPaymentMethodLabel =
+        reservation.signalPaymentMethod === 'efectivo'
+          ? 'efectivo'
+          : reservation.signalPaymentMethod === 'tarjeta'
+            ? 'tarjeta'
+            : reservation.signalPaymentMethod === 'bizum'
+              ? 'bizum'
+              : null;
+      const signalDateLabel = reservation.signalReceivedAtIso
+        ? new Date(reservation.signalReceivedAtIso).toISOString().slice(0, 10)
+        : null;
+      const signalInfoSuffix =
+        signalAmountEuro > 0
+          ? ` · Señal previa: ${signalAmountEuro.toFixed(2)} €${signalPaymentMethodLabel ? ` (${signalPaymentMethodLabel})` : ''}${signalDateLabel ? ` cobrada el ${signalDateLabel}` : ''}`
+          : '';
+
       addPaymentToDailySummary(
         todayIso,
         paymentMethod as 'efectivo' | 'tarjeta' | 'bizum',
-        resolvedPriceEuro,
+        finalChargeEuro,
         {
           operationType: 'reservation_payment',
-          concept: `Reserva: ${reservation.appointmentTypeName}`,
+          concept: `Pago final cita: ${reservation.customerName} · ${reservation.appointmentTypeName} · ${reservation.dateIso} ${reservation.startTime}${signalInfoSuffix}`,
           performedByEmail: session.email,
         },
       );
@@ -4996,6 +5027,13 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
   const customerName = `${req.body?.customerName ?? ''}`.trim();
   const customerPhone = `${req.body?.customerPhone ?? ''}`.trim();
   const customerEmail = `${req.body?.customerEmail ?? ''}`.trim().toLowerCase();
+  const hasAdditionalComments = Object.prototype.hasOwnProperty.call(
+    req.body ?? {},
+    'additionalComments',
+  );
+  const additionalComments = hasAdditionalComments
+    ? `${req.body?.additionalComments ?? ''}`.trim().slice(0, 500)
+    : undefined;
 
   if (!reservationId) {
     return res.status(400).json({ ok: false, error: 'ID de reserva inválido.' });
@@ -5008,8 +5046,7 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
     durationMinutes <= 0 ||
     !appointmentTypeName ||
     !customerName ||
-    !customerPhone ||
-    !customerEmail
+    !customerPhone
   ) {
     return res.status(400).json({ ok: false, error: 'Faltan datos para modificar la reserva.' });
   }
@@ -5037,6 +5074,7 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
         customerName,
         customerPhone,
         customerEmail,
+        additionalComments,
       },
       {
         allowClosedSchedule: superadminSession.isSuperadmin,
@@ -5139,6 +5177,8 @@ app.post('/api/admin/reservas', async (req, res) => {
 
   const createdByEmail =
     canAssignReservationToWorker && createdByEmailRaw ? createdByEmailRaw : session.email;
+  const shouldRequireReservationSignal =
+    requiresReservationSignal || requiresReservationSignalByName(appointmentTypeName);
 
   if (createdByEmail) {
     const assigneeUser = usersByEmail.get(createdByEmail);
@@ -5162,8 +5202,7 @@ app.post('/api/admin/reservas', async (req, res) => {
         customerPhone,
         appointmentTypeName,
         createdByEmail,
-        // Las reservas creadas desde agenda admin deben persistir como cita confirmada internamente.
-        requiresReservationSignal: false,
+        requiresReservationSignal: shouldRequireReservationSignal,
       },
       {
         allowClosedSchedule: isSuperadmin,
@@ -5180,7 +5219,9 @@ app.post('/api/admin/reservas', async (req, res) => {
       });
     }
 
-    await updateReservationAdminStatus(created.reservationId, 'accepted');
+    if (!shouldRequireReservationSignal) {
+      await updateReservationAdminStatus(created.reservationId, 'accepted');
+    }
 
     let emailSent = false;
     let emailError: string | undefined;
@@ -5214,10 +5255,9 @@ app.post('/api/admin/reservas', async (req, res) => {
       }
 
       if (customerEmail) {
-        const provisionalHoldHours =
-          Boolean(requiresReservationSignal) || requiresReservationSignalByName(appointmentTypeName)
-            ? getProvisionalReservationHoursByName(appointmentTypeName) || 48
-            : 0;
+        const provisionalHoldHours = shouldRequireReservationSignal
+          ? getProvisionalReservationHoursByName(appointmentTypeName) || 48
+          : 0;
 
         const subject = `Confirmación de cita - ${appointmentTypeName} (${dateIso} ${time})`;
         const html = buildReservationEmailHtml({
@@ -5227,7 +5267,8 @@ app.post('/api/admin/reservas', async (req, res) => {
           dateIso,
           time,
           establishmentAddress: 'C. de Castilla, 4, 28320 Pinto, Madrid',
-          establishmentPhone: '614716238',
+          establishmentPhone: '919521611',
+          bizumPhone: '614716238',
         });
 
         const resend = new Resend(apiKey);
@@ -5260,9 +5301,81 @@ app.post('/api/admin/reservas', async (req, res) => {
       ...(emailError ? { emailError } : {}),
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'No se pudo crear la reserva.';
+
+    if (message.includes('La hora seleccionada no es válida.')) {
+      return res.status(400).json({ ok: false, error: message });
+    }
+
     console.error('Error creando reserva manual admin:', error);
     return res.status(500).json({ ok: false, error: 'No se pudo crear la reserva.' });
   }
+});
+
+app.post('/api/admin/reservas/:id/senal', async (req, res) => {
+  seedAuthUsers();
+  const session = getAuthSession(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const reservationId = `${req.params['id'] ?? ''}`.trim();
+  const paymentMethod = `${req.body?.paymentMethod ?? ''}`.trim() as
+    | 'efectivo'
+    | 'tarjeta'
+    | 'bizum';
+  const amount = Number(req.body?.amount ?? 20);
+
+  if (!reservationId) {
+    return res.status(400).json({ ok: false, error: 'ID de reserva inválido.' });
+  }
+
+  if (!['efectivo', 'tarjeta', 'bizum'].includes(paymentMethod)) {
+    return res
+      .status(400)
+      .json({ ok: false, error: 'Método de pago inválido. Usa efectivo, tarjeta o bizum.' });
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ ok: false, error: 'Importe de señal inválido.' });
+  }
+
+  const reservations = await listReservationsForAdmin();
+  const reservation = reservations.find((r) => r.id === reservationId);
+
+  if (!reservation) {
+    return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+  }
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const signalRegistered = await registerReservationSignalPayment(reservationId, {
+    amountEuro: Number(amount.toFixed(2)),
+    paymentMethod,
+    receivedAtIso: new Date().toISOString(),
+    registeredByEmail: session.email,
+  });
+
+  if (!signalRegistered.ok) {
+    if (signalRegistered.reason === 'not-found') {
+      return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      alreadyRecorded: true,
+    });
+  }
+
+  const concept = `Señal cita: ${reservation.customerName} · ${reservation.appointmentTypeName} · ${reservation.dateIso} ${reservation.startTime}`;
+
+  addPaymentToDailySummary(todayIso, paymentMethod, amount, {
+    operationType: 'reservation_payment',
+    concept,
+    performedByEmail: session.email ?? '',
+  });
+
+  return res.status(200).json({ ok: true });
 });
 
 app.patch('/api/admin/reservas/:id/assign', async (req, res) => {
@@ -5786,6 +5899,7 @@ app.post('/api/reservas/email', async (req, res) => {
       time,
       establishmentAddress,
       establishmentPhone,
+      bizumPhone: '614716238',
       observaciones: typeof observaciones === 'string' ? observaciones : undefined,
     });
 

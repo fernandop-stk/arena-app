@@ -11,12 +11,14 @@ export interface ReservaPersistRequest {
   customerName: string;
   customerPhone: string;
   appointmentTypeName: string;
+  additionalComments?: string;
   requiresReservationSignal?: boolean;
   createdByEmail?: string;
 }
 
 export type AdminReservationStatus = 'pending' | 'accepted' | 'rejected';
 export type ClientConfirmationStatus = 'pending' | 'confirmed';
+export type ReservationSignalPaymentMethod = 'efectivo' | 'tarjeta' | 'bizum';
 
 export interface AdminReservationItem {
   id: string;
@@ -28,7 +30,14 @@ export interface AdminReservationItem {
   customerName: string;
   customerPhone: string;
   appointmentTypeName: string;
+  additionalComments: string;
+  signalAmountEuro: number;
+  signalPaymentMethod: ReservationSignalPaymentMethod | null;
+  signalReceivedAtIso?: string | null;
+  signalRegisteredByEmail?: string | null;
   paymentReceived: boolean;
+  paymentMethod: ReservationSignalPaymentMethod | null;
+  paymentAmountEuro: number;
   adminStatus: AdminReservationStatus;
   clientConfirmationStatus: ClientConfirmationStatus;
   clientConfirmationReminderSentAtIso?: string | null;
@@ -105,7 +114,14 @@ interface MemoryReservation {
   customerName: string;
   customerPhone: string;
   appointmentTypeName: string;
+  additionalComments: string;
+  signalAmountEuro: number;
+  signalPaymentMethod: ReservationSignalPaymentMethod | null;
+  signalReceivedAtIso?: string | null;
+  signalRegisteredByEmail?: string | null;
   paymentReceived: boolean;
+  paymentMethod: ReservationSignalPaymentMethod | null;
+  paymentAmountEuro: number;
   adminStatus: AdminReservationStatus;
   clientConfirmationStatus: ClientConfirmationStatus;
   clientConfirmationReminderSentAtIso?: string | null;
@@ -259,14 +275,35 @@ const loadMemoryFromFile = (): void => {
         return;
       }
 
-      memoryReservations.set(item.id, item);
-      const dateSlots = memorySlotsByDate.get(item.dateIso) ?? new Set<string>();
+      const normalizedItem: MemoryReservation = {
+        ...item,
+        additionalComments: `${item.additionalComments ?? ''}`,
+        signalAmountEuro: Number(item.signalAmountEuro) > 0 ? Number(item.signalAmountEuro) : 0,
+        signalPaymentMethod:
+          item.signalPaymentMethod === 'efectivo' ||
+          item.signalPaymentMethod === 'tarjeta' ||
+          item.signalPaymentMethod === 'bizum'
+            ? item.signalPaymentMethod
+            : null,
+        signalReceivedAtIso: item.signalReceivedAtIso ?? null,
+        signalRegisteredByEmail: item.signalRegisteredByEmail ?? null,
+        paymentMethod:
+          item.paymentMethod === 'efectivo' ||
+          item.paymentMethod === 'tarjeta' ||
+          item.paymentMethod === 'bizum'
+            ? item.paymentMethod
+            : null,
+        paymentAmountEuro: Number(item.paymentAmountEuro) > 0 ? Number(item.paymentAmountEuro) : 0,
+      };
 
-      if (item.adminStatus !== 'rejected') {
-        item.slots.forEach((slot) => dateSlots.add(slot));
+      memoryReservations.set(normalizedItem.id, normalizedItem);
+      const dateSlots = memorySlotsByDate.get(normalizedItem.dateIso) ?? new Set<string>();
+
+      if (normalizedItem.adminStatus !== 'rejected') {
+        normalizedItem.slots.forEach((slot) => dateSlots.add(slot));
       }
 
-      memorySlotsByDate.set(item.dateIso, dateSlots);
+      memorySlotsByDate.set(normalizedItem.dateIso, dateSlots);
     });
 
     // If we loaded real data, skip mock seeding
@@ -394,7 +431,14 @@ const ensureSchema = async (): Promise<void> => {
         customer_name TEXT NOT NULL,
         customer_phone TEXT NOT NULL,
         appointment_type_name TEXT NOT NULL,
+        additional_comments TEXT NOT NULL DEFAULT '',
+        signal_amount_euro NUMERIC(10,2) NOT NULL DEFAULT 0,
+        signal_payment_method TEXT NULL,
+        signal_received_at TIMESTAMPTZ NULL,
+        signal_registered_by_email TEXT NULL,
         payment_received BOOLEAN NOT NULL DEFAULT FALSE,
+        payment_method TEXT NULL,
+        payment_amount_euro NUMERIC(10,2) NOT NULL DEFAULT 0,
         admin_status TEXT NOT NULL DEFAULT 'pending',
         client_confirmation_status TEXT NOT NULL DEFAULT 'pending',
         client_confirmation_reminder_sent_at TIMESTAMPTZ NULL,
@@ -406,6 +450,16 @@ const ensureSchema = async (): Promise<void> => {
     await db.query(`
       ALTER TABLE reservations
       ADD COLUMN IF NOT EXISTS payment_received BOOLEAN NOT NULL DEFAULT FALSE;
+    `);
+
+    await db.query(`
+      ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS payment_method TEXT NULL;
+    `);
+
+    await db.query(`
+      ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS payment_amount_euro NUMERIC(10,2) NOT NULL DEFAULT 0;
     `);
 
     await db.query(`
@@ -431,6 +485,31 @@ const ensureSchema = async (): Promise<void> => {
     await db.query(`
       ALTER TABLE reservations
       ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NULL;
+    `);
+
+    await db.query(`
+      ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS additional_comments TEXT NOT NULL DEFAULT '';
+    `);
+
+    await db.query(`
+      ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS signal_amount_euro NUMERIC(10,2) NOT NULL DEFAULT 0;
+    `);
+
+    await db.query(`
+      ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS signal_payment_method TEXT NULL;
+    `);
+
+    await db.query(`
+      ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS signal_received_at TIMESTAMPTZ NULL;
+    `);
+
+    await db.query(`
+      ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS signal_registered_by_email TEXT NULL;
     `);
 
     await db.query(`
@@ -748,7 +827,14 @@ const createReservationWithSlotsInMemory = (
     customerName: payload.customerName,
     customerPhone: payload.customerPhone,
     appointmentTypeName: payload.appointmentTypeName,
+    additionalComments: `${payload.additionalComments ?? ''}`.trim().slice(0, 500),
+    signalAmountEuro: 0,
+    signalPaymentMethod: null,
+    signalReceivedAtIso: null,
+    signalRegisteredByEmail: null,
     paymentReceived: false,
+    paymentMethod: null,
+    paymentAmountEuro: 0,
     adminStatus: 'pending',
     clientConfirmationStatus: 'pending',
     clientConfirmationReminderSentAtIso: null,
@@ -1125,11 +1211,16 @@ export const createReservationWithSlots = async (
         customer_name,
         customer_phone,
         appointment_type_name,
+        additional_comments,
+        signal_amount_euro,
+        signal_payment_method,
+        signal_received_at,
+        signal_registered_by_email,
         client_confirmation_status,
         created_by_email,
         expires_at
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
       `,
       [
         reservationId,
@@ -1141,6 +1232,11 @@ export const createReservationWithSlots = async (
         payload.customerName,
         payload.customerPhone,
         payload.appointmentTypeName,
+        `${payload.additionalComments ?? ''}`.trim().slice(0, 500),
+        0,
+        null,
+        null,
+        null,
         'pending',
         payload.createdByEmail?.trim().toLowerCase() || null,
         expiresAtIso,
@@ -1225,7 +1321,14 @@ const mapMemoryReservationToAdminItem = (reservation: MemoryReservation): AdminR
   customerName: reservation.customerName,
   customerPhone: reservation.customerPhone,
   appointmentTypeName: reservation.appointmentTypeName,
+  additionalComments: reservation.additionalComments,
+  signalAmountEuro: reservation.signalAmountEuro,
+  signalPaymentMethod: reservation.signalPaymentMethod,
+  signalReceivedAtIso: reservation.signalReceivedAtIso ?? null,
+  signalRegisteredByEmail: reservation.signalRegisteredByEmail ?? null,
   paymentReceived: reservation.paymentReceived,
+  paymentMethod: reservation.paymentMethod ?? null,
+  paymentAmountEuro: Number(reservation.paymentAmountEuro) || 0,
   adminStatus: reservation.adminStatus,
   clientConfirmationStatus: reservation.clientConfirmationStatus ?? 'pending',
   clientConfirmationReminderSentAtIso: reservation.clientConfirmationReminderSentAtIso ?? null,
@@ -1258,7 +1361,14 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
       customer_name: string;
       customer_phone: string;
       appointment_type_name: string;
+      additional_comments: string;
+      signal_amount_euro: number | string;
+      signal_payment_method: string | null;
+      signal_received_at: string | null;
+      signal_registered_by_email: string | null;
       payment_received: boolean;
+      payment_method: string | null;
+      payment_amount_euro: number | string;
       admin_status: string;
       client_confirmation_status: string;
       client_confirmation_reminder_sent_at: string | null;
@@ -1276,7 +1386,14 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
         customer_name,
         customer_phone,
         appointment_type_name,
+        additional_comments,
+        signal_amount_euro,
+        signal_payment_method,
+        signal_received_at,
+        signal_registered_by_email,
         payment_received,
+        payment_method,
+        payment_amount_euro,
         admin_status,
         client_confirmation_status,
         client_confirmation_reminder_sent_at,
@@ -1297,7 +1414,24 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
       customerName: row.customer_name,
       customerPhone: row.customer_phone,
       appointmentTypeName: row.appointment_type_name,
+      additionalComments: row.additional_comments,
+      signalAmountEuro: Number(row.signal_amount_euro) || 0,
+      signalPaymentMethod:
+        row.signal_payment_method === 'efectivo' ||
+        row.signal_payment_method === 'tarjeta' ||
+        row.signal_payment_method === 'bizum'
+          ? row.signal_payment_method
+          : null,
+      signalReceivedAtIso: row.signal_received_at,
+      signalRegisteredByEmail: row.signal_registered_by_email,
       paymentReceived: row.payment_received,
+      paymentMethod:
+        row.payment_method === 'efectivo' ||
+        row.payment_method === 'tarjeta' ||
+        row.payment_method === 'bizum'
+          ? row.payment_method
+          : null,
+      paymentAmountEuro: Number(row.payment_amount_euro) || 0,
       adminStatus: row.admin_status as AdminReservationStatus,
       clientConfirmationStatus: row.client_confirmation_status as ClientConfirmationStatus,
       clientConfirmationReminderSentAtIso: row.client_confirmation_reminder_sent_at,
@@ -1432,7 +1566,23 @@ export const updateReservationClientConfirmationStatus = async (
 export const updateReservationPaymentReceived = async (
   reservationId: string,
   paymentReceived: boolean,
+  options?: {
+    paymentMethod?: ReservationSignalPaymentMethod;
+    paymentAmountEuro?: number;
+  },
 ): Promise<{ ok: true } | { ok: false; reason: 'not-found' }> => {
+  const nextPaymentMethod =
+    options?.paymentMethod === 'efectivo' ||
+    options?.paymentMethod === 'tarjeta' ||
+    options?.paymentMethod === 'bizum'
+      ? options.paymentMethod
+      : null;
+  const nextPaymentAmountEuro = Number(options?.paymentAmountEuro ?? 0);
+  const safePaymentAmountEuro =
+    Number.isFinite(nextPaymentAmountEuro) && nextPaymentAmountEuro > 0
+      ? Number(nextPaymentAmountEuro.toFixed(2))
+      : 0;
+
   if (!shouldUseDatabase()) {
     const reservation = memoryReservations.get(reservationId);
 
@@ -1441,6 +1591,14 @@ export const updateReservationPaymentReceived = async (
     }
 
     reservation.paymentReceived = paymentReceived;
+
+    if (!paymentReceived) {
+      reservation.paymentMethod = null;
+      reservation.paymentAmountEuro = 0;
+    } else if (nextPaymentMethod) {
+      reservation.paymentMethod = nextPaymentMethod;
+      reservation.paymentAmountEuro = safePaymentAmountEuro;
+    }
 
     if (!paymentReceived) {
       reservation.adminStatus = 'pending';
@@ -1458,10 +1616,20 @@ export const updateReservationPaymentReceived = async (
       `
       UPDATE reservations
       SET payment_received = $2,
+          payment_method = CASE
+            WHEN $2 = false THEN NULL
+            WHEN $3::text IN ('efectivo', 'tarjeta', 'bizum') THEN $3::text
+            ELSE payment_method
+          END,
+          payment_amount_euro = CASE
+            WHEN $2 = false THEN 0
+            WHEN $3::text IN ('efectivo', 'tarjeta', 'bizum') THEN $4
+            ELSE payment_amount_euro
+          END,
           admin_status = CASE WHEN $2 = false THEN 'pending' ELSE admin_status END
       WHERE id = $1
       `,
-      [reservationId, paymentReceived],
+      [reservationId, paymentReceived, nextPaymentMethod, safePaymentAmountEuro],
     );
 
     if (updated.rowCount === 0) {
@@ -1480,9 +1648,114 @@ export const updateReservationPaymentReceived = async (
       reservation.paymentReceived = paymentReceived;
 
       if (!paymentReceived) {
+        reservation.paymentMethod = null;
+        reservation.paymentAmountEuro = 0;
+      } else if (nextPaymentMethod) {
+        reservation.paymentMethod = nextPaymentMethod;
+        reservation.paymentAmountEuro = safePaymentAmountEuro;
+      }
+
+      if (!paymentReceived) {
         reservation.adminStatus = 'pending';
       }
 
+      memoryReservations.set(reservationId, reservation);
+      saveMemoryToFile();
+      return { ok: true };
+    }
+
+    throw error;
+  }
+};
+
+export const registerReservationSignalPayment = async (
+  reservationId: string,
+  payload: {
+    amountEuro: number;
+    paymentMethod: ReservationSignalPaymentMethod;
+    receivedAtIso: string;
+    registeredByEmail?: string | null;
+  },
+): Promise<{ ok: true } | { ok: false; reason: 'not-found' | 'already-recorded' }> => {
+  const safeAmount = Number(payload.amountEuro.toFixed(2));
+  const safeRegisteredByEmail = payload.registeredByEmail?.trim().toLowerCase() || null;
+
+  if (!shouldUseDatabase()) {
+    const reservation = memoryReservations.get(reservationId);
+
+    if (!reservation) {
+      return { ok: false, reason: 'not-found' };
+    }
+
+    if ((reservation.signalAmountEuro ?? 0) > 0) {
+      return { ok: false, reason: 'already-recorded' };
+    }
+
+    reservation.signalAmountEuro = safeAmount;
+    reservation.signalPaymentMethod = payload.paymentMethod;
+    reservation.signalReceivedAtIso = payload.receivedAtIso;
+    reservation.signalRegisteredByEmail = safeRegisteredByEmail;
+    memoryReservations.set(reservationId, reservation);
+    saveMemoryToFile();
+    return { ok: true };
+  }
+
+  try {
+    await ensureSchema();
+    const db = getPool();
+    const current = await db.query<{ id: string; signal_amount_euro: number | string }>(
+      'SELECT id, signal_amount_euro FROM reservations WHERE id = $1',
+      [reservationId],
+    );
+
+    if (current.rowCount === 0) {
+      return { ok: false, reason: 'not-found' };
+    }
+
+    if ((Number(current.rows[0]?.signal_amount_euro) || 0) > 0) {
+      return { ok: false, reason: 'already-recorded' };
+    }
+
+    const updated = await db.query(
+      `
+      UPDATE reservations
+      SET signal_amount_euro = $2,
+          signal_payment_method = $3,
+          signal_received_at = $4,
+          signal_registered_by_email = $5
+      WHERE id = $1
+        AND COALESCE(signal_amount_euro, 0) <= 0
+      `,
+      [
+        reservationId,
+        safeAmount,
+        payload.paymentMethod,
+        payload.receivedAtIso,
+        safeRegisteredByEmail,
+      ],
+    );
+
+    if ((updated.rowCount ?? 0) === 0) {
+      return { ok: false, reason: 'already-recorded' };
+    }
+
+    return { ok: true };
+  } catch (error) {
+    if (enableRuntimeMemoryMode(error)) {
+      const reservation = memoryReservations.get(reservationId);
+
+      if (!reservation) {
+        return { ok: false, reason: 'not-found' };
+      }
+
+      if ((reservation.signalAmountEuro ?? 0) > 0) {
+        return { ok: false, reason: 'already-recorded' };
+      }
+
+      reservation.signalAmountEuro = safeAmount;
+      reservation.signalPaymentMethod = payload.paymentMethod;
+      reservation.signalReceivedAtIso = payload.receivedAtIso;
+      reservation.signalRegisteredByEmail = safeRegisteredByEmail;
       memoryReservations.set(reservationId, reservation);
       saveMemoryToFile();
       return { ok: true };
@@ -1869,6 +2142,7 @@ export const updateReservationByAdmin = async (
     customerName: string;
     customerPhone: string;
     customerEmail: string;
+    additionalComments?: string;
   },
   options?: {
     allowClosedSchedule?: boolean;
@@ -2053,7 +2327,8 @@ export const updateReservationByAdmin = async (
           appointment_type_name = $6,
           customer_name = $7,
           customer_phone = $8,
-          customer_email = $9
+          customer_email = $9,
+          additional_comments = COALESCE($10, additional_comments)
       WHERE id = $1
       `,
       [
@@ -2066,6 +2341,7 @@ export const updateReservationByAdmin = async (
         payload.customerName,
         payload.customerPhone,
         payload.customerEmail,
+        payload.additionalComments?.trim().slice(0, 500) ?? null,
       ],
     );
 
@@ -2136,6 +2412,10 @@ export const updateReservationByAdmin = async (
       reservation.customerName = payload.customerName;
       reservation.customerPhone = payload.customerPhone;
       reservation.customerEmail = payload.customerEmail;
+      reservation.additionalComments =
+        payload.additionalComments !== undefined
+          ? payload.additionalComments.trim().slice(0, 500)
+          : reservation.additionalComments;
       reservation.slots = nextSlots;
 
       memoryReservations.set(reservationId, reservation);

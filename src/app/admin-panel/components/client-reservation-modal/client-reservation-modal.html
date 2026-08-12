@@ -1,0 +1,134 @@
+@if (visible) {
+  <div class="client-reservation-modal__backdrop" (click)="close.emit()">
+    <section class="client-reservation-modal__card" (click)="$event.stopPropagation()">
+      <div class="client-reservation-modal__head">
+        <div>
+          <h3 class="client-reservation-modal__title">Añadir reserva</h3>
+          <p class="client-reservation-modal__subtitle">
+            Crea la cita desde la ficha sin volver a teclear los datos de la clienta.
+          </p>
+        </div>
+        <button
+          type="button"
+          class="client-reservation-modal__close"
+          (click)="close.emit()"
+          aria-label="Cerrar"
+        >
+          ×
+        </button>
+      </div>
+
+      <div class="client-reservation-modal__client">
+        <div>
+          <p class="client-reservation-modal__client-name">{{ clientName }}</p>
+          <p class="client-reservation-modal__client-meta">{{ clientEmail }} · {{ clientPhone }}</p>
+        </div>
+        <span class="client-reservation-modal__client-badge">Datos desde ficha</span>
+      </div>
+
+      <div class="client-reservation-modal__grid">
+        <label class="client-reservation-modal__field">
+          Fecha de la cita
+          <input
+            class="client-reservation-modal__input"
+            type="date"
+            lang="es-ES"
+            [value]="reservationDateIso"
+            (input)="onDateInput($event)"
+          />
+        </label>
+
+        <label class="client-reservation-modal__field">
+          Hora
+          <select
+            class="client-reservation-modal__input client-reservation-modal__input--select"
+            [value]="reservationTime"
+            [disabled]="availabilityLoading || timeOptions.length === 0"
+            (change)="onTimeInput($any($event.target).value)"
+          >
+            <option value="">Selecciona una hora</option>
+            @for (time of timeOptions; track time) {
+              <option [value]="time">{{ time }}</option>
+            }
+          </select>
+        </label>
+      </div>
+
+      <div class="client-reservation-modal__tabs" role="tablist" aria-label="Tipo de servicio">
+        <button
+          type="button"
+          class="client-reservation-modal__tab"
+          [class.client-reservation-modal__tab--active]="selectedType === 'pack'"
+          (click)="setSelectedType('pack')"
+        >
+          Packs
+        </button>
+        <button
+          type="button"
+          class="client-reservation-modal__tab"
+          [class.client-reservation-modal__tab--active]="selectedType === 'treatment'"
+          (click)="setSelectedType('treatment')"
+        >
+          Tratamientos
+        </button>
+      </div>
+
+      <label class="client-reservation-modal__field">
+        @if (selectedType === 'pack') {
+          Pack
+        } @else {
+          Tratamiento
+        }
+        <select
+          class="client-reservation-modal__input client-reservation-modal__input--select"
+          [value]="selectedTypeId"
+          (change)="onSelectionChange($event, selectedType)"
+        >
+          <option value="0">Selecciona una opción</option>
+          @for (option of currentOptions; track option.id) {
+            <option [value]="option.id">{{ option.nombre }}</option>
+          }
+        </select>
+      </label>
+
+      @if (currentSelectionLabel) {
+        <p class="client-reservation-modal__selection">Seleccionado: {{ currentSelectionLabel }}</p>
+      }
+
+      @if (error) {
+        <p class="client-reservation-modal__error">{{ error }}</p>
+      }
+
+      @if (!error && timeOptions.length === 0 && !availabilityLoading) {
+        <p class="client-reservation-modal__selection">
+          No hay huecos disponibles para la fecha seleccionada.
+        </p>
+      }
+
+      <div class="client-reservation-modal__actions">
+        <button
+          type="button"
+          class="client-reservation-modal__btn client-reservation-modal__btn--soft"
+          [disabled]="loading"
+          (click)="close.emit()"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          class="client-reservation-modal__btn client-reservation-modal__btn--primary"
+          [disabled]="
+            loading || availabilityLoading || timeOptions.length === 0 || !reservationTime
+          "
+          (click)="confirm.emit()"
+        >
+          @if (loading) {
+            Creando...
+          } @else {
+            Añadir reserva
+          }
+        </button>
+      </div>
+    </section>
+  </div>
+}

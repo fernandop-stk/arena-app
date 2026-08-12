@@ -570,6 +570,7 @@
                                         'day'
                                       )
                                     "
+                                    style="align-content: start"
                                   >
                                     <div class="admin-panel--container__agenda-reservation-head">
                                       <span
@@ -585,22 +586,56 @@
                                     </p>
 
                                     @if (isSuperadmin()) {
-                                      <button
-                                        type="button"
-                                        class="admin-panel--container__action-button admin-panel--container__action-button--soft"
-                                        style="
-                                          width: auto;
-                                          padding: 0.25rem 0.5rem;
-                                          min-height: auto;
-                                        "
-                                        (click)="
-                                          $event.stopPropagation();
-                                          openAgendaReservationDetail(reservation)
-                                        "
-                                        aria-label="Editar cita"
+                                      <div
+                                        class="admin-panel--container__agenda-reservation-actions-inline"
                                       >
-                                        Editar cita ✏️
-                                      </button>
+                                        <button
+                                          type="button"
+                                          class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                                          style="
+                                            min-height: 1.95rem;
+                                            height: 1.95rem;
+                                            padding: 0 0.75rem;
+                                            font-size: 0.78rem;
+                                            line-height: 1;
+                                            display: inline-flex;
+                                            align-items: center;
+                                            justify-content: center;
+                                            align-self: start;
+                                            margin-top: 0.14rem;
+                                          "
+                                          (click)="
+                                            $event.stopPropagation();
+                                            openAgendaReservationDetail(reservation)
+                                          "
+                                          aria-label="Editar cita"
+                                        >
+                                          Editar cita ✏️
+                                        </button>
+                                        <button
+                                          type="button"
+                                          class="admin-panel--container__action-button admin-panel--container__action-button--secondary"
+                                          style="
+                                            min-height: 1.95rem;
+                                            height: 1.95rem;
+                                            padding: 0 0.75rem;
+                                            font-size: 0.78rem;
+                                            line-height: 1;
+                                            display: inline-flex;
+                                            align-items: center;
+                                            justify-content: center;
+                                            align-self: start;
+                                            margin-top: 0.14rem;
+                                          "
+                                          (click)="
+                                            $event.stopPropagation();
+                                            openAgendaReservationInfoModal(reservation)
+                                          "
+                                          aria-label="Información de pago"
+                                        >
+                                          Info
+                                        </button>
+                                      </div>
                                     }
                                   </article>
                                 }
@@ -809,6 +844,7 @@
                                       'week'
                                     )
                                   "
+                                  style="align-content: start"
                                 >
                                   <div class="admin-panel--container__agenda-reservation-head">
                                     <span
@@ -822,6 +858,58 @@
                                     {{ reservation.appointmentTypeName }} €
                                     {{ formatDuration(reservation.durationMinutes) }}
                                   </p>
+                                  @if (isSuperadmin()) {
+                                    <div
+                                      class="admin-panel--container__agenda-reservation-actions-inline"
+                                    >
+                                      <button
+                                        type="button"
+                                        class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                                        style="
+                                          min-height: 1.95rem;
+                                          height: 1.95rem;
+                                          padding: 0 0.75rem;
+                                          font-size: 0.78rem;
+                                          line-height: 1;
+                                          display: inline-flex;
+                                          align-items: center;
+                                          justify-content: center;
+                                          align-self: start;
+                                          margin-top: 0.14rem;
+                                        "
+                                        (click)="
+                                          $event.stopPropagation();
+                                          openAgendaReservationDetail(reservation)
+                                        "
+                                        aria-label="Editar cita"
+                                      >
+                                        Editar ✏️
+                                      </button>
+                                      <button
+                                        type="button"
+                                        class="admin-panel--container__action-button admin-panel--container__action-button--secondary"
+                                        style="
+                                          min-height: 1.95rem;
+                                          height: 1.95rem;
+                                          padding: 0 0.75rem;
+                                          font-size: 0.78rem;
+                                          line-height: 1;
+                                          display: inline-flex;
+                                          align-items: center;
+                                          justify-content: center;
+                                          align-self: start;
+                                          margin-top: 0.14rem;
+                                        "
+                                        (click)="
+                                          $event.stopPropagation();
+                                          openAgendaReservationInfoModal(reservation)
+                                        "
+                                        aria-label="Información de pago"
+                                      >
+                                        Info
+                                      </button>
+                                    </div>
+                                  }
                                 </article>
                               }
                               @if (
@@ -1158,6 +1246,32 @@
                       <span class="admin-panel--container__agenda-detail-label">Estado</span>
                       <span>{{ getReservationAgendaStatusLabel(agendaDetailReservation()!) }}</span>
                     </p>
+                    <p class="admin-panel--container__agenda-detail-row">
+                      <span class="admin-panel--container__agenda-detail-label">Pago final</span>
+                      <span>
+                        @if (agendaDetailReservation()!.paymentReceived) {
+                          Recibido
+                          @if (agendaDetailReservation()!.paymentMethod) {
+                            ({{
+                              getPaymentMethodDisplayLabel(
+                                agendaDetailReservation()!.paymentMethod!
+                              )
+                            }})
+                          }
+                          @if (agendaDetailReservation()!.paymentAmountEuro > 0) {
+                            · {{ agendaDetailReservation()!.paymentAmountEuro | number: '1.2-2' }} €
+                          }
+                        } @else {
+                          Pendiente
+                        }
+                      </span>
+                    </p>
+                    <p class="admin-panel--container__agenda-detail-row">
+                      <span class="admin-panel--container__agenda-detail-label">
+                        Comentarios adicionales
+                      </span>
+                      <span>{{ agendaDetailReservation()!.additionalComments || '-' }}</span>
+                    </p>
                   </div>
                 </div>
 
@@ -1223,6 +1337,7 @@
                   <select
                     id="agendaEditName"
                     class="admin-panel--container__input"
+                    #agendaEditNameSelect
                     [value]="agendaEditDraftName()"
                     (change)="onAgendaEditDraftNameChange($event)"
                   >
@@ -1237,6 +1352,7 @@
                   <select
                     id="agendaEditDuration"
                     class="admin-panel--container__input"
+                    #agendaEditDurationSelect
                     [value]="agendaEditDraftDuration()"
                     (change)="onAgendaEditDraftDurationChange($event)"
                   >
@@ -1244,6 +1360,26 @@
                       <option [value]="duration">{{ formatDuration(duration) }}</option>
                     }
                   </select>
+
+                  <label class="admin-panel--container__label" for="agendaEditAdditionalComments">
+                    Comentarios adicionales
+                  </label>
+                  <textarea
+                    id="agendaEditAdditionalComments"
+                    class="admin-panel--container__input"
+                    #agendaEditAdditionalCommentsInput
+                    rows="3"
+                    maxlength="500"
+                    [value]="agendaEditDraftAdditionalComments()"
+                    (input)="onAgendaEditDraftAdditionalCommentsInput($event)"
+                    placeholder="Añade notas para esta cita (opcional)"
+                  ></textarea>
+                  <p
+                    class="admin-panel--container__hint admin-panel--container__hint--compact"
+                    style="margin-top: 0.35rem; text-align: right"
+                  >
+                    {{ agendaEditDraftAdditionalComments().length }}/500
+                  </p>
                 </div>
 
                 <div class="admin-panel--container__agenda-detail-actions">
@@ -1251,7 +1387,13 @@
                     type="button"
                     class="admin-panel--container__action-button"
                     [disabled]="agendaDetailSaving()"
-                    (click)="saveAgendaReservationEdit()"
+                    (click)="
+                      saveAgendaReservationEdit(
+                        agendaEditNameSelect.value,
+                        agendaEditDurationSelect.value,
+                        agendaEditAdditionalCommentsInput.value
+                      )
+                    "
                   >
                     @if (agendaDetailSaving()) {
                       Guardando...
@@ -1465,7 +1607,29 @@
                         {{ formatDuration(reservation.durationMinutes) }}
                       </p>
                       <p class="admin-panel--container__reservation-text">
-                        Señal: {{ reservation.paymentReceived ? 'Recibida' : 'Pendiente' }}
+                        Señal:
+                        @if (reservation.signalAmountEuro > 0) {
+                          Recibida {{ reservation.signalAmountEuro | number: '1.2-2' }} €
+                          @if (reservation.signalPaymentMethod) {
+                            ({{ reservation.signalPaymentMethod }})
+                          }
+                        } @else {
+                          Sin registrar
+                        }
+                      </p>
+                      <p class="admin-panel--container__reservation-text">
+                        Pago final:
+                        @if (reservation.paymentReceived) {
+                          Recibido
+                          @if (reservation.paymentMethod) {
+                            ({{ getPaymentMethodDisplayLabel(reservation.paymentMethod) }})
+                          }
+                          @if (reservation.paymentAmountEuro > 0) {
+                            · {{ reservation.paymentAmountEuro | number: '1.2-2' }} €
+                          }
+                        } @else {
+                          Pendiente
+                        }
                       </p>
                       <p
                         class="admin-panel--container__reservation-text admin-panel--container__reservation-text--client-confirmation"
@@ -1491,6 +1655,9 @@
                         >
                           @if (reservation.paymentReceived) {
                             Pago recibido ✓
+                            @if (reservation.paymentMethod) {
+                              ({{ getPaymentMethodDisplayLabel(reservation.paymentMethod) }})
+                            }
                           } @else {
                             Marcar pago recibido
                           }
@@ -1606,6 +1773,20 @@
                   >
                     Confirmación clienta: {{ getClientConfirmationLabel(reservation) }}
                   </p>
+                  <p class="admin-panel--container__reservation-text">
+                    Pago final:
+                    @if (reservation.paymentReceived) {
+                      Recibido
+                      @if (reservation.paymentMethod) {
+                        ({{ getPaymentMethodDisplayLabel(reservation.paymentMethod) }})
+                      }
+                      @if (reservation.paymentAmountEuro > 0) {
+                        · {{ reservation.paymentAmountEuro | number: '1.2-2' }} €
+                      }
+                    } @else {
+                      Pendiente
+                    }
+                  </p>
 
                   <div class="admin-panel--container__reservation-actions">
                     <button
@@ -1625,6 +1806,9 @@
                     >
                       @if (reservation.paymentReceived) {
                         Pago recibido ✓
+                        @if (reservation.paymentMethod) {
+                          ({{ getPaymentMethodDisplayLabel(reservation.paymentMethod) }})
+                        }
                       } @else {
                         Marcar pago recibido
                       }
@@ -2627,6 +2811,13 @@
                     <button
                       type="button"
                       class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
+                      (click)="openClientReservationModal()"
+                    >
+                      ➕ Añadir reserva
+                    </button>
+                    <button
+                      type="button"
+                      class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
                       (click)="openPaymentModal()"
                     >
                       💰 Cobrar pago
@@ -2788,6 +2979,29 @@
             </div>
           </div>
         }
+
+        <app-client-reservation-modal
+          [visible]="showClientReservationModal()"
+          [clientName]="getSelectedClientCard()?.fullName ?? ''"
+          [clientEmail]="getSelectedClientCard()?.email ?? ''"
+          [clientPhone]="getSelectedClientCard()?.phone ?? ''"
+          [packOptions]="agendaPackOptions"
+          [treatmentOptions]="agendaTreatmentCatalog"
+          [timeOptions]="clientReservationTimeOptions()"
+          [selectedType]="clientReservationServiceType()"
+          [selectedTypeId]="clientReservationServiceId()"
+          [reservationDateIso]="clientReservationDateIso()"
+          [reservationTime]="clientReservationTime()"
+          [availabilityLoading]="clientReservationAvailabilityLoading()"
+          [loading]="clientReservationLoading()"
+          [error]="clientReservationError()"
+          (close)="closeClientReservationModal()"
+          (confirm)="submitClientReservation()"
+          (typeChange)="onClientReservationServiceTypeChange($event)"
+          (selectionChange)="onClientReservationServiceIdChange($event)"
+          (dateChange)="onClientReservationDateInput($event)"
+          (timeChange)="onClientReservationTimeInput($event)"
+        ></app-client-reservation-modal>
       }
 
       @if (activeTab() === 'almacen') {
@@ -5309,6 +5523,63 @@
     </div>
   }
 
+  @if (agendaReservationInfoModalReservation(); as reservation) {
+    <div class="admin-panel--container__modal-backdrop" (click)="closeAgendaReservationInfoModal()">
+      <section
+        class="admin-panel--container__modal admin-panel--container__modal--compact"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Información de la cita"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="admin-panel--container__modal-head">
+          <h2 class="admin-panel--container__modal-title">Info de la cita</h2>
+          <button
+            type="button"
+            class="admin-panel--container__modal-close"
+            (click)="closeAgendaReservationInfoModal()"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+
+        <p class="admin-panel--container__modal-subtitle">
+          {{ reservation.customerName }} · {{ reservation.appointmentTypeName }}
+        </p>
+
+        <p class="admin-panel--container__agenda-payment-info-line">
+          <strong>Señal:</strong>
+          <span>
+            @if (reservation.signalAmountEuro > 0) {
+              {{ reservation.signalAmountEuro | number: '1.2-2' }} €
+              @if (reservation.signalPaymentMethod) {
+                · {{ getPaymentMethodDisplayLabel(reservation.signalPaymentMethod) }}
+              }
+            } @else {
+              Sin señal
+            }
+          </span>
+        </p>
+
+        <p class="admin-panel--container__agenda-payment-info-line">
+          <strong>Pago final:</strong>
+          <span>{{ getReservationFinalPaymentLabel(reservation) }}</span>
+        </p>
+
+        <div class="admin-panel--container__modal-actions" style="justify-content: flex-end">
+          <button
+            type="button"
+            class="admin-panel--container__button admin-panel--container__button--secondary"
+            (click)="closeAgendaReservationInfoModal()"
+          >
+            Cerrar
+          </button>
+        </div>
+      </section>
+    </div>
+  }
+
   @if (showPaymentMethodModal()) {
     <div class="admin-panel--container__modal-backdrop" (click)="closePaymentMethodModal()">
       <section
@@ -5469,6 +5740,107 @@
     </div>
   }
 
+  @if (showSenalModal()) {
+    <div class="admin-panel--container__modal-backdrop" (click)="closeSenalModal()">
+      <section
+        class="admin-panel--container__modal admin-panel--container__modal--compact"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Señal de reserva"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="admin-panel--container__modal-head">
+          <h2 class="admin-panel--container__modal-title">Señal de reserva</h2>
+          <button
+            type="button"
+            class="admin-panel--container__modal-close"
+            (click)="closeSenalModal()"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+
+        <p class="admin-panel--container__modal-subtitle" style="margin: 0 0 0.5rem">
+          Indica cómo se cobra la señal de <strong>{{ SENAL_AMOUNT }} €</strong> (se descuenta del
+          total del tratamiento).
+        </p>
+
+        <div class="admin-panel--container__payment-method-options">
+          <button
+            type="button"
+            class="admin-panel--container__payment-option"
+            [class.admin-panel--container__payment-option--selected]="
+              senalPaymentMethod() === 'efectivo'
+            "
+            (click)="senalPaymentMethod.set('efectivo')"
+          >
+            💵 Efectivo
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__payment-option"
+            [class.admin-panel--container__payment-option--selected]="
+              senalPaymentMethod() === 'tarjeta'
+            "
+            (click)="senalPaymentMethod.set('tarjeta')"
+          >
+            💳 Tarjeta
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__payment-option"
+            [class.admin-panel--container__payment-option--selected]="
+              senalPaymentMethod() === 'bizum'
+            "
+            (click)="senalPaymentMethod.set('bizum')"
+          >
+            📱 Bizum
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__payment-option admin-panel--container__payment-option--neutral"
+            [class.admin-panel--container__payment-option--selected]="
+              senalPaymentMethod() === 'sin_senal'
+            "
+            (click)="senalPaymentMethod.set('sin_senal')"
+          >
+            Sin señal
+          </button>
+        </div>
+
+        @if (senalError()) {
+          <p class="admin-panel--container__action-error" style="margin: 0.5rem 0 0">
+            {{ senalError() }}
+          </p>
+        }
+
+        <div class="admin-panel--container__modal-actions">
+          <button
+            type="button"
+            class="admin-panel--container__button admin-panel--container__button--secondary"
+            [disabled]="senalLoading()"
+            (click)="closeSenalModal()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__button admin-panel--container__button--primary"
+            [disabled]="!senalPaymentMethod() || senalLoading()"
+            (click)="submitSenalAndConfirm()"
+          >
+            @if (senalLoading()) {
+              Confirmando...
+            } @else {
+              Confirmar cita
+            }
+          </button>
+        </div>
+      </section>
+    </div>
+  }
+
   @if (showAgendaUnassignedReservationsModal()) {
     <div
       class="admin-panel--container__modal-backdrop"
@@ -5531,20 +5903,34 @@
                 </p>
 
                 @if (!isAgendaUnassignedAssignExpanded(reservation.id)) {
-                  <button
-                    type="button"
-                    class="admin-panel--container__action-button admin-panel--container__action-button--accept"
-                    [disabled]="
-                      getAgendaUnassignedReservationAvailableWorkers(reservation).length === 0
-                    "
-                    (click)="startAgendaUnassignedReservationAssign(reservation)"
+                  <div
+                    class="admin-panel--container__modal-actions"
+                    style="justify-content: space-between; margin-top: 0.75rem"
                   >
-                    @if (getAgendaUnassignedReservationAvailableWorkers(reservation).length === 0) {
-                      Sin personal libre
-                    } @else {
-                      Asignar
-                    }
-                  </button>
+                    <button
+                      type="button"
+                      class="admin-panel--container__action-button admin-panel--container__action-button--accept"
+                      [disabled]="
+                        getAgendaUnassignedReservationAvailableWorkers(reservation).length === 0
+                      "
+                      (click)="startAgendaUnassignedReservationAssign(reservation)"
+                    >
+                      @if (
+                        getAgendaUnassignedReservationAvailableWorkers(reservation).length === 0
+                      ) {
+                        Sin personal libre
+                      } @else {
+                        Asignar
+                      }
+                    </button>
+                    <button
+                      type="button"
+                      class="admin-panel--container__action-button admin-panel--container__action-button--reject"
+                      (click)="openAgendaDeleteReservationModal(reservation)"
+                    >
+                      Borrar cita
+                    </button>
+                  </div>
                 } @else {
                   <div style="display: grid; gap: 0.6rem; margin-top: 0.75rem">
                     <label class="admin-panel--container__label" style="margin: 0">
@@ -5597,6 +5983,81 @@
             }
           </div>
         }
+      </section>
+    </div>
+  }
+
+  @if (agendaDeleteReservationTarget()) {
+    <div
+      class="admin-panel--container__modal-backdrop"
+      (click)="closeAgendaDeleteReservationModal()"
+    >
+      <section
+        class="admin-panel--container__modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Eliminar reserva"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="admin-panel--container__modal-head">
+          <div>
+            <h2 class="admin-panel--container__modal-title">Eliminar reserva</h2>
+            <p class="admin-panel--container__modal-subtitle">Vas a eliminar la reserva.</p>
+          </div>
+          <button
+            type="button"
+            class="admin-panel--container__modal-close"
+            (click)="closeAgendaDeleteReservationModal()"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+
+        @if (agendaDeleteReservationError()) {
+          <p class="admin-panel--container__error" style="margin-top: 0">
+            {{ agendaDeleteReservationError() }}
+          </p>
+        }
+
+        <div style="display: grid; gap: 0.55rem; margin: 0.75rem 0 1.25rem; color: #4b352b">
+          <p style="margin: 0; font-weight: 700">
+            {{ agendaDeleteReservationTarget()?.customerName }} ·
+            {{ agendaDeleteReservationTarget()?.appointmentTypeName }}
+          </p>
+          <p style="margin: 0">
+            {{ formatDate(agendaDeleteReservationTarget()?.dateIso ?? '') }} ·
+            {{ agendaDeleteReservationTarget()?.startTime }} -
+            {{ agendaDeleteReservationTarget()?.endTime }}
+          </p>
+          <p style="margin: 0">
+            {{ agendaDeleteReservationTarget()?.customerPhone }} ·
+            {{ agendaDeleteReservationTarget()?.customerEmail }}
+          </p>
+          <p style="margin: 0; font-weight: 700; color: #8a4f3a">¿Estás segura?</p>
+        </div>
+
+        <div class="admin-panel--container__modal-actions" style="justify-content: flex-end">
+          <button
+            type="button"
+            class="admin-panel--container__button admin-panel--container__button--secondary"
+            (click)="closeAgendaDeleteReservationModal()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__button admin-panel--container__button--primary"
+            [disabled]="agendaDeleteReservationLoadingId() === agendaDeleteReservationTarget()?.id"
+            (click)="deleteAgendaUnassignedReservation()"
+          >
+            {{
+              agendaDeleteReservationLoadingId() === agendaDeleteReservationTarget()?.id
+                ? 'Eliminando...'
+                : 'Confirmar'
+            }}
+          </button>
+        </div>
       </section>
     </div>
   }
