@@ -43,6 +43,8 @@ type CierreStatsMetric = 'efectivo' | 'tarjeta' | 'bizum' | 'digital' | 'total';
 type AdminCardTarget = 'packs' | 'reservas' | 'agenda' | 'clientes' | 'almacen' | 'cierre';
 type EmployeeManagementTab = 'crear' | 'listado' | 'buscar' | 'superadmin';
 type ClientManagementTab = 'crear' | 'listado' | 'buscar';
+type ClientDetailTab = 'ficha' | 'tratamiento' | 'opciones' | 'estadisticas';
+type ClientHistoryTab = 'packs' | 'citas';
 type AdminUserRole = 'superadmin' | 'admin' | 'client';
 type EmployeeWorkStatus = 'idle' | 'working' | 'vacation' | 'sick_leave' | 'recovering_hours';
 type GlobalTreatmentFilterPreset = 'all' | 'month' | 'last30' | 'year' | 'custom';
@@ -97,6 +99,33 @@ interface AdminReservationItem {
   clientConfirmationReminderSentAtIso?: string | null;
   createdByEmail?: string | null;
   createdAtIso: string;
+  linkedClientId?: string;
+  reservationServiceItems?: ReservationServiceLineItem[];
+  reservationStockItems?: ReservationStockLineItem[];
+}
+
+interface ReservationServiceLineItem {
+  id: string;
+  type: 'pack' | 'treatment';
+  name: string;
+  quantity: number;
+  durationMinutes: number;
+  unitPriceEuro: number;
+  requiresReservationSignal: boolean;
+}
+
+interface ReservationStockLineItem {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPriceEuro: number;
+}
+
+interface ReservationPaymentLineItem {
+  id: string;
+  label: string;
+  amountEuro: number;
 }
 
 interface AdminBlockedPeriodItem {
@@ -193,6 +222,11 @@ interface ClientCardItem {
     priceEuro?: number;
     paymentMethod?: 'efectivo' | 'tarjeta' | 'bizum' | null;
   }>;
+}
+
+interface ClientTreatmentHistoryEntry {
+  name: string;
+  createdAtIso: string;
 }
 
 interface StockProductItem {
@@ -490,9 +524,13 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly agendaDropToast = signal('');
   protected readonly agendaDetailReservation = signal<AdminReservationItem | null>(null);
   protected readonly agendaDetailMode = signal<'view' | 'edit'>('view');
+  protected readonly agendaEditTarget = signal<'duration' | 'services'>('duration');
   protected readonly agendaEditDraftName = signal('');
   protected readonly agendaEditDraftDuration = signal(0);
   protected readonly agendaEditDraftAdditionalComments = signal('');
+  protected readonly agendaEditDraftStockProductId = signal('');
+  protected readonly agendaEditDraftStockUnits = signal('1');
+  protected readonly agendaEditDraftStockLines = signal<ReservationStockLineItem[]>([]);
   protected readonly agendaDetailSaving = signal(false);
   protected readonly agendaDetailError = signal('');
   protected readonly agendaDetailCancelling = signal(false);
@@ -527,6 +565,9 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly agendaManualReserveCustomerName = signal('');
   protected readonly agendaManualReserveCustomerPhone = signal('');
   protected readonly agendaManualReserveCustomerEmail = signal('');
+  protected readonly agendaManualReserveClientMode = signal<'existing' | 'manual'>('manual');
+  protected readonly agendaManualReserveClientSearch = signal('');
+  protected readonly agendaManualReserveSelectedClientId = signal('');
   protected readonly agendaManualReserveServiceType = signal<'pack' | 'treatment'>('pack');
   protected readonly agendaManualReserveServiceId = signal<number>(
     this.agendaPackOptions[0]?.id ?? 1,
@@ -534,6 +575,10 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly agendaManualReserveDuration = signal<number>(
     this.agendaPackOptions[0]?.duracionMinutos ?? 60,
   );
+  protected readonly agendaManualReserveServiceLines = signal<ReservationServiceLineItem[]>([]);
+  protected readonly agendaManualReserveStockProductId = signal('');
+  protected readonly agendaManualReserveStockUnits = signal('1');
+  protected readonly agendaManualReserveStockLines = signal<ReservationStockLineItem[]>([]);
   protected readonly helpSearch = signal('');
   protected readonly isLoadingBlockedPeriods = signal(false);
   protected readonly ownerEmail = signal('');
@@ -707,6 +752,7 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly showClientTypePickerModal = signal(false);
   protected readonly clientTypePickerReservationId = signal('');
   protected readonly selectedPaymentMethod = signal<'efectivo' | 'tarjeta' | 'bizum' | ''>('');
+  protected readonly selectedReservationPaymentLineIds = signal<string[]>([]);
   protected readonly paymentMethodReservation = computed<AdminReservationItem | null>(() => {
     const reservationId = this.paymentMethodReservationId();
 
@@ -723,7 +769,11 @@ export class AdminPanelComponent implements OnDestroy {
       return 0;
     }
 
-    const totalPrice = this.getPackPriceByName(reservation.appointmentTypeName);
+    const selectedIds = this.selectedReservationPaymentLineIds();
+    const lines = this.getReservationPaymentLineItems(reservation);
+    const totalPrice = lines
+      .filter((line) => selectedIds.includes(line.id))
+      .reduce((acc, line) => acc + line.amountEuro, 0);
     const signalAmount = Math.max(0, Number(reservation.signalAmountEuro ?? 0));
     return Math.max(0, Number((totalPrice - signalAmount).toFixed(2)));
   });
@@ -815,6 +865,8 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly clientTreatmentName = signal('');
   protected readonly clientTreatmentNote = signal('');
   protected readonly clientTreatmentLoading = signal(false);
+  protected readonly clientDetailTab = signal<ClientDetailTab>('ficha');
+  protected readonly clientHistoryTab = signal<ClientHistoryTab>('packs');
   protected readonly showClientReservationModal = signal(false);
   protected readonly clientReservationServiceType = signal<'pack' | 'treatment'>('pack');
   protected readonly clientReservationServiceId = signal(0);
@@ -824,6 +876,11 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly clientReservationAvailabilityLoading = signal(false);
   protected readonly clientReservationLoading = signal(false);
   protected readonly clientReservationError = signal('');
+  protected readonly clientReservationStockTargetReservationId = signal('');
+  protected readonly clientReservationStockProductId = signal('');
+  protected readonly clientReservationStockUnits = signal('1');
+  protected readonly clientReservationStockLoading = signal(false);
+  protected readonly clientReservationStockError = signal('');
   protected readonly paymentModalOpen = signal(false);
   protected readonly paymentSelectTreatmentOpen = signal(false);
   protected readonly selectedTreatmentForPayment = signal<{
@@ -900,6 +957,7 @@ export class AdminPanelComponent implements OnDestroy {
             this.loadAgendaAlerts();
             this.loadBlockedPeriods();
             this.loadClientCards();
+            this.loadStockProducts();
 
             this.loadEmployeeUsers();
 
@@ -2478,6 +2536,22 @@ export class AdminPanelComponent implements OnDestroy {
     }
   }
 
+  protected setClientDetailTab(tab: ClientDetailTab): void {
+    this.clientDetailTab.set(tab);
+  }
+
+  protected isClientDetailTab(tab: ClientDetailTab): boolean {
+    return this.clientDetailTab() === tab;
+  }
+
+  protected setClientHistoryTab(tab: ClientHistoryTab): void {
+    this.clientHistoryTab.set(tab);
+  }
+
+  protected isClientHistoryTab(tab: ClientHistoryTab): boolean {
+    return this.clientHistoryTab() === tab;
+  }
+
   protected openClientDetailModal(clientId: string): void {
     const card = this.clientCards().find((item) => item.id === clientId) ?? null;
 
@@ -2498,9 +2572,20 @@ export class AdminPanelComponent implements OnDestroy {
     this.clientTreatmentName.set('');
     this.clientTreatmentNote.set('');
     this.clientChartType.set('pie');
+    this.clientDetailTab.set('ficha');
+    this.clientHistoryTab.set('packs');
     this.showClientReservationModal.set(false);
     this.clientReservationLoading.set(false);
     this.clientReservationError.set('');
+    if (this.getAvailableSellableStockProducts().length === 0) {
+      this.loadStockProducts();
+    }
+    const clientReservations = this.getSelectedClientReservationHistory();
+    this.clientReservationStockTargetReservationId.set(clientReservations[0]?.id ?? '');
+    this.clientReservationStockProductId.set(this.getAvailableSellableStockProducts()[0]?.id ?? '');
+    this.clientReservationStockUnits.set('1');
+    this.clientReservationStockLoading.set(false);
+    this.clientReservationStockError.set('');
   }
 
   protected openClientStatsModal(): void {
@@ -2523,8 +2608,15 @@ export class AdminPanelComponent implements OnDestroy {
     this.clientTreatmentName.set('');
     this.clientTreatmentNote.set('');
     this.clientChartType.set('pie');
+    this.clientDetailTab.set('ficha');
+    this.clientHistoryTab.set('packs');
     this.clientReservationLoading.set(false);
     this.clientReservationError.set('');
+    this.clientReservationStockTargetReservationId.set('');
+    this.clientReservationStockProductId.set('');
+    this.clientReservationStockUnits.set('1');
+    this.clientReservationStockLoading.set(false);
+    this.clientReservationStockError.set('');
   }
 
   protected closeClientStatsModal(): void {
@@ -2775,6 +2867,129 @@ export class AdminPanelComponent implements OnDestroy {
     }
 
     return this.clientCards().find((card) => card.id === id) ?? null;
+  }
+
+  protected getSelectedClientReservationHistory(): AdminReservationItem[] {
+    const selected = this.getSelectedClientCard();
+
+    if (!selected) {
+      return [];
+    }
+
+    const selectedEmail = selected.email.trim().toLowerCase();
+    const selectedPhone = this.normalizePhoneForMatch(selected.phone);
+
+    return this.reservations()
+      .filter((reservation) => reservation.adminStatus !== 'rejected')
+      .filter((reservation) => {
+        if (reservation.linkedClientId && reservation.linkedClientId === selected.id) {
+          return true;
+        }
+
+        const reservationEmail = `${reservation.customerEmail ?? ''}`.trim().toLowerCase();
+        const reservationPhone = this.normalizePhoneForMatch(reservation.customerPhone ?? '');
+
+        if (selectedEmail && reservationEmail && selectedEmail === reservationEmail) {
+          return true;
+        }
+
+        if (selectedPhone && reservationPhone && selectedPhone === reservationPhone) {
+          return true;
+        }
+
+        return false;
+      })
+      .sort((a, b) => {
+        const keyA = `${a.dateIso}T${a.startTime}`;
+        const keyB = `${b.dateIso}T${b.startTime}`;
+        return keyB.localeCompare(keyA);
+      });
+  }
+
+  protected getClientTreatmentHistoryEntries(card: ClientCardItem): ClientTreatmentHistoryEntry[] {
+    const reservationHistory = this.getSelectedClientReservationHistory();
+
+    return [
+      ...(card.treatments ?? []).map((item) => ({
+        name: item.name,
+        createdAtIso: item.createdAtIso,
+      })),
+      ...reservationHistory.flatMap((reservation) => {
+        const serviceItems = this.getReservationDisplayServiceItems(reservation);
+
+        if (serviceItems.length === 0) {
+          return [
+            {
+              name: reservation.appointmentTypeName,
+              createdAtIso: `${reservation.dateIso}T${reservation.startTime}:00`,
+            },
+          ];
+        }
+
+        return serviceItems.flatMap((service) =>
+          Array.from({ length: Math.max(1, service.quantity) }, () => ({
+            name: service.name,
+            createdAtIso: `${reservation.dateIso}T${reservation.startTime}:00`,
+          })),
+        );
+      }),
+    ];
+  }
+
+  protected getReservationDisplayServiceItems(
+    reservation: AdminReservationItem,
+  ): ReservationServiceLineItem[] {
+    if (reservation.reservationServiceItems && reservation.reservationServiceItems.length > 0) {
+      return reservation.reservationServiceItems;
+    }
+
+    return [
+      {
+        id: `svc-main-${reservation.id}`,
+        type: 'pack',
+        name: reservation.appointmentTypeName || 'Servicio',
+        quantity: 1,
+        durationMinutes: Math.max(0, Number(reservation.durationMinutes ?? 0) || 0),
+        unitPriceEuro: Math.max(
+          0,
+          Number(this.getPackPriceByName(reservation.appointmentTypeName) || 0),
+        ),
+        requiresReservationSignal: false,
+      },
+    ];
+  }
+
+  protected getReservationDisplayStockItems(
+    reservation: AdminReservationItem,
+  ): ReservationStockLineItem[] {
+    return reservation.reservationStockItems ?? [];
+  }
+
+  protected getReservationDisplayTotalAmount(reservation: AdminReservationItem): number {
+    const serviceAmount = this.getReservationDisplayServiceItems(reservation).reduce(
+      (acc, item) =>
+        acc + Math.max(0, Number(item.unitPriceEuro ?? 0)) * Math.max(1, item.quantity),
+      0,
+    );
+    const stockAmount = this.getReservationDisplayStockItems(reservation).reduce(
+      (acc, item) =>
+        acc + Math.max(0, Number(item.unitPriceEuro ?? 0)) * Math.max(1, item.quantity),
+      0,
+    );
+
+    return Number((serviceAmount + stockAmount).toFixed(2));
+  }
+
+  protected getReservationDisplaySignalAmount(reservation: AdminReservationItem): number {
+    return Math.max(0, Number(reservation.signalAmountEuro ?? 0));
+  }
+
+  protected getReservationDisplayRemainingAmount(reservation: AdminReservationItem): number {
+    const total = this.getReservationDisplayTotalAmount(reservation);
+    const signal = this.getReservationDisplaySignalAmount(reservation);
+    const finalPaid = Math.max(0, Number(reservation.paymentAmountEuro ?? 0));
+
+    return Math.max(0, Number((total - signal - finalPaid).toFixed(2)));
   }
 
   protected setEmployeeManagementTab(tab: EmployeeManagementTab): void {
@@ -3710,7 +3925,7 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected getClientTreatmentCategoryRows(card: ClientCardItem): ClientTreatmentCategoryRow[] {
-    return this.buildTreatmentCategoryRows(card.treatments ?? []);
+    return this.buildTreatmentCategoryRows(this.getClientTreatmentHistoryEntries(card));
   }
 
   protected getGlobalTreatmentCategoryRows(): ClientTreatmentCategoryRow[] {
@@ -4551,6 +4766,101 @@ export class AdminPanelComponent implements OnDestroy {
         },
         complete: () => {
           this.clientReservationLoading.set(false);
+        },
+      });
+  }
+
+  protected getClientStockAttachReservationOptions(): AdminReservationItem[] {
+    return this.getSelectedClientReservationHistory();
+  }
+
+  protected getClientStockAttachReservationLabel(reservation: AdminReservationItem): string {
+    return `${this.formatDate(reservation.dateIso)} ${reservation.startTime} · ${reservation.appointmentTypeName}`;
+  }
+
+  protected onClientReservationStockTargetChange(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    this.clientReservationStockTargetReservationId.set(target.value);
+    this.clientReservationStockError.set('');
+  }
+
+  protected onClientReservationStockProductChange(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    this.clientReservationStockProductId.set(target.value);
+    this.clientReservationStockError.set('');
+  }
+
+  protected onClientReservationStockUnitsInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.clientReservationStockUnits.set(target.value);
+    this.clientReservationStockError.set('');
+  }
+
+  protected addStockToClientReservation(): void {
+    const selectedClient = this.getSelectedClientCard();
+    const reservationId = this.clientReservationStockTargetReservationId().trim();
+    const productId = this.clientReservationStockProductId().trim();
+    const units = Math.max(1, Math.floor(Number(this.clientReservationStockUnits().trim()) || 1));
+    const reservation = this.getClientStockAttachReservationOptions().find(
+      (item) => item.id === reservationId,
+    );
+    const product = this.getAvailableSellableStockProducts().find((item) => item.id === productId);
+
+    if (!selectedClient) {
+      this.clientReservationStockError.set('Selecciona una ficha de clienta válida.');
+      return;
+    }
+
+    if (!reservation) {
+      this.clientReservationStockError.set('Selecciona una reserva válida.');
+      return;
+    }
+
+    if (!product) {
+      this.clientReservationStockError.set('Selecciona un producto de stock disponible.');
+      return;
+    }
+
+    if (units > product.quantity) {
+      this.clientReservationStockError.set(
+        `No hay unidades suficientes de ${product.productName}. Disponible: ${product.quantity}.`,
+      );
+      return;
+    }
+
+    this.clientReservationStockLoading.set(true);
+    this.clientReservationStockError.set('');
+    this.clientCardsMessage.set('');
+
+    this.http
+      .patch<{ ok: boolean; error?: string }>(`/api/admin/reservas/${reservation.id}/stock-line`, {
+        productId: product.id,
+        quantity: units,
+        clientCardId: selectedClient.id,
+      })
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.clientReservationStockError.set(
+              response.error ?? 'No se pudo añadir el producto a la reserva.',
+            );
+            return;
+          }
+
+          this.clientCardsMessage.set('Producto añadido a la reserva correctamente.');
+          this.clientReservationStockUnits.set('1');
+          this.loadReservations();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.clientReservationStockError.set(
+            typeof apiError === 'string' && apiError
+              ? apiError
+              : 'No se pudo añadir el producto a la reserva.',
+          );
+        },
+        complete: () => {
+          this.clientReservationStockLoading.set(false);
         },
       });
   }
@@ -5429,6 +5739,40 @@ export class AdminPanelComponent implements OnDestroy {
     return `Recibido${methodLabel}${amountLabel}`;
   }
 
+  protected getClientReservationPaymentBadgeLabel(reservation: AdminReservationItem): string {
+    if (!reservation.paymentReceived) {
+      return 'Pendiente de cobro';
+    }
+
+    return 'Cobrada';
+  }
+
+  protected getClientReservationPaymentBadgeClass(reservation: AdminReservationItem): string {
+    return reservation.paymentReceived
+      ? 'admin-panel--container__badge admin-panel--container__badge--green'
+      : 'admin-panel--container__badge admin-panel--container__badge--gray';
+  }
+
+  protected getClientReservationStatusBadgeLabel(reservation: AdminReservationItem): string {
+    if (reservation.adminStatus === 'accepted') {
+      return 'Aceptada';
+    }
+
+    if (reservation.adminStatus === 'rejected') {
+      return 'Cancelada';
+    }
+
+    return 'Pendiente';
+  }
+
+  protected getClientReservationStatusBadgeClass(reservation: AdminReservationItem): string {
+    if (reservation.adminStatus === 'accepted') {
+      return 'admin-panel--container__badge admin-panel--container__badge--green';
+    }
+
+    return 'admin-panel--container__badge admin-panel--container__badge--gray';
+  }
+
   protected formatDate(dateIso: string): string {
     const date = new Date(`${dateIso}T00:00:00`);
 
@@ -5643,13 +5987,77 @@ export class AdminPanelComponent implements OnDestroy {
   protected markPaymentReceivedDirect(reservationId: string): void {
     this.paymentMethodReservationId.set(reservationId);
     this.selectedPaymentMethod.set('');
+    const reservation = this.reservations().find((item) => item.id === reservationId) ?? null;
+
+    if (reservation) {
+      const defaultLineIds = this.getReservationPaymentLineItems(reservation).map(
+        (item) => item.id,
+      );
+      this.selectedReservationPaymentLineIds.set(defaultLineIds);
+    } else {
+      this.selectedReservationPaymentLineIds.set([]);
+    }
+
     this.showPaymentMethodModal.set(true);
+  }
+
+  protected getReservationPaymentLineItems(
+    reservation: AdminReservationItem,
+  ): ReservationPaymentLineItem[] {
+    const serviceItems = reservation.reservationServiceItems ?? [];
+    const stockItems = reservation.reservationStockItems ?? [];
+
+    if (serviceItems.length === 0 && stockItems.length === 0) {
+      return [
+        {
+          id: 'svc-main',
+          label: reservation.appointmentTypeName,
+          amountEuro: this.getPackPriceByName(reservation.appointmentTypeName),
+        },
+      ];
+    }
+
+    const lines: ReservationPaymentLineItem[] = [];
+
+    serviceItems.forEach((item, index) => {
+      lines.push({
+        id: `svc-${index}`,
+        label: item.quantity > 1 ? `${item.name} x${item.quantity}` : item.name,
+        amountEuro: Number((item.unitPriceEuro * item.quantity).toFixed(2)),
+      });
+    });
+
+    stockItems.forEach((item, index) => {
+      lines.push({
+        id: `stk-${index}`,
+        label: `${item.productName} x${item.quantity}`,
+        amountEuro: Number((item.unitPriceEuro * item.quantity).toFixed(2)),
+      });
+    });
+
+    return lines;
+  }
+
+  protected isReservationPaymentLineSelected(lineId: string): boolean {
+    return this.selectedReservationPaymentLineIds().includes(lineId);
+  }
+
+  protected toggleReservationPaymentLine(lineId: string): void {
+    const current = this.selectedReservationPaymentLineIds();
+
+    if (current.includes(lineId)) {
+      this.selectedReservationPaymentLineIds.set(current.filter((id) => id !== lineId));
+      return;
+    }
+
+    this.selectedReservationPaymentLineIds.set([...current, lineId]);
   }
 
   protected confirmPaymentMethod(): void {
     const reservationId = this.paymentMethodReservationId();
     const paymentMethod = this.selectedPaymentMethod();
     const priceEuro = Number(this.paymentMethodReservationPriceEuro().toFixed(2));
+    const selectedLineIds = this.selectedReservationPaymentLineIds();
 
     if (!reservationId || !paymentMethod) {
       return;
@@ -5664,6 +6072,7 @@ export class AdminPanelComponent implements OnDestroy {
         paymentReceived: true,
         paymentMethod,
         priceEuro,
+        paidItemIds: selectedLineIds,
       })
       .subscribe({
         next: (response) => {
@@ -5691,6 +6100,7 @@ export class AdminPanelComponent implements OnDestroy {
           this.actionError.set(
             typeof apiError === 'string' && apiError ? apiError : 'No se pudo actualizar el pago.',
           );
+          this.actionLoadingId.set('');
         },
         complete: () => {
           this.actionLoadingId.set('');
@@ -5702,6 +6112,7 @@ export class AdminPanelComponent implements OnDestroy {
     this.showPaymentMethodModal.set(false);
     this.paymentMethodReservationId.set('');
     this.selectedPaymentMethod.set('');
+    this.selectedReservationPaymentLineIds.set([]);
   }
 
   protected setReservationStatus(
@@ -5736,6 +6147,7 @@ export class AdminPanelComponent implements OnDestroy {
               ? apiError
               : 'No se pudo actualizar el estado.',
           );
+          this.actionLoadingId.set('');
         },
         complete: () => {
           this.actionLoadingId.set('');
@@ -5771,6 +6183,7 @@ export class AdminPanelComponent implements OnDestroy {
           this.actionError.set(
             typeof apiError === 'string' && apiError ? apiError : 'No se pudo confirmar la cita.',
           );
+          this.actionLoadingId.set('');
         },
         complete: () => {
           this.actionLoadingId.set('');
@@ -5847,6 +6260,7 @@ export class AdminPanelComponent implements OnDestroy {
               ? apiError
               : 'No se pudo modificar la reserva.',
           );
+          this.actionLoadingId.set('');
         },
         complete: () => {
           this.actionLoadingId.set('');
@@ -6093,6 +6507,34 @@ export class AdminPanelComponent implements OnDestroy {
               (product) => product.isSellable && product.quantity > 0,
             );
             this.stockSaleProductId.set(firstSellable?.id ?? '');
+          }
+
+          const agendaSelectedStockId = this.agendaManualReserveStockProductId();
+          if (
+            !agendaSelectedStockId ||
+            !products.some(
+              (product) =>
+                product.id === agendaSelectedStockId && product.isSellable && product.quantity > 0,
+            )
+          ) {
+            const firstAgendaSellable = products.find(
+              (product) => product.isSellable && product.quantity > 0,
+            );
+            this.agendaManualReserveStockProductId.set(firstAgendaSellable?.id ?? '');
+          }
+
+          const clientSelectedStockId = this.clientReservationStockProductId();
+          if (
+            !clientSelectedStockId ||
+            !products.some(
+              (product) =>
+                product.id === clientSelectedStockId && product.isSellable && product.quantity > 0,
+            )
+          ) {
+            const firstClientSellable = products.find(
+              (product) => product.isSellable && product.quantity > 0,
+            );
+            this.clientReservationStockProductId.set(firstClientSellable?.id ?? '');
           }
         },
         error: (error) => {
@@ -7755,6 +8197,8 @@ export class AdminPanelComponent implements OnDestroy {
           this.showAgendaDropToast(
             `⚠️ ${typeof apiError === 'string' && apiError ? apiError : 'No se pudo actualizar la cita.'}`,
           );
+          this.agendaDayScheduleLoadingReservationId.set('');
+          this.agendaDraggedReservationId.set('');
         },
         complete: () => {
           this.agendaDayScheduleLoadingReservationId.set('');
@@ -8105,7 +8549,11 @@ export class AdminPanelComponent implements OnDestroy {
   protected closeAgendaReservationDetail(): void {
     this.agendaDetailReservation.set(null);
     this.agendaDetailMode.set('view');
+    this.agendaEditTarget.set('duration');
     this.agendaEditDraftAdditionalComments.set('');
+    this.agendaEditDraftStockLines.set([]);
+    this.agendaEditDraftStockProductId.set('');
+    this.agendaEditDraftStockUnits.set('1');
     this.agendaDetailError.set('');
     this.agendaDetailSaving.set(false);
     this.agendaDetailCancelling.set(false);
@@ -8118,16 +8566,37 @@ export class AdminPanelComponent implements OnDestroy {
     if (!r) {
       return;
     }
+
+    const availableSellableProducts = this.getAvailableSellableStockProducts();
+
+    this.agendaEditTarget.set('duration');
     this.agendaEditDraftName.set(r.appointmentTypeName);
     this.agendaEditDraftDuration.set(r.durationMinutes);
     this.agendaEditDraftAdditionalComments.set(r.additionalComments ?? '');
+    this.agendaEditDraftStockLines.set(
+      (r.reservationStockItems ?? []).map((item) => ({ ...item })),
+    );
+    this.agendaEditDraftStockProductId.set(availableSellableProducts[0]?.id ?? '');
+    this.agendaEditDraftStockUnits.set('1');
     this.agendaDetailError.set('');
     this.agendaDetailMode.set('edit');
   }
 
+  protected onAgendaEditTargetChange(target: 'duration' | 'services'): void {
+    this.agendaEditTarget.set(target);
+    this.agendaDetailError.set('');
+  }
+
   protected onAgendaEditDraftNameChange(event: Event): void {
     const target = event.target as HTMLSelectElement;
-    this.agendaEditDraftName.set(target.value);
+    const nextName = target.value;
+    this.agendaEditDraftName.set(nextName);
+
+    const selectedService = this.getAgendaEditSelectedService(nextName);
+
+    if (selectedService) {
+      this.agendaEditDraftDuration.set(selectedService.duracionMinutos);
+    }
   }
 
   protected onAgendaEditDraftDurationChange(event: Event): void {
@@ -8144,6 +8613,46 @@ export class AdminPanelComponent implements OnDestroy {
   protected onAgendaEditDraftAdditionalCommentsInput(event: Event): void {
     const target = event.target as HTMLTextAreaElement;
     this.agendaEditDraftAdditionalComments.set(target.value);
+  }
+
+  private getAgendaEditSelectedService(
+    serviceName: string,
+  ): AppointmentType | TratamientoItem | null {
+    const normalized = serviceName.trim().toLowerCase();
+
+    return (
+      this.agendaPackOptions.find((item) => item.nombre.trim().toLowerCase() === normalized) ??
+      this.agendaTreatmentCatalog.find((item) => item.nombre.trim().toLowerCase() === normalized) ??
+      null
+    );
+  }
+
+  private buildReservationServiceLineFromName(
+    serviceName: string,
+  ): ReservationServiceLineItem | null {
+    const selectedService = this.getAgendaEditSelectedService(serviceName);
+
+    if (!selectedService) {
+      return null;
+    }
+
+    const isPack = this.agendaPackOptions.some(
+      (item) => item.nombre.trim().toLowerCase() === selectedService.nombre.trim().toLowerCase(),
+    );
+
+    return {
+      id: `svc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type: isPack ? 'pack' : 'treatment',
+      name: selectedService.nombre,
+      quantity: 1,
+      durationMinutes: selectedService.duracionMinutos,
+      unitPriceEuro: Math.max(0, Number(this.getPackPriceByName(selectedService.nombre) || 0)),
+      requiresReservationSignal: Boolean(
+        isPack && 'requiresReservationSignal' in selectedService
+          ? (selectedService as AppointmentType).requiresReservationSignal
+          : false,
+      ),
+    };
   }
 
   protected saveAgendaReservationEdit(
@@ -8163,6 +8672,7 @@ export class AdminPanelComponent implements OnDestroy {
     }`
       .trim()
       .slice(0, 500);
+    const editTarget = this.agendaEditTarget();
 
     this.agendaEditDraftName.set(nextName);
     this.agendaEditDraftDuration.set(nextDuration);
@@ -8178,10 +8688,49 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
+    const currentServiceItems =
+      r.reservationServiceItems && r.reservationServiceItems.length > 0
+        ? r.reservationServiceItems
+        : [
+            {
+              id: 'svc-main',
+              type: 'pack' as const,
+              name: r.appointmentTypeName,
+              quantity: 1,
+              durationMinutes: Math.max(0, Number(r.durationMinutes ?? 0) || 0),
+              unitPriceEuro: Math.max(
+                0,
+                Number(this.getPackPriceByName(r.appointmentTypeName) || 0),
+              ),
+              requiresReservationSignal: false,
+            },
+          ];
+    const selectedServiceLine = this.buildReservationServiceLineFromName(nextName);
+    const nextServiceItems =
+      editTarget === 'services' && selectedServiceLine
+        ? [selectedServiceLine]
+        : currentServiceItems;
+    const nextAppointmentTypeName =
+      editTarget === 'services' && selectedServiceLine
+        ? selectedServiceLine.name
+        : r.appointmentTypeName;
+    const nextDurationMinutes =
+      editTarget === 'services' && selectedServiceLine
+        ? selectedServiceLine.durationMinutes
+        : nextDuration;
+    const nextStockItems = this.agendaEditDraftStockLines();
+
     if (
+      editTarget === 'duration' &&
       !this.isSuperadmin() &&
-      nextDuration !== r.durationMinutes &&
-      this.hasReservationConflict(r.dateIso, r.startTime, nextDuration, r.id, r.createdByEmail)
+      nextDurationMinutes !== r.durationMinutes &&
+      this.hasReservationConflict(
+        r.dateIso,
+        r.startTime,
+        nextDurationMinutes,
+        r.id,
+        r.createdByEmail,
+      )
     ) {
       this.agendaDetailError.set('La nueva duración solapa con otra cita existente.');
       return;
@@ -8190,16 +8739,24 @@ export class AdminPanelComponent implements OnDestroy {
     this.agendaDetailSaving.set(true);
     this.agendaDetailError.set('');
 
+    const reservationMeta = {
+      version: 1 as const,
+      linkedClientId: r.linkedClientId,
+      services: nextServiceItems,
+      stock: nextStockItems,
+    };
+
     this.http
       .patch<{ ok: boolean; error?: string }>(`/api/admin/reservas/${r.id}`, {
         dateIso: r.dateIso,
         startTime: r.startTime,
-        durationMinutes: nextDuration,
-        appointmentTypeName: nextName,
+        durationMinutes: nextDurationMinutes,
+        appointmentTypeName: nextAppointmentTypeName,
         customerName: r.customerName,
         customerPhone: r.customerPhone,
         customerEmail: r.customerEmail,
         additionalComments: nextAdditionalComments,
+        reservationMeta,
       })
       .subscribe({
         next: (response) => {
@@ -8210,15 +8767,17 @@ export class AdminPanelComponent implements OnDestroy {
           }
 
           const nextEndTime = this.formatMinutesToTime(
-            this.parseTimeToMinutes(r.startTime) + nextDuration,
+            this.parseTimeToMinutes(r.startTime) + nextDurationMinutes,
           );
 
           const updated: AdminReservationItem = {
             ...r,
-            appointmentTypeName: nextName,
-            durationMinutes: nextDuration,
+            appointmentTypeName: nextAppointmentTypeName,
+            durationMinutes: nextDurationMinutes,
             additionalComments: nextAdditionalComments,
             endTime: nextEndTime,
+            reservationServiceItems: nextServiceItems,
+            reservationStockItems: nextStockItems,
           };
 
           this.reservations.update((items) =>
@@ -8315,12 +8874,25 @@ export class AdminPanelComponent implements OnDestroy {
     );
     this.agendaManualReserveAssignToMe.set(!canAssignReservation);
     this.agendaManualReserveWorkerEmail.set(targetWorkerEmail);
+    this.agendaManualReserveClientMode.set('manual');
+    this.agendaManualReserveClientSearch.set('');
+    this.agendaManualReserveSelectedClientId.set('');
     this.agendaManualReserveCustomerName.set('');
     this.agendaManualReserveCustomerPhone.set('');
     this.agendaManualReserveCustomerEmail.set('');
     this.agendaManualReserveServiceType.set('pack');
     this.agendaManualReserveServiceId.set(defaultPack?.id ?? 1);
     this.agendaManualReserveDuration.set(defaultPack?.duracionMinutos ?? 60);
+    this.agendaManualReserveServiceLines.set([]);
+    this.agendaManualReserveStockLines.set([]);
+    this.agendaManualReserveStockUnits.set('1');
+    if (this.getAvailableSellableStockProducts().length === 0) {
+      this.loadStockProducts();
+    }
+    this.agendaManualReserveStockProductId.set(
+      this.getAvailableSellableStockProducts()[0]?.id ?? '',
+    );
+    this.addAgendaManualReserveServiceLine();
     this.showAgendaManualReserveModal.set(true);
   }
 
@@ -8353,6 +8925,170 @@ export class AdminPanelComponent implements OnDestroy {
     this.syncAgendaManualReserveDurationFromSelectedService();
   }
 
+  protected onAgendaManualReserveClientModeChange(mode: 'existing' | 'manual'): void {
+    this.agendaManualReserveClientMode.set(mode);
+    this.agendaManualReserveError.set('');
+
+    if (mode === 'manual') {
+      this.agendaManualReserveSelectedClientId.set('');
+      return;
+    }
+
+    const firstClient = this.getFilteredClientCards()[0] ?? this.clientCards()[0];
+
+    if (firstClient) {
+      this.selectAgendaManualReserveClient(firstClient.id);
+    }
+  }
+
+  protected onAgendaManualReserveClientSearchInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.agendaManualReserveClientSearch.set(target.value);
+  }
+
+  protected getAgendaManualReserveFilteredClientCards(): ClientCardItem[] {
+    const search = this.agendaManualReserveClientSearch().trim().toLowerCase();
+
+    if (!search) {
+      return this.clientCards();
+    }
+
+    return this.clientCards().filter((card) => {
+      return (
+        card.fullName.toLowerCase().includes(search) ||
+        card.email.toLowerCase().includes(search) ||
+        card.phone.toLowerCase().includes(search)
+      );
+    });
+  }
+
+  protected selectAgendaManualReserveClient(clientId: string): void {
+    const client = this.clientCards().find((card) => card.id === clientId);
+
+    if (!client) {
+      return;
+    }
+
+    this.agendaManualReserveSelectedClientId.set(client.id);
+    this.agendaManualReserveCustomerName.set(client.fullName);
+    this.agendaManualReserveCustomerPhone.set(client.phone);
+    this.agendaManualReserveCustomerEmail.set(client.email);
+  }
+
+  protected addAgendaManualReserveServiceLine(): void {
+    const selectedService = this.getAgendaManualReserveSelectedService();
+
+    if (!selectedService) {
+      this.agendaManualReserveError.set('Selecciona un servicio válido para añadirlo.');
+      return;
+    }
+
+    const nextLine: ReservationServiceLineItem = {
+      id: `svc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type: this.agendaManualReserveServiceType(),
+      name: selectedService.nombre,
+      quantity: 1,
+      durationMinutes: selectedService.duracionMinutos,
+      unitPriceEuro: this.getPackPriceByName(selectedService.nombre),
+      requiresReservationSignal: Boolean(
+        this.agendaManualReserveServiceType() === 'pack' &&
+        (selectedService as AppointmentType).requiresReservationSignal,
+      ),
+    };
+
+    this.agendaManualReserveServiceLines.update((items) => [...items, nextLine]);
+    this.agendaManualReserveDuration.set(this.getAgendaManualReserveTotalDuration());
+  }
+
+  protected removeAgendaManualReserveServiceLine(lineId: string): void {
+    this.agendaManualReserveServiceLines.update((items) =>
+      items.filter((item) => item.id !== lineId),
+    );
+    this.agendaManualReserveDuration.set(this.getAgendaManualReserveTotalDuration());
+  }
+
+  protected getAgendaManualReserveTotalDuration(): number {
+    const totalDuration = this.agendaManualReserveServiceLines().reduce(
+      (acc, item) => acc + item.durationMinutes * Math.max(1, item.quantity),
+      0,
+    );
+
+    return Math.max(30, totalDuration || this.agendaManualReserveDuration());
+  }
+
+  protected addAgendaManualReserveStockLine(): void {
+    const productId = this.agendaManualReserveStockProductId().trim();
+    const units = Math.max(1, Math.floor(Number(this.agendaManualReserveStockUnits().trim()) || 1));
+    const product = this.getAvailableSellableStockProducts().find((item) => item.id === productId);
+
+    if (!product) {
+      this.agendaManualReserveError.set('Selecciona un producto de stock vendible.');
+      return;
+    }
+
+    this.agendaManualReserveStockLines.update((items) => [
+      ...items,
+      {
+        id: `stk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        productId: product.id,
+        productName: product.productName,
+        quantity: units,
+        unitPriceEuro: product.price,
+      },
+    ]);
+
+    this.agendaManualReserveStockUnits.set('1');
+  }
+
+  protected removeAgendaManualReserveStockLine(lineId: string): void {
+    this.agendaManualReserveStockLines.update((items) =>
+      items.filter((item) => item.id !== lineId),
+    );
+  }
+
+  protected addAgendaEditDraftStockLine(): void {
+    const productId = this.agendaEditDraftStockProductId().trim();
+    const units = Math.max(1, Math.floor(Number(this.agendaEditDraftStockUnits().trim()) || 1));
+    const product = this.getAvailableSellableStockProducts().find((item) => item.id === productId);
+
+    if (!product) {
+      this.agendaDetailError.set('Selecciona un producto de stock vendible.');
+      return;
+    }
+
+    this.agendaEditDraftStockLines.update((items) => {
+      const nextItems = [...items];
+      const existingIndex = nextItems.findIndex((item) => item.productId === product.id);
+
+      if (existingIndex >= 0) {
+        const current = nextItems[existingIndex];
+        nextItems[existingIndex] = {
+          ...current,
+          quantity: current.quantity + units,
+          unitPriceEuro: product.price,
+        };
+        return nextItems;
+      }
+
+      nextItems.push({
+        id: `stk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        productId: product.id,
+        productName: product.productName,
+        quantity: units,
+        unitPriceEuro: product.price,
+      });
+
+      return nextItems;
+    });
+
+    this.agendaEditDraftStockUnits.set('1');
+    this.agendaDetailError.set('');
+  }
+
+  protected removeAgendaEditDraftStockLine(lineId: string): void {
+    this.agendaEditDraftStockLines.update((items) => items.filter((item) => item.id !== lineId));
+  }
+
   protected onAgendaManualReserveDurationChange(event: Event): void {
     const target = event.target as HTMLSelectElement;
     const nextDuration = Number(target.value);
@@ -8370,13 +9106,24 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
-    const selectedService = this.getAgendaManualReserveSelectedService();
+    const serviceLines = this.agendaManualReserveServiceLines();
+    const stockLines = this.agendaManualReserveStockLines();
     const dateIso = this.agendaManualReserveDateIso().trim();
     const time = this.normalizeAgendaTimeValue(this.agendaManualReserveTime().trim());
-    const customerName = this.agendaManualReserveCustomerName().trim();
-    const customerPhone = this.agendaManualReserveCustomerPhone().trim();
-    const customerEmail = this.agendaManualReserveCustomerEmail().trim().toLowerCase();
-    const durationMinutes = this.agendaManualReserveDuration();
+    const selectedClient =
+      this.agendaManualReserveClientMode() === 'existing'
+        ? (this.clientCards().find(
+            (card) => card.id === this.agendaManualReserveSelectedClientId(),
+          ) ?? null)
+        : null;
+    const customerName =
+      `${selectedClient?.fullName ?? this.agendaManualReserveCustomerName()}`.trim();
+    const customerPhone =
+      `${selectedClient?.phone ?? this.agendaManualReserveCustomerPhone()}`.trim();
+    const customerEmail = `${selectedClient?.email ?? this.agendaManualReserveCustomerEmail()}`
+      .trim()
+      .toLowerCase();
+    const durationMinutes = this.getAgendaManualReserveTotalDuration();
     const canAssignReservation = this.canAssignReservationToWorker();
     const currentUserEmail = this.ownerEmail().trim().toLowerCase();
     const selectedWorkerEmail = this.normalizeAgendaWorkerEmail(
@@ -8387,13 +9134,18 @@ export class AdminPanelComponent implements OnDestroy {
         ? currentUserEmail
         : selectedWorkerEmail || currentUserEmail;
 
-    if (!selectedService) {
-      this.agendaManualReserveError.set('Selecciona un servicio válido.');
+    if (serviceLines.length === 0) {
+      this.agendaManualReserveError.set('Añade al menos un pack o tratamiento a la reserva.');
       return;
     }
 
     if (!dateIso || !time || !customerName || !customerPhone) {
       this.agendaManualReserveError.set('Completa todos los datos de la reserva.');
+      return;
+    }
+
+    if (this.agendaManualReserveClientMode() === 'existing' && !selectedClient) {
+      this.agendaManualReserveError.set('Selecciona una clienta existente para continuar.');
       return;
     }
 
@@ -8414,10 +9166,15 @@ export class AdminPanelComponent implements OnDestroy {
         customerPhone,
         customerEmail,
         createdByEmail,
-        appointmentTypeName: selectedService.nombre,
-        requiresReservationSignal:
-          this.agendaManualReserveServiceType() === 'pack' &&
-          Boolean((selectedService as AppointmentType).requiresReservationSignal),
+        clientCardId: selectedClient?.id ?? '',
+        appointmentTypeName: serviceLines.map((line) => line.name).join(' + '),
+        requiresReservationSignal: serviceLines.some((line) => line.requiresReservationSignal),
+        reservationMeta: {
+          version: 1,
+          linkedClientId: selectedClient?.id ?? undefined,
+          services: serviceLines,
+          stock: stockLines,
+        },
       })
       .subscribe({
         next: (response) => {
@@ -8754,7 +9511,7 @@ export class AdminPanelComponent implements OnDestroy {
 
   private normalizeAgendaTimeValue(value: string): string {
     const normalized = `${value ?? ''}`.trim();
-    const match = normalized.match(/^(\d{1,2}):(\d{2})/);
+    const match = normalized.match(/^(\d{1,2}):(\d{2})$/);
 
     if (!match) {
       return normalized;
@@ -8771,19 +9528,133 @@ export class AdminPanelComponent implements OnDestroy {
       return normalized;
     }
 
-    return `${`${hours}`.padStart(2, '0')}:${`${minutes}`.padStart(2, '0')}`;
+    const totalMinutes = hours * 60 + minutes;
+    const roundedMinutes = Math.round(totalMinutes / 30) * 30;
+    const clampedMinutes = Math.max(0, Math.min(23 * 60 + 59, roundedMinutes));
+    const normalizedHours = Math.floor(clampedMinutes / 60);
+    const normalizedMinutePart = clampedMinutes % 60;
+
+    return `${`${normalizedHours}`.padStart(2, '0')}:${`${normalizedMinutePart}`.padStart(2, '0')}`;
   }
 
   private normalizeAgendaWorkerEmail(value: string | null | undefined): string {
     return `${value ?? ''}`.trim().toLowerCase();
   }
 
+  private parseReservationMeta(additionalCommentsRaw: string): {
+    plainComments: string;
+    linkedClientId?: string;
+    services: ReservationServiceLineItem[];
+    stock: ReservationStockLineItem[];
+  } {
+    const marker = '[arena-meta]';
+    const raw = `${additionalCommentsRaw ?? ''}`;
+    const markerIndex = raw.lastIndexOf(marker);
+
+    if (markerIndex < 0) {
+      return {
+        plainComments: raw.trim(),
+        services: [],
+        stock: [],
+      };
+    }
+
+    const plainComments = raw.slice(0, markerIndex).trim();
+    const encodedMeta = raw.slice(markerIndex + marker.length).trim();
+
+    if (!encodedMeta) {
+      return {
+        plainComments,
+        services: [],
+        stock: [],
+      };
+    }
+
+    try {
+      const parsed = JSON.parse(decodeURIComponent(encodedMeta)) as {
+        linkedClientId?: string;
+        services?: ReservationServiceLineItem[];
+        stock?: ReservationStockLineItem[];
+      };
+
+      const services = Array.isArray(parsed.services)
+        ? parsed.services
+            .map((item, index) => ({
+              id: `${item.id ?? `svc-${index}`}`,
+              type: (item.type === 'treatment' ? 'treatment' : 'pack') as 'pack' | 'treatment',
+              name: `${item.name ?? ''}`.trim(),
+              quantity: Math.max(1, Math.floor(Number(item.quantity ?? 1) || 1)),
+              durationMinutes: Math.max(0, Math.floor(Number(item.durationMinutes ?? 0) || 0)),
+              unitPriceEuro: Math.max(0, Number(item.unitPriceEuro ?? 0) || 0),
+              requiresReservationSignal: Boolean(item.requiresReservationSignal),
+            }))
+            .filter((item) => item.name)
+        : [];
+
+      const stock = Array.isArray(parsed.stock)
+        ? parsed.stock
+            .map((item, index) => ({
+              id: `${item.id ?? `stk-${index}`}`,
+              productId: `${item.productId ?? ''}`.trim(),
+              productName: `${item.productName ?? ''}`.trim(),
+              quantity: Math.max(1, Math.floor(Number(item.quantity ?? 1) || 1)),
+              unitPriceEuro: Math.max(0, Number(item.unitPriceEuro ?? 0) || 0),
+            }))
+            .filter((item) => item.productId && item.productName)
+        : [];
+
+      return {
+        plainComments,
+        linkedClientId: `${parsed.linkedClientId ?? ''}`.trim() || undefined,
+        services,
+        stock,
+      };
+    } catch {
+      return {
+        plainComments,
+        services: [],
+        stock: [],
+      };
+    }
+  }
+
   private normalizeReservationTimeFields(reservation: AdminReservationItem): AdminReservationItem {
+    const parsedMeta = this.parseReservationMeta(`${reservation.additionalComments ?? ''}`);
+    const normalizedStartTime = this.normalizeAgendaTimeValue(reservation.startTime);
+    const normalizedEndTime = this.normalizeAgendaTimeValue(reservation.endTime);
+    const startMinutes = this.parseTimeToMinutes(normalizedStartTime);
+    const endMinutes = this.parseTimeToMinutes(normalizedEndTime);
+    const durationFromRange = endMinutes > startMinutes ? endMinutes - startMinutes : 0;
+    const serviceItems = parsedMeta.services;
+    const stockItems = parsedMeta.stock;
+    const serviceParts = serviceItems.flatMap((item) =>
+      Array.from({ length: Math.max(1, item.quantity) }, () => item.name),
+    );
+    const serviceDurationMinutes = serviceItems.reduce(
+      (acc, item) => acc + Math.max(0, item.durationMinutes) * Math.max(1, item.quantity),
+      0,
+    );
+    const normalizedAppointmentTypeName =
+      serviceParts.length > 0
+        ? serviceParts.join(' + ')
+        : `${reservation.appointmentTypeName ?? ''}`.trim();
+    const normalizedDurationMinutes =
+      serviceDurationMinutes > 0
+        ? serviceDurationMinutes
+        : durationFromRange > 0
+          ? durationFromRange
+          : Math.max(30, Number(reservation.durationMinutes ?? 0) || 30);
+
     return {
       ...reservation,
-      startTime: this.normalizeAgendaTimeValue(reservation.startTime),
-      endTime: this.normalizeAgendaTimeValue(reservation.endTime),
-      additionalComments: `${reservation.additionalComments ?? ''}`,
+      startTime: normalizedStartTime,
+      endTime: normalizedEndTime,
+      durationMinutes: normalizedDurationMinutes,
+      appointmentTypeName: normalizedAppointmentTypeName || reservation.appointmentTypeName,
+      additionalComments: parsedMeta.plainComments,
+      linkedClientId: parsedMeta.linkedClientId,
+      reservationServiceItems: serviceItems,
+      reservationStockItems: stockItems,
       signalAmountEuro: Math.max(0, Number(reservation.signalAmountEuro ?? 0)),
       signalPaymentMethod:
         reservation.signalPaymentMethod === 'efectivo' ||

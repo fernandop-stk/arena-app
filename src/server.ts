@@ -53,6 +53,7 @@ import {
   updateAlertApprovalStatus,
   deleteAlert,
   updateReservationByAdmin,
+  updateReservationDetailsByAdmin,
 } from './shared/reservas-db';
 import {
   getPackPriceByName,
@@ -572,8 +573,142 @@ const buildReservationDecisionResultHtml = (
 };
 
 const getReservationStartMs = (dateIso: string, startTime: string): number | null => {
-  const value = new Date(`${dateIso}T${startTime}:00`).getTime();
+  const normalizedStartTime = normalizeReservationStartTimeForComparison(startTime);
+  const value = new Date(`${dateIso}T${normalizedStartTime}:00`).getTime();
   return Number.isNaN(value) ? null : value;
+};
+
+const parseReservationClockToMinutes = (timeValue: string): number | null => {
+  const normalized = `${timeValue ?? ''}`.trim();
+  const match = normalized.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return null;
+  }
+
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    return null;
+  }
+
+  return hours * 60 + minutes;
+};
+
+const formatMinutesToReservationClock = (totalMinutes: number): string => {
+  const clamped = Math.max(0, Math.min(23 * 60 + 59, Math.floor(totalMinutes)));
+  const hours = Math.floor(clamped / 60)
+    .toString()
+    .padStart(2, '0');
+  const minutes = (clamped % 60).toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
+
+const normalizeReservationStartTimeForComparison = (timeValue: string): string => {
+  const minutes = parseReservationClockToMinutes(timeValue);
+
+  if (minutes === null) {
+    return `${timeValue ?? ''}`.trim();
+  }
+
+  return formatMinutesToReservationClock(minutes);
+};
+
+const normalizeReservationStartTimeToSlot = (timeValue: string): string => {
+  const minutes = parseReservationClockToMinutes(timeValue);
+
+  if (minutes === null) {
+    return `${timeValue ?? ''}`.trim();
+  }
+
+  const rounded = Math.round(minutes / 30) * 30;
+  return formatMinutesToReservationClock(rounded);
+};
+
+const normalizeReservationDurationToSlot = (durationMinutes: number): number => {
+  if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+    return 30;
+  }
+
+  const rounded = Math.round(durationMinutes / 30) * 30;
+  return Math.max(30, rounded);
+};
+
+const getDurationFromTimeRange = (startTime: string, endTime: string): number | null => {
+  const startMinutes = parseReservationClockToMinutes(startTime);
+  const endMinutes = parseReservationClockToMinutes(endTime);
+
+  if (startMinutes === null || endMinutes === null) {
+    return null;
+  }
+
+  const difference = endMinutes - startMinutes;
+
+  if (!Number.isFinite(difference) || difference <= 0) {
+    return null;
+  }
+
+  return difference;
+};
+
+const tryNormalizeLegacyReservationSchedule = async (
+  reservation: {
+    id: string;
+    dateIso: string;
+    startTime: string;
+    endTime: string;
+    durationMinutes: number;
+  },
+  payload: {
+    appointmentTypeName: string;
+    customerName: string;
+    customerPhone: string;
+    customerEmail: string;
+    additionalComments?: string;
+  },
+  options: {
+    allowClosedSchedule: boolean;
+    maxConcurrentReservations: number;
+  },
+): Promise<void> => {
+  const comparableStartTime = normalizeReservationStartTimeForComparison(reservation.startTime);
+  const normalizedStartTime = normalizeReservationStartTimeToSlot(comparableStartTime);
+  const durationFromRange = getDurationFromTimeRange(reservation.startTime, reservation.endTime);
+  const effectiveDurationMinutes = durationFromRange ?? reservation.durationMinutes;
+  const normalizedDurationMinutes = normalizeReservationDurationToSlot(effectiveDurationMinutes);
+  const needsNormalization =
+    reservation.startTime !== comparableStartTime ||
+    comparableStartTime !== normalizedStartTime ||
+    reservation.durationMinutes !== effectiveDurationMinutes ||
+    effectiveDurationMinutes !== normalizedDurationMinutes;
+
+  if (!needsNormalization) {
+    return;
+  }
+
+  try {
+    await updateReservationByAdmin(
+      reservation.id,
+      {
+        dateIso: reservation.dateIso,
+        startTime: normalizedStartTime,
+        durationMinutes: normalizedDurationMinutes,
+        appointmentTypeName: payload.appointmentTypeName,
+        customerName: payload.customerName,
+        customerPhone: payload.customerPhone,
+        customerEmail: payload.customerEmail,
+        additionalComments: payload.additionalComments,
+      },
+      options,
+    );
+  } catch (error) {
+    console.warn('No se pudo normalizar horario legacy de reserva:', reservation.id, error);
+  }
 };
 
 const shouldSend48hReminder = (reservation: {
@@ -835,6 +970,31 @@ interface StockSaleHistoryItem {
   paymentMethod: 'efectivo' | 'tarjeta' | 'bizum';
   soldByEmail: string;
   soldAtIso: string;
+}
+
+interface ReservationServiceMetaItem {
+  id: string;
+  type: 'pack' | 'treatment';
+  name: string;
+  quantity: number;
+  durationMinutes: number;
+  unitPriceEuro: number;
+  requiresReservationSignal: boolean;
+}
+
+interface ReservationStockMetaItem {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPriceEuro: number;
+}
+
+interface ReservationMetaPayload {
+  version: 1;
+  linkedClientId?: string;
+  services: ReservationServiceMetaItem[];
+  stock: ReservationStockMetaItem[];
 }
 
 interface CierreCajaItem {
@@ -1278,6 +1438,274 @@ const normalizeStockSale = (sale: StockSaleHistoryItem): StockSaleHistoryItem =>
         : 'efectivo',
     soldByEmail: `${sale.soldByEmail ?? ''}`.toLowerCase().trim(),
     soldAtIso: `${sale.soldAtIso ?? new Date().toISOString()}`,
+  };
+};
+
+const RESERVATION_META_MARKER = '[arena-meta]';
+
+const parseReservationMetaFromComments = (
+  additionalCommentsRaw: string | null | undefined,
+): {
+  plainComments: string;
+  meta: ReservationMetaPayload | null;
+} => {
+  const raw = `${additionalCommentsRaw ?? ''}`;
+  const markerIndex = raw.lastIndexOf(RESERVATION_META_MARKER);
+
+  if (markerIndex < 0) {
+    return {
+      plainComments: raw.trim(),
+      meta: null,
+    };
+  }
+
+  const plainComments = raw.slice(0, markerIndex).trim();
+  const encodedMeta = raw.slice(markerIndex + RESERVATION_META_MARKER.length).trim();
+
+  if (!encodedMeta) {
+    return {
+      plainComments,
+      meta: null,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(decodeURIComponent(encodedMeta)) as Partial<ReservationMetaPayload>;
+    const services = Array.isArray(parsed.services)
+      ? parsed.services
+          .map((item) => ({
+            id: `${item.id ?? ''}`.trim() || `svc-${Math.random().toString(36).slice(2, 8)}`,
+            type: (item.type === 'treatment' ? 'treatment' : 'pack') as 'pack' | 'treatment',
+            name: `${item.name ?? ''}`.trim(),
+            quantity: Math.max(1, Math.floor(Number(item.quantity ?? 1) || 1)),
+            durationMinutes: Math.max(0, Math.floor(Number(item.durationMinutes ?? 0) || 0)),
+            unitPriceEuro: Math.max(0, Number(item.unitPriceEuro ?? 0) || 0),
+            requiresReservationSignal: Boolean(item.requiresReservationSignal),
+          }))
+          .filter((item) => item.name)
+      : [];
+    const stock = Array.isArray(parsed.stock)
+      ? parsed.stock
+          .map((item) => ({
+            id: `${item.id ?? ''}`.trim() || `stk-${Math.random().toString(36).slice(2, 8)}`,
+            productId: `${item.productId ?? ''}`.trim(),
+            productName: `${item.productName ?? ''}`.trim(),
+            quantity: Math.max(1, Math.floor(Number(item.quantity ?? 1) || 1)),
+            unitPriceEuro: Math.max(0, Number(item.unitPriceEuro ?? 0) || 0),
+          }))
+          .filter((item) => item.productId && item.productName)
+      : [];
+
+    const hasAnyItem = services.length > 0 || stock.length > 0;
+
+    return {
+      plainComments,
+      meta: hasAnyItem
+        ? {
+            version: 1,
+            linkedClientId: `${parsed.linkedClientId ?? ''}`.trim() || undefined,
+            services,
+            stock,
+          }
+        : null,
+    };
+  } catch {
+    return {
+      plainComments,
+      meta: null,
+    };
+  }
+};
+
+const composeReservationCommentsWithMeta = (
+  plainCommentsRaw: string,
+  meta: ReservationMetaPayload | null,
+): string => {
+  const plainComments = `${plainCommentsRaw ?? ''}`.trim().slice(0, 500);
+
+  if (!meta) {
+    return plainComments;
+  }
+
+  const encoded = encodeURIComponent(JSON.stringify(meta));
+  return plainComments
+    ? `${plainComments}\n${RESERVATION_META_MARKER}${encoded}`
+    : `${RESERVATION_META_MARKER}${encoded}`;
+};
+
+const buildDefaultReservationMeta = (data: {
+  appointmentTypeName: string;
+  durationMinutes: number;
+  requiresReservationSignal: boolean;
+  linkedClientId?: string;
+}): ReservationMetaPayload => ({
+  version: 1,
+  linkedClientId: data.linkedClientId,
+  services: [
+    {
+      id: 'svc-main',
+      type: 'pack',
+      name: data.appointmentTypeName,
+      quantity: 1,
+      durationMinutes: Math.max(0, Math.floor(data.durationMinutes)),
+      unitPriceEuro: Math.max(0, Number(getPackPriceByName(data.appointmentTypeName) || 0)),
+      requiresReservationSignal: data.requiresReservationSignal,
+    },
+  ],
+  stock: [],
+});
+
+const getReservationMetaSummary = (
+  meta: ReservationMetaPayload,
+): {
+  appointmentTypeName: string;
+  durationMinutes: number;
+  requiresReservationSignal: boolean;
+  totalAmountEuro: number;
+} => {
+  const serviceParts = meta.services.flatMap((item) =>
+    Array.from({ length: Math.max(1, item.quantity) }, () => item.name),
+  );
+  const appointmentTypeName = serviceParts.length > 0 ? serviceParts.join(' + ') : 'Servicio';
+
+  const durationMinutes = meta.services.reduce(
+    (acc, item) => acc + Math.max(0, item.durationMinutes) * Math.max(1, item.quantity),
+    0,
+  );
+
+  const serviceAmount = meta.services.reduce(
+    (acc, item) => acc + Math.max(0, item.unitPriceEuro) * Math.max(1, item.quantity),
+    0,
+  );
+  const stockAmount = meta.stock.reduce(
+    (acc, item) => acc + Math.max(0, item.unitPriceEuro) * Math.max(1, item.quantity),
+    0,
+  );
+
+  const requiresReservationSignal = meta.services.some(
+    (item) => item.requiresReservationSignal || requiresReservationSignalByName(item.name),
+  );
+
+  return {
+    appointmentTypeName,
+    durationMinutes,
+    requiresReservationSignal,
+    totalAmountEuro: Number((serviceAmount + stockAmount).toFixed(2)),
+  };
+};
+
+const applyReservationStockOutput = async (
+  meta: ReservationMetaPayload,
+): Promise<{ ok: true } | { ok: false; error: string }> => {
+  if (!meta.stock.length) {
+    return { ok: true };
+  }
+
+  const pendingUpdates: Array<{ current: StockProductItem; next: StockProductItem }> = [];
+
+  for (const stockItem of meta.stock) {
+    const product = stockProductsById.get(stockItem.productId);
+
+    if (!product) {
+      return {
+        ok: false,
+        error: `Producto no encontrado en stock: ${stockItem.productName}.`,
+      };
+    }
+
+    if (!product.isSellable) {
+      return {
+        ok: false,
+        error: `El producto ${product.productName} no está marcado para venta.`,
+      };
+    }
+
+    const requestedUnits = Math.max(1, Math.floor(Number(stockItem.quantity) || 1));
+
+    if (product.quantity < requestedUnits) {
+      return {
+        ok: false,
+        error: `Stock insuficiente para ${product.productName}. Quedan ${product.quantity}.`,
+      };
+    }
+
+    pendingUpdates.push({
+      current: product,
+      next: normalizeStockProduct({
+        ...product,
+        quantity: product.quantity - requestedUnits,
+      }),
+    });
+  }
+
+  for (const update of pendingUpdates) {
+    try {
+      await saveStockProductToDb(update.next);
+      stockProductsById.set(update.next.id, update.next);
+    } catch (error) {
+      console.error('Error descontando stock asociado a reserva:', error);
+      return {
+        ok: false,
+        error: 'No se pudo actualizar el stock de productos asociados a la reserva.',
+      };
+    }
+  }
+
+  void persistStockProductsToDisk();
+  return { ok: true };
+};
+
+const sanitizeReservationMetaFromRequest = (
+  rawMeta: unknown,
+  fallback: {
+    appointmentTypeName: string;
+    durationMinutes: number;
+    requiresReservationSignal: boolean;
+    linkedClientId?: string;
+  },
+): ReservationMetaPayload => {
+  const parsed =
+    typeof rawMeta === 'object' && rawMeta
+      ? (rawMeta as Partial<ReservationMetaPayload>)
+      : undefined;
+
+  if (!parsed || !Array.isArray(parsed.services)) {
+    return buildDefaultReservationMeta(fallback);
+  }
+
+  const services = parsed.services
+    .map((item) => ({
+      id: `${item.id ?? ''}`.trim() || `svc-${Math.random().toString(36).slice(2, 8)}`,
+      type: (item.type === 'treatment' ? 'treatment' : 'pack') as 'pack' | 'treatment',
+      name: `${item.name ?? ''}`.trim(),
+      quantity: Math.max(1, Math.floor(Number(item.quantity ?? 1) || 1)),
+      durationMinutes: Math.max(0, Math.floor(Number(item.durationMinutes ?? 0) || 0)),
+      unitPriceEuro: Math.max(0, Number(item.unitPriceEuro ?? 0) || 0),
+      requiresReservationSignal: Boolean(item.requiresReservationSignal),
+    }))
+    .filter((item) => item.name);
+
+  const stock = Array.isArray(parsed.stock)
+    ? parsed.stock
+        .map((item) => ({
+          id: `${item.id ?? ''}`.trim() || `stk-${Math.random().toString(36).slice(2, 8)}`,
+          productId: `${item.productId ?? ''}`.trim(),
+          productName: `${item.productName ?? ''}`.trim(),
+          quantity: Math.max(1, Math.floor(Number(item.quantity ?? 1) || 1)),
+          unitPriceEuro: Math.max(0, Number(item.unitPriceEuro ?? 0) || 0),
+        }))
+        .filter((item) => item.productId && item.productName)
+    : [];
+
+  if (services.length === 0) {
+    return buildDefaultReservationMeta(fallback);
+  }
+
+  return {
+    version: 1,
+    linkedClientId: `${parsed.linkedClientId ?? fallback.linkedClientId ?? ''}`.trim() || undefined,
+    services,
+    stock,
   };
 };
 
@@ -4934,6 +5362,9 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
   const paymentReceived = Boolean(req.body?.paymentReceived);
   const paymentMethod = req.body?.paymentMethod as string | undefined;
   const paymentAmountEuroRaw = Number(req.body?.priceEuro ?? NaN);
+  const paidItemIdsRaw = Array.isArray(req.body?.paidItemIds)
+    ? req.body.paidItemIds.map((item: unknown) => `${item ?? ''}`.trim()).filter(Boolean)
+    : [];
 
   if (!reservationId) {
     return res.status(400).json({ ok: false, error: 'ID de reserva inválido.' });
@@ -4947,20 +5378,58 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
     }
 
+    const parsedMeta = parseReservationMetaFromComments(reservation.additionalComments);
+    const meta = parsedMeta.meta;
+    const metaSummary = meta ? getReservationMetaSummary(meta) : null;
     const resolvedPriceEuro = Number(
-      getPackPriceByName(reservation.appointmentTypeName).toFixed(2),
+      (metaSummary?.totalAmountEuro ?? getPackPriceByName(reservation.appointmentTypeName)).toFixed(
+        2,
+      ),
     );
+    const availablePaymentItems = meta
+      ? [
+          ...meta.services.map((item, index) => ({
+            id: `svc-${index}`,
+            label: item.name,
+            amount: Number((item.unitPriceEuro * item.quantity).toFixed(2)),
+          })),
+          ...meta.stock.map((item, index) => ({
+            id: `stk-${index}`,
+            label: `${item.productName} x${item.quantity}`,
+            amount: Number((item.unitPriceEuro * item.quantity).toFixed(2)),
+          })),
+        ]
+      : [
+          {
+            id: 'svc-main',
+            label: reservation.appointmentTypeName,
+            amount: Number(resolvedPriceEuro.toFixed(2)),
+          },
+        ];
+    const selectedItems =
+      paidItemIdsRaw.length > 0
+        ? availablePaymentItems.filter((item) => paidItemIdsRaw.includes(item.id))
+        : availablePaymentItems;
+    const selectedItemsAmount = selectedItems.reduce((acc, item) => acc + item.amount, 0);
     const paymentAmountEuro =
       Number.isFinite(paymentAmountEuroRaw) && paymentAmountEuroRaw >= 0
         ? Number(paymentAmountEuroRaw.toFixed(2))
-        : resolvedPriceEuro;
+        : Number(selectedItemsAmount.toFixed(2));
     const signalAmountEuro = Math.max(0, Number(reservation.signalAmountEuro ?? 0));
-    const finalChargeEuro = Math.max(0, Number((resolvedPriceEuro - signalAmountEuro).toFixed(2)));
+    const finalChargeEuro = Math.max(0, Number((paymentAmountEuro - signalAmountEuro).toFixed(2)));
     const shouldAccumulate =
       paymentReceived &&
       !reservation.paymentReceived &&
       paymentMethod &&
       ['efectivo', 'tarjeta', 'bizum'].includes(paymentMethod);
+
+    if (shouldAccumulate && meta?.stock?.length) {
+      const stockUpdate = await applyReservationStockOutput(meta);
+
+      if (!stockUpdate.ok) {
+        return res.status(409).json({ ok: false, error: stockUpdate.error });
+      }
+    }
 
     const updated = await updateReservationPaymentReceived(reservationId, paymentReceived, {
       paymentMethod:
@@ -4991,6 +5460,10 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
         signalAmountEuro > 0
           ? ` · Señal previa: ${signalAmountEuro.toFixed(2)} €${signalPaymentMethodLabel ? ` (${signalPaymentMethodLabel})` : ''}${signalDateLabel ? ` cobrada el ${signalDateLabel}` : ''}`
           : '';
+      const paidItemsSuffix =
+        selectedItems.length > 0
+          ? ` · Conceptos: ${selectedItems.map((item) => item.label).join(', ')}`
+          : '';
 
       addPaymentToDailySummary(
         todayIso,
@@ -4998,7 +5471,7 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
         finalChargeEuro,
         {
           operationType: 'reservation_payment',
-          concept: `Pago final cita: ${reservation.customerName} · ${reservation.appointmentTypeName} · ${reservation.dateIso} ${reservation.startTime}${signalInfoSuffix}`,
+          concept: `Pago final cita: ${reservation.customerName} · ${reservation.appointmentTypeName} · ${reservation.dateIso} ${reservation.startTime}${signalInfoSuffix}${paidItemsSuffix}`,
           performedByEmail: session.email,
         },
       );
@@ -5008,6 +5481,150 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
   } catch (error) {
     console.error('Error actualizando pago de reserva:', error);
     return res.status(500).json({ ok: false, error: 'No se pudo actualizar el pago.' });
+  }
+});
+
+app.patch('/api/admin/reservas/:id/stock-line', async (req, res) => {
+  const session = getAuthSession(req.headers.cookie);
+  const superadminSession = isSuperadminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const reservationId = `${req.params['id'] ?? ''}`.trim();
+  const productId = `${req.body?.productId ?? ''}`.trim();
+  const clientCardId = `${req.body?.clientCardId ?? ''}`.trim();
+  const quantity = Math.max(1, Math.floor(Number(req.body?.quantity ?? 1) || 1));
+
+  if (!reservationId) {
+    return res.status(400).json({ ok: false, error: 'ID de reserva inválido.' });
+  }
+
+  if (!productId) {
+    return res.status(400).json({ ok: false, error: 'Selecciona un producto de stock.' });
+  }
+
+  try {
+    const reservations = await listReservationsForAdmin();
+    const reservation = reservations.find((item) => item.id === reservationId);
+
+    if (!reservation) {
+      return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+    }
+
+    if (reservation.adminStatus === 'rejected') {
+      return res
+        .status(409)
+        .json({ ok: false, error: 'No se puede editar una reserva cancelada.' });
+    }
+
+    const product = stockProductsById.get(productId);
+
+    if (!product) {
+      return res.status(404).json({ ok: false, error: 'Producto no encontrado en almacén.' });
+    }
+
+    if (!product.isSellable) {
+      return res
+        .status(409)
+        .json({ ok: false, error: 'El producto seleccionado no está habilitado para venta.' });
+    }
+
+    if (product.quantity < quantity) {
+      return res.status(409).json({
+        ok: false,
+        error: `No hay stock suficiente de ${product.productName}. Disponible: ${product.quantity}.`,
+      });
+    }
+
+    const parsed = parseReservationMetaFromComments(reservation.additionalComments);
+    const fallbackMeta = buildDefaultReservationMeta({
+      appointmentTypeName: reservation.appointmentTypeName,
+      durationMinutes: reservation.durationMinutes,
+      requiresReservationSignal: requiresReservationSignalByName(reservation.appointmentTypeName),
+      linkedClientId: clientCardId || undefined,
+    });
+    const baseMeta = parsed.meta ?? fallbackMeta;
+    const nextStock = [...baseMeta.stock];
+    const existingStockIndex = nextStock.findIndex((item) => item.productId === product.id);
+
+    if (existingStockIndex >= 0) {
+      const currentItem = nextStock[existingStockIndex];
+      nextStock[existingStockIndex] = {
+        ...currentItem,
+        quantity: currentItem.quantity + quantity,
+        unitPriceEuro: Math.max(0, Number(product.price || currentItem.unitPriceEuro || 0)),
+      };
+    } else {
+      nextStock.push({
+        id: `stk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        productId: product.id,
+        productName: product.productName,
+        quantity,
+        unitPriceEuro: Math.max(0, Number(product.price || 0)),
+      });
+    }
+
+    const updatedMeta: ReservationMetaPayload = {
+      version: 1,
+      linkedClientId: clientCardId || baseMeta.linkedClientId,
+      services: baseMeta.services,
+      stock: nextStock,
+    };
+
+    const summary = getReservationMetaSummary(updatedMeta);
+    const additionalComments = composeReservationCommentsWithMeta(
+      parsed.plainComments,
+      updatedMeta,
+    );
+
+    const updated = await updateReservationDetailsByAdmin(reservationId, {
+      appointmentTypeName: summary.appointmentTypeName || reservation.appointmentTypeName,
+      customerName: reservation.customerName,
+      customerPhone: reservation.customerPhone,
+      customerEmail: reservation.customerEmail,
+      additionalComments,
+    });
+
+    if (!updated.ok) {
+      if (updated.reason === 'not-found') {
+        return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+      }
+
+      return res.status(409).json({
+        ok: false,
+        error: 'No se pudo actualizar la reserva con el producto seleccionado.',
+      });
+    }
+
+    await tryNormalizeLegacyReservationSchedule(
+      {
+        id: reservation.id,
+        dateIso: reservation.dateIso,
+        startTime: reservation.startTime,
+        endTime: reservation.endTime,
+        durationMinutes: reservation.durationMinutes,
+      },
+      {
+        appointmentTypeName: summary.appointmentTypeName || reservation.appointmentTypeName,
+        customerName: reservation.customerName,
+        customerPhone: reservation.customerPhone,
+        customerEmail: reservation.customerEmail,
+        additionalComments,
+      },
+      {
+        allowClosedSchedule: superadminSession.isSuperadmin,
+        maxConcurrentReservations: getMaxConcurrentReservationsForSlot(),
+      },
+    );
+
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Error añadiendo producto de stock a reserva:', error);
+    return res
+      .status(500)
+      .json({ ok: false, error: 'No se pudo añadir el producto a la reserva.' });
   }
 });
 
@@ -5022,6 +5639,7 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
   const reservationId = `${req.params['id'] ?? ''}`.trim();
   const dateIso = `${req.body?.dateIso ?? ''}`.trim();
   const startTime = `${req.body?.startTime ?? ''}`.trim();
+  const normalizedStartTime = normalizeReservationStartTimeForComparison(startTime);
   const durationMinutes = Number(req.body?.durationMinutes ?? NaN);
   const appointmentTypeName = `${req.body?.appointmentTypeName ?? ''}`.trim();
   const customerName = `${req.body?.customerName ?? ''}`.trim();
@@ -5041,7 +5659,7 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
 
   if (
     !dateIso ||
-    !startTime ||
+    !normalizedStartTime ||
     !Number.isFinite(durationMinutes) ||
     durationMinutes <= 0 ||
     !appointmentTypeName ||
@@ -5055,7 +5673,7 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'Fecha inválida. Usa formato YYYY-MM-DD.' });
   }
 
-  if (!/^\d{2}:\d{2}$/.test(startTime)) {
+  if (!/^\d{2}:\d{2}$/.test(normalizedStartTime)) {
     return res.status(400).json({ ok: false, error: 'Hora inválida. Usa formato HH:mm.' });
   }
 
@@ -5064,17 +5682,107 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
   }
 
   try {
+    const reservations = await listReservationsForAdmin();
+    const currentReservation = reservations.find((item) => item.id === reservationId);
+
+    if (!currentReservation) {
+      return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+    }
+
+    const parsedCurrentMeta = parseReservationMetaFromComments(
+      currentReservation.additionalComments,
+    );
+    const currentLinkedClientId = parsedCurrentMeta.meta?.linkedClientId ?? undefined;
+    const incomingMeta =
+      req.body && Object.prototype.hasOwnProperty.call(req.body, 'reservationMeta')
+        ? sanitizeReservationMetaFromRequest(req.body?.reservationMeta, {
+            appointmentTypeName,
+            durationMinutes,
+            requiresReservationSignal: Boolean(req.body?.requiresReservationSignal),
+            linkedClientId: currentLinkedClientId,
+          })
+        : (parsedCurrentMeta.meta ??
+          buildDefaultReservationMeta({
+            appointmentTypeName: currentReservation.appointmentTypeName,
+            durationMinutes: currentReservation.durationMinutes,
+            requiresReservationSignal: requiresReservationSignalByName(
+              currentReservation.appointmentTypeName,
+            ),
+            linkedClientId: currentLinkedClientId,
+          }));
+
+    let additionalCommentsWithMeta = additionalComments;
+
+    if (hasAdditionalComments || req.body?.reservationMeta !== undefined) {
+      additionalCommentsWithMeta = composeReservationCommentsWithMeta(
+        additionalComments ?? parsedCurrentMeta.plainComments,
+        incomingMeta,
+      );
+    }
+
+    const currentComparableStartTime = normalizeReservationStartTimeForComparison(
+      currentReservation.startTime,
+    );
+    const currentDurationFromRange = getDurationFromTimeRange(
+      currentReservation.startTime,
+      currentReservation.endTime,
+    );
+    const currentComparableDurationMinutes =
+      currentDurationFromRange ?? currentReservation.durationMinutes;
+
+    const isScheduleChange =
+      currentReservation.dateIso !== dateIso ||
+      currentComparableStartTime !== normalizedStartTime ||
+      currentComparableDurationMinutes !== durationMinutes;
+
+    if (!isScheduleChange) {
+      const updatedDetails = await updateReservationDetailsByAdmin(reservationId, {
+        appointmentTypeName,
+        customerName,
+        customerPhone,
+        customerEmail,
+        additionalComments: additionalCommentsWithMeta,
+      });
+
+      if (!updatedDetails.ok) {
+        return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+      }
+
+      await tryNormalizeLegacyReservationSchedule(
+        {
+          id: currentReservation.id,
+          dateIso: currentReservation.dateIso,
+          startTime: currentReservation.startTime,
+          endTime: currentReservation.endTime,
+          durationMinutes: currentReservation.durationMinutes,
+        },
+        {
+          appointmentTypeName,
+          customerName,
+          customerPhone,
+          customerEmail,
+          additionalComments: additionalCommentsWithMeta,
+        },
+        {
+          allowClosedSchedule: superadminSession.isSuperadmin,
+          maxConcurrentReservations: getMaxConcurrentReservationsForSlot(),
+        },
+      );
+
+      return res.status(200).json({ ok: true });
+    }
+
     const updated = await updateReservationByAdmin(
       reservationId,
       {
         dateIso,
-        startTime,
+        startTime: normalizedStartTime,
         durationMinutes,
         appointmentTypeName,
         customerName,
         customerPhone,
         customerEmail,
-        additionalComments,
+        additionalComments: additionalCommentsWithMeta,
       },
       {
         allowClosedSchedule: superadminSession.isSuperadmin,
@@ -5146,6 +5854,8 @@ app.post('/api/admin/reservas', async (req, res) => {
   const customerEmail = `${req.body?.customerEmail ?? ''}`.trim().toLowerCase();
   const createdByEmailRaw = `${req.body?.createdByEmail ?? ''}`.trim().toLowerCase();
   const requiresReservationSignal = Boolean(req.body?.requiresReservationSignal);
+  const linkedClientId = `${req.body?.clientCardId ?? ''}`.trim();
+  const additionalCommentsPlain = `${req.body?.additionalComments ?? ''}`.trim();
 
   if (
     !dateIso ||
@@ -5177,8 +5887,32 @@ app.post('/api/admin/reservas', async (req, res) => {
 
   const createdByEmail =
     canAssignReservationToWorker && createdByEmailRaw ? createdByEmailRaw : session.email;
+
+  const reservationMeta = sanitizeReservationMetaFromRequest(req.body?.reservationMeta, {
+    appointmentTypeName,
+    durationMinutes,
+    requiresReservationSignal,
+    linkedClientId: linkedClientId || undefined,
+  });
+  const reservationMetaSummary = getReservationMetaSummary(reservationMeta);
+  const resolvedDurationMinutes = Math.max(
+    30,
+    reservationMetaSummary.durationMinutes || durationMinutes,
+  );
+  const resolvedAppointmentTypeName =
+    reservationMetaSummary.appointmentTypeName || appointmentTypeName;
   const shouldRequireReservationSignal =
-    requiresReservationSignal || requiresReservationSignalByName(appointmentTypeName);
+    requiresReservationSignal ||
+    reservationMetaSummary.requiresReservationSignal ||
+    requiresReservationSignalByName(resolvedAppointmentTypeName);
+  const additionalComments = composeReservationCommentsWithMeta(additionalCommentsPlain, {
+    ...reservationMeta,
+    linkedClientId: linkedClientId || reservationMeta.linkedClientId,
+  });
+
+  if (linkedClientId && !clientCardsById.has(linkedClientId)) {
+    return res.status(400).json({ ok: false, error: 'La clienta seleccionada no existe.' });
+  }
 
   if (createdByEmail) {
     const assigneeUser = usersByEmail.get(createdByEmail);
@@ -5196,11 +5930,12 @@ app.post('/api/admin/reservas', async (req, res) => {
       {
         dateIso,
         time,
-        durationMinutes,
+        durationMinutes: resolvedDurationMinutes,
         customerEmail,
         customerName,
         customerPhone,
-        appointmentTypeName,
+        appointmentTypeName: resolvedAppointmentTypeName,
+        additionalComments,
         createdByEmail,
         requiresReservationSignal: shouldRequireReservationSignal,
       },
@@ -5256,13 +5991,13 @@ app.post('/api/admin/reservas', async (req, res) => {
 
       if (customerEmail) {
         const provisionalHoldHours = shouldRequireReservationSignal
-          ? getProvisionalReservationHoursByName(appointmentTypeName) || 48
+          ? getProvisionalReservationHoursByName(resolvedAppointmentTypeName) || 48
           : 0;
 
-        const subject = `Confirmación de cita - ${appointmentTypeName} (${dateIso} ${time})`;
+        const subject = `Confirmación de cita - ${resolvedAppointmentTypeName} (${dateIso} ${time})`;
         const html = buildReservationEmailHtml({
           customerName,
-          appointmentTypeName,
+          appointmentTypeName: resolvedAppointmentTypeName,
           provisionalHoldHours,
           dateIso,
           time,
@@ -5841,11 +6576,12 @@ app.post('/api/reservas/email', async (req, res) => {
   }
 
   let reservationId = '';
-  const provisionalHoldHours =
+  const shouldRequireReservationSignal =
     Boolean(requiresReservationSignal) ||
-    requiresReservationSignalByName(`${appointmentTypeName ?? ''}`)
-      ? getProvisionalReservationHoursByName(`${appointmentTypeName ?? ''}`) || 48
-      : 0;
+    requiresReservationSignalByName(`${appointmentTypeName ?? ''}`);
+  const provisionalHoldHours = shouldRequireReservationSignal
+    ? getProvisionalReservationHoursByName(`${appointmentTypeName ?? ''}`) || 48
+    : 0;
 
   try {
     const created = await createReservationWithSlots(
@@ -5857,7 +6593,7 @@ app.post('/api/reservas/email', async (req, res) => {
         customerName,
         customerPhone,
         appointmentTypeName,
-        requiresReservationSignal: Boolean(requiresReservationSignal),
+        requiresReservationSignal: shouldRequireReservationSignal,
       },
       {
         maxConcurrentReservations: getMaxConcurrentReservationsForSlot(),

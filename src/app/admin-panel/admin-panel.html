@@ -2671,79 +2671,6 @@
                   {{ getWorkerDisplayName(card.createdByEmail) }}
                 </p>
 
-                <div
-                  class="admin-panel--container__block-form admin-panel--container__block-form--compact admin-panel--container__client-modal-card"
-                >
-                  <p class="admin-panel--container__hint">Editar ficha</p>
-
-                  <label class="admin-panel--container__label">
-                    Nombre completo
-                    <input
-                      class="admin-panel--container__input"
-                      type="text"
-                      maxlength="80"
-                      [value]="clientEditFullName()"
-                      (input)="onClientEditFullNameInput($event)"
-                    />
-                  </label>
-
-                  <div class="admin-panel--container__time-range">
-                    <label class="admin-panel--container__label">
-                      Email
-                      <input
-                        class="admin-panel--container__input"
-                        type="email"
-                        maxlength="120"
-                        [value]="clientEditEmail()"
-                        (input)="onClientEditEmailInput($event)"
-                      />
-                    </label>
-
-                    <label class="admin-panel--container__label">
-                      Teléfono
-                      <input
-                        class="admin-panel--container__input"
-                        type="text"
-                        maxlength="30"
-                        [value]="clientEditPhone()"
-                        (input)="onClientEditPhoneInput($event)"
-                      />
-                    </label>
-
-                    <label class="admin-panel--container__label">
-                      Fecha de nacimiento
-                      <input
-                        class="admin-panel--container__input"
-                        type="date"
-                        lang="es-ES"
-                        [attr.max]="getTodayIso()"
-                        [value]="clientEditBirthDateIso()"
-                        (input)="onClientEditBirthDateInput($event)"
-                      />
-                    </label>
-                  </div>
-
-                  <label class="admin-panel--container__label">
-                    Observaciones
-                    <textarea
-                      class="admin-panel--container__input admin-panel--container__textarea"
-                      rows="3"
-                      maxlength="500"
-                      [value]="clientEditNotes()"
-                      (input)="onClientEditNotesInput($event)"
-                    ></textarea>
-                  </label>
-
-                  <button
-                    type="button"
-                    class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
-                    [disabled]="clientEditLoading()"
-                    (click)="updateClientCard()"
-                  >
-                    Guardar cambios de ficha
-                  </button>
-                </div>
-
                 <div class="admin-panel--container__employee-stats-grid">
                   <span class="admin-panel--container__employee-stat-chip"
                     >Total packs: {{ card.treatments.length }}</span
@@ -2753,227 +2680,525 @@
                   >
                 </div>
 
-                <div class="admin-panel--container__client-modal-content">
-                  <div
-                    class="admin-panel--container__block-form admin-panel--container__block-form--compact admin-panel--container__client-modal-card"
+                <div class="admin-panel--container__employee-subtabs">
+                  <button
+                    type="button"
+                    class="admin-panel--container__employee-subtab"
+                    [class.admin-panel--container__employee-subtab--active]="
+                      isClientDetailTab('ficha')
+                    "
+                    (click)="setClientDetailTab('ficha')"
                   >
-                    <p class="admin-panel--container__hint">Añadir tratamiento</p>
-                    <div class="admin-panel--container__client-modal-fields">
+                    Editar ficha
+                  </button>
+                  <button
+                    type="button"
+                    class="admin-panel--container__employee-subtab"
+                    [class.admin-panel--container__employee-subtab--active]="
+                      isClientDetailTab('tratamiento')
+                    "
+                    (click)="setClientDetailTab('tratamiento')"
+                  >
+                    Añadir tratamiento
+                  </button>
+                  <button
+                    type="button"
+                    class="admin-panel--container__employee-subtab"
+                    [class.admin-panel--container__employee-subtab--active]="
+                      isClientDetailTab('opciones')
+                    "
+                    (click)="setClientDetailTab('opciones')"
+                  >
+                    Opciones
+                  </button>
+                  <button
+                    type="button"
+                    class="admin-panel--container__employee-subtab"
+                    [class.admin-panel--container__employee-subtab--active]="
+                      isClientDetailTab('estadisticas')
+                    "
+                    (click)="setClientDetailTab('estadisticas')"
+                  >
+                    Estadisticas
+                  </button>
+                </div>
+
+                <div class="admin-panel--container__client-modal-content">
+                  @if (isClientDetailTab('ficha')) {
+                    <div
+                      class="admin-panel--container__block-form admin-panel--container__block-form--compact admin-panel--container__client-modal-card"
+                    >
+                      <p class="admin-panel--container__hint">Editar ficha</p>
+
                       <label class="admin-panel--container__label">
-                        Tratamiento
-                        <span class="admin-panel--container__time-select-wrap">
-                          <select
-                            class="admin-panel--container__input admin-panel--container__time-select"
-                            [value]="clientTreatmentName()"
-                            (change)="onClientTreatmentNameInput($event)"
-                          >
-                            <option value="">Selecciona tratamiento</option>
-                            <option value="" disabled>---- Packs ----</option>
-                            @for (treatment of clientPackOptions; track treatment.name) {
-                              <option [value]="treatment.name">
-                                {{ getClientTreatmentOptionLabel(treatment) }}
-                              </option>
-                            }
-                            <option value="" disabled>---- Tratamientos ----</option>
-                            @for (treatment of clientTratamientoOptions; track treatment.name) {
-                              <option [value]="treatment.name">
-                                {{ getClientTreatmentOptionLabel(treatment) }}
-                              </option>
-                            }
-                          </select>
-                        </span>
-                      </label>
-                      <label class="admin-panel--container__label">
-                        Nota (opcional)
+                        Nombre completo
                         <input
                           class="admin-panel--container__input"
                           type="text"
-                          maxlength="300"
-                          placeholder="Detalle del servicio"
-                          [value]="clientTreatmentNote()"
-                          (input)="onClientTreatmentNoteInput($event)"
+                          maxlength="80"
+                          [value]="clientEditFullName()"
+                          (input)="onClientEditFullNameInput($event)"
                         />
                       </label>
-                    </div>
-                    <button
-                      type="button"
-                      class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
-                      [disabled]="clientTreatmentLoading()"
-                      (click)="addClientTreatment()"
-                    >
-                      Añadir tratamiento
-                    </button>
-                  </div>
-                  <div
-                    class="admin-panel--container__block-form admin-panel--container__block-form--compact admin-panel--container__client-modal-card"
-                  >
-                    <p class="admin-panel--container__hint">Opciones</p>
-                    <button
-                      type="button"
-                      class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
-                      (click)="openClientReservationModal()"
-                    >
-                      ➕ Añadir reserva
-                    </button>
-                    <button
-                      type="button"
-                      class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
-                      (click)="openPaymentModal()"
-                    >
-                      💰 Cobrar pago
-                    </button>
-                    <button
-                      type="button"
-                      class="admin-panel--container__action-button admin-panel--container__action-button--reject"
-                      [disabled]="clientDeleteLoading()"
-                      (click)="openDeleteClientConfirmModal()"
-                    >
-                      @if (clientDeleteLoading()) {
-                        Eliminando...
-                      } @else {
-                        🗑️ Eliminar clienta
-                      }
-                    </button>
-                  </div>
 
-                  <div
-                    class="admin-panel--container__client-chart admin-panel--container__client-modal-card"
-                  >
-                    <div class="admin-panel--container__client-chart-head">
-                      <p class="admin-panel--container__employee-history-title">Gráfica de packs</p>
-                      <label
-                        class="admin-panel--container__label admin-panel--container__label--inline"
-                      >
-                        Tipo
-                        <span class="admin-panel--container__time-select-wrap">
-                          <select
-                            class="admin-panel--container__input admin-panel--container__time-select"
-                            [value]="clientChartType()"
-                            (change)="onClientChartTypeChange($event)"
-                          >
-                            <option value="bar">Barras / Columnas</option>
-                            <option value="pie">Circular</option>
-                          </select>
-                        </span>
+                      <div class="admin-panel--container__time-range">
+                        <label class="admin-panel--container__label">
+                          Email
+                          <input
+                            class="admin-panel--container__input"
+                            type="email"
+                            maxlength="120"
+                            [value]="clientEditEmail()"
+                            (input)="onClientEditEmailInput($event)"
+                          />
+                        </label>
+
+                        <label class="admin-panel--container__label">
+                          Teléfono
+                          <input
+                            class="admin-panel--container__input"
+                            type="text"
+                            maxlength="30"
+                            [value]="clientEditPhone()"
+                            (input)="onClientEditPhoneInput($event)"
+                          />
+                        </label>
+
+                        <label class="admin-panel--container__label">
+                          Fecha de nacimiento
+                          <input
+                            class="admin-panel--container__input"
+                            type="date"
+                            lang="es-ES"
+                            [attr.max]="getTodayIso()"
+                            [value]="clientEditBirthDateIso()"
+                            (input)="onClientEditBirthDateInput($event)"
+                          />
+                        </label>
+                      </div>
+
+                      <label class="admin-panel--container__label">
+                        Observaciones
+                        <textarea
+                          class="admin-panel--container__input admin-panel--container__textarea"
+                          rows="3"
+                          maxlength="500"
+                          [value]="clientEditNotes()"
+                          (input)="onClientEditNotesInput($event)"
+                        ></textarea>
                       </label>
+
+                      <button
+                        type="button"
+                        class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
+                        [disabled]="clientEditLoading()"
+                        (click)="updateClientCard()"
+                      >
+                        Guardar cambios de ficha
+                      </button>
                     </div>
+                  }
 
-                    @let selectedChartType = clientChartType();
-                    @let categoryRows = getClientTreatmentCategoryRows(card);
-                    @let pieData = getClientTreatmentPieData(card);
+                  @if (isClientDetailTab('tratamiento')) {
+                    <div
+                      class="admin-panel--container__block-form admin-panel--container__block-form--compact admin-panel--container__client-modal-card"
+                    >
+                      <p class="admin-panel--container__hint">Añadir tratamiento</p>
+                      <div class="admin-panel--container__client-modal-fields">
+                        <label class="admin-panel--container__label">
+                          Tratamiento
+                          <span class="admin-panel--container__time-select-wrap">
+                            <select
+                              class="admin-panel--container__input admin-panel--container__time-select"
+                              [value]="clientTreatmentName()"
+                              (change)="onClientTreatmentNameInput($event)"
+                            >
+                              <option value="">Selecciona tratamiento</option>
+                              <option value="" disabled>---- Packs ----</option>
+                              @for (treatment of clientPackOptions; track treatment.name) {
+                                <option [value]="treatment.name">
+                                  {{ getClientTreatmentOptionLabel(treatment) }}
+                                </option>
+                              }
+                              <option value="" disabled>---- Tratamientos ----</option>
+                              @for (treatment of clientTratamientoOptions; track treatment.name) {
+                                <option [value]="treatment.name">
+                                  {{ getClientTreatmentOptionLabel(treatment) }}
+                                </option>
+                              }
+                            </select>
+                          </span>
+                        </label>
+                        <label class="admin-panel--container__label">
+                          Nota (opcional)
+                          <input
+                            class="admin-panel--container__input"
+                            type="text"
+                            maxlength="300"
+                            placeholder="Detalle del servicio"
+                            [value]="clientTreatmentNote()"
+                            (input)="onClientTreatmentNoteInput($event)"
+                          />
+                        </label>
+                      </div>
+                      <button
+                        type="button"
+                        class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
+                        [disabled]="clientTreatmentLoading()"
+                        (click)="addClientTreatment()"
+                      >
+                        Añadir tratamiento
+                      </button>
+                    </div>
+                  }
 
-                    @if (card.treatments.length === 0) {
-                      <p class="admin-panel--container__hint">Sin datos para mostrar gráfica.</p>
-                    } @else {
-                      @if (selectedChartType === 'bar') {
-                        @let barTicks = getClientBarChartTicks(categoryRows);
-                        <div class="admin-panel--container__client-bar-chart">
-                          <div class="admin-panel--container__client-bar-axis">
-                            @for (tick of barTicks; track $index) {
-                              <span>{{ tick }}</span>
-                            }
-                          </div>
+                  @if (isClientDetailTab('opciones')) {
+                    <div
+                      class="admin-panel--container__block-form admin-panel--container__block-form--compact admin-panel--container__client-modal-card"
+                    >
+                      <p class="admin-panel--container__hint">Opciones</p>
+                      <button
+                        type="button"
+                        class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
+                        (click)="openClientReservationModal()"
+                      >
+                        ➕ Añadir reserva
+                      </button>
+                      <button
+                        type="button"
+                        class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
+                        (click)="openPaymentModal()"
+                      >
+                        💰 Cobrar pago
+                      </button>
+                      <div
+                        class="admin-panel--container__block-form admin-panel--container__block-form--compact admin-panel--container__client-modal-card"
+                      >
+                        <p class="admin-panel--container__hint">Añadir producto a una cita</p>
+                        @if (getClientStockAttachReservationOptions().length === 0) {
+                          <p class="admin-panel--container__hint">
+                            No hay citas activas para asociar productos.
+                          </p>
+                        } @else {
+                          <label class="admin-panel--container__label">
+                            Cita
+                            <select
+                              class="admin-panel--container__input"
+                              [value]="clientReservationStockTargetReservationId()"
+                              (change)="onClientReservationStockTargetChange($event)"
+                            >
+                              @for (
+                                reservation of getClientStockAttachReservationOptions();
+                                track reservation.id
+                              ) {
+                                <option [value]="reservation.id">
+                                  {{ getClientStockAttachReservationLabel(reservation) }}
+                                </option>
+                              }
+                            </select>
+                          </label>
+                          <label class="admin-panel--container__label">
+                            Producto
+                            <select
+                              class="admin-panel--container__input"
+                              [value]="clientReservationStockProductId()"
+                              (change)="onClientReservationStockProductChange($event)"
+                            >
+                              <option value="">Selecciona producto</option>
+                              @for (
+                                product of getAvailableSellableStockProducts();
+                                track product.id
+                              ) {
+                                <option [value]="product.id">
+                                  {{ product.productName }} · {{ product.quantity }} uds ·
+                                  {{ product.price | number: '1.2-2' }} €
+                                </option>
+                              }
+                            </select>
+                          </label>
+                          <label class="admin-panel--container__label">
+                            Unidades
+                            <input
+                              class="admin-panel--container__input"
+                              type="number"
+                              min="1"
+                              [value]="clientReservationStockUnits()"
+                              (input)="onClientReservationStockUnitsInput($event)"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
+                            [disabled]="
+                              clientReservationStockLoading() || !clientReservationStockProductId()
+                            "
+                            (click)="addStockToClientReservation()"
+                          >
+                            {{
+                              clientReservationStockLoading() ? 'Guardando...' : 'Añadir producto'
+                            }}
+                          </button>
+                          @if (clientReservationStockError()) {
+                            <p class="admin-panel--container__error">
+                              {{ clientReservationStockError() }}
+                            </p>
+                          }
+                        }
+                      </div>
+                      <button
+                        type="button"
+                        class="admin-panel--container__action-button admin-panel--container__action-button--reject"
+                        [disabled]="clientDeleteLoading()"
+                        (click)="openDeleteClientConfirmModal()"
+                      >
+                        @if (clientDeleteLoading()) {
+                          Eliminando...
+                        } @else {
+                          🗑️ Eliminar clienta
+                        }
+                      </button>
+                    </div>
+                  }
 
-                          <div class="admin-panel--container__client-bar-main">
-                            <div class="admin-panel--container__client-bar-plot">
-                              <div class="admin-panel--container__client-columns">
+                  @if (isClientDetailTab('estadisticas')) {
+                    <div
+                      class="admin-panel--container__client-chart admin-panel--container__client-modal-card"
+                    >
+                      <div class="admin-panel--container__client-chart-head">
+                        <p class="admin-panel--container__employee-history-title">
+                          Gráfica de packs y citas
+                        </p>
+                        <label
+                          class="admin-panel--container__label admin-panel--container__label--inline"
+                        >
+                          Tipo
+                          <span class="admin-panel--container__time-select-wrap">
+                            <select
+                              class="admin-panel--container__input admin-panel--container__time-select"
+                              [value]="clientChartType()"
+                              (change)="onClientChartTypeChange($event)"
+                            >
+                              <option value="bar">Barras / Columnas</option>
+                              <option value="pie">Circular</option>
+                            </select>
+                          </span>
+                        </label>
+                      </div>
+
+                      @let selectedChartType = clientChartType();
+                      @let categoryRows = getClientTreatmentCategoryRows(card);
+                      @let pieData = getClientTreatmentPieData(card);
+                      @let clientTreatmentChartEntries = getClientTreatmentHistoryEntries(card);
+
+                      @if (clientTreatmentChartEntries.length === 0) {
+                        <p class="admin-panel--container__hint">Sin datos para mostrar gráfica.</p>
+                      } @else {
+                        @if (selectedChartType === 'bar') {
+                          @let barTicks = getClientBarChartTicks(categoryRows);
+                          <div class="admin-panel--container__client-bar-chart">
+                            <div class="admin-panel--container__client-bar-axis">
+                              @for (tick of barTicks; track $index) {
+                                <span>{{ tick }}</span>
+                              }
+                            </div>
+
+                            <div class="admin-panel--container__client-bar-main">
+                              <div class="admin-panel--container__client-bar-plot">
+                                <div class="admin-panel--container__client-columns">
+                                  @for (row of categoryRows; track row.name) {
+                                    <div class="admin-panel--container__client-column-item">
+                                      <span class="admin-panel--container__client-column-value">{{
+                                        row.count
+                                      }}</span>
+                                      <div
+                                        class="admin-panel--container__client-column-bar"
+                                        [style.height.%]="row.heightPercent"
+                                        [style.background]="row.color"
+                                      ></div>
+                                    </div>
+                                  }
+                                </div>
+                              </div>
+
+                              <div class="admin-panel--container__client-column-labels">
                                 @for (row of categoryRows; track row.name) {
-                                  <div class="admin-panel--container__client-column-item">
-                                    <span class="admin-panel--container__client-column-value">{{
-                                      row.count
-                                    }}</span>
-                                    <div
-                                      class="admin-panel--container__client-column-bar"
-                                      [style.height.%]="row.heightPercent"
-                                      [style.background]="row.color"
-                                    ></div>
+                                  <span class="admin-panel--container__client-column-label">{{
+                                    row.name
+                                  }}</span>
+                                }
+                              </div>
+                            </div>
+                          </div>
+                        }
+
+                        @if (selectedChartType === 'pie') {
+                          @if (pieData.total === 0) {
+                            <p class="admin-panel--container__hint">
+                              Sin datos para mostrar gráfica.
+                            </p>
+                          } @else {
+                            <div class="admin-panel--container__client-pie-layout">
+                              <div
+                                class="admin-panel--container__client-pie-chart"
+                                [style.background]="pieData.gradient"
+                                role="img"
+                                [attr.aria-label]="'Distribución de packs. Total: ' + pieData.total"
+                              >
+                                <div class="admin-panel--container__client-pie-hole">
+                                  <span>Total</span>
+                                  <strong>{{ pieData.total }}</strong>
+                                </div>
+                              </div>
+
+                              <div class="admin-panel--container__client-chart-list">
+                                @for (slice of pieData.slices; track slice.name) {
+                                  <div class="admin-panel--container__client-chart-row">
+                                    <div class="admin-panel--container__client-chart-legend">
+                                      <span
+                                        class="admin-panel--container__client-chart-dot"
+                                        [style.background]="slice.color"
+                                      ></span>
+                                      <span class="admin-panel--container__client-chart-label">{{
+                                        slice.name
+                                      }}</span>
+                                      <span class="admin-panel--container__client-chart-value"
+                                        >{{ slice.count }} ({{ slice.percentage }}%)</span
+                                      >
+                                    </div>
                                   </div>
                                 }
                               </div>
                             </div>
-
-                            <div class="admin-panel--container__client-column-labels">
-                              @for (row of categoryRows; track row.name) {
-                                <span class="admin-panel--container__client-column-label">{{
-                                  row.name
-                                }}</span>
-                              }
-                            </div>
-                          </div>
-                        </div>
+                          }
+                        }
                       }
+                    </div>
 
-                      @if (selectedChartType === 'pie') {
-                        @if (pieData.total === 0) {
+                    <div
+                      class="admin-panel--container__employee-history admin-panel--container__client-modal-card admin-panel--container__client-modal-card--history"
+                    >
+                      <p class="admin-panel--container__employee-history-title">Historial</p>
+                      <div class="admin-panel--container__employee-subtabs">
+                        <button
+                          type="button"
+                          class="admin-panel--container__employee-subtab"
+                          [class.admin-panel--container__employee-subtab--active]="
+                            isClientHistoryTab('packs')
+                          "
+                          (click)="setClientHistoryTab('packs')"
+                        >
+                          Packs
+                        </button>
+                        <button
+                          type="button"
+                          class="admin-panel--container__employee-subtab"
+                          [class.admin-panel--container__employee-subtab--active]="
+                            isClientHistoryTab('citas')
+                          "
+                          (click)="setClientHistoryTab('citas')"
+                        >
+                          Citas
+                        </button>
+                      </div>
+
+                      @if (isClientHistoryTab('packs')) {
+                        @if (card.treatments.length === 0) {
                           <p class="admin-panel--container__hint">
-                            Sin datos para mostrar gráfica.
+                            Este cliente aún no tiene packs registrados.
                           </p>
                         } @else {
-                          <div class="admin-panel--container__client-pie-layout">
-                            <div
-                              class="admin-panel--container__client-pie-chart"
-                              [style.background]="pieData.gradient"
-                              role="img"
-                              [attr.aria-label]="'Distribución de packs. Total: ' + pieData.total"
-                            >
-                              <div class="admin-panel--container__client-pie-hole">
-                                <span>Total</span>
-                                <strong>{{ pieData.total }}</strong>
-                              </div>
-                            </div>
-
-                            <div class="admin-panel--container__client-chart-list">
-                              @for (slice of pieData.slices; track slice.name) {
-                                <div class="admin-panel--container__client-chart-row">
-                                  <div class="admin-panel--container__client-chart-legend">
-                                    <span
-                                      class="admin-panel--container__client-chart-dot"
-                                      [style.background]="slice.color"
-                                    ></span>
-                                    <span class="admin-panel--container__client-chart-label">{{
-                                      slice.name
-                                    }}</span>
-                                    <span class="admin-panel--container__client-chart-value"
-                                      >{{ slice.count }} ({{ slice.percentage }}%)</span
-                                    >
-                                  </div>
-                                </div>
-                              }
-                            </div>
+                          <div
+                            class="admin-panel--container__employee-history-list admin-panel--container__employee-history-list--compact"
+                          >
+                            @for (item of card.treatments; track item.id) {
+                              <article class="admin-panel--container__employee-history-item">
+                                <p class="admin-panel--container__employee-history-text">
+                                  <strong>{{ item.name }}</strong> ·
+                                  {{ formatDateTime(item.createdAtIso) }}
+                                </p>
+                                @if (item.note) {
+                                  <p class="admin-panel--container__employee-history-note">
+                                    {{ item.note }}
+                                  </p>
+                                }
+                              </article>
+                            }
+                          </div>
+                        }
+                      } @else {
+                        @let clientReservationHistory = getSelectedClientReservationHistory();
+                        @if (clientReservationHistory.length === 0) {
+                          <p class="admin-panel--container__hint">
+                            Este cliente aún no tiene citas registradas.
+                          </p>
+                        } @else {
+                          <div
+                            class="admin-panel--container__employee-history-list admin-panel--container__employee-history-list--compact"
+                          >
+                            @for (reservation of clientReservationHistory; track reservation.id) {
+                              <article class="admin-panel--container__employee-history-item">
+                                <p class="admin-panel--container__employee-history-text">
+                                  <strong>{{ formatDate(reservation.dateIso) }}</strong> ·
+                                  {{ reservation.startTime }} - {{ reservation.endTime }}
+                                </p>
+                                <p class="admin-panel--container__employee-history-text">
+                                  {{ reservation.appointmentTypeName }}
+                                </p>
+                                @if (getReservationDisplayServiceItems(reservation).length > 0) {
+                                  <ul class="admin-panel--container__employee-history-note">
+                                    @for (
+                                      service of getReservationDisplayServiceItems(reservation);
+                                      track service.id
+                                    ) {
+                                      <li>
+                                        {{ service.name }}
+                                        @if (service.quantity > 1) {
+                                          × {{ service.quantity }}
+                                        }
+                                      </li>
+                                    }
+                                  </ul>
+                                }
+                                @if (getReservationDisplayStockItems(reservation).length > 0) {
+                                  <ul class="admin-panel--container__employee-history-note">
+                                    @for (
+                                      stock of getReservationDisplayStockItems(reservation);
+                                      track stock.id
+                                    ) {
+                                      <li>
+                                        {{ stock.productName }} × {{ stock.quantity }}
+                                        @if (stock.unitPriceEuro > 0) {
+                                          ·
+                                          {{
+                                            stock.unitPriceEuro * stock.quantity | number: '1.2-2'
+                                          }}
+                                          €
+                                        }
+                                      </li>
+                                    }
+                                  </ul>
+                                }
+                                <p class="admin-panel--container__employee-history-note">
+                                  Señal:
+                                  {{
+                                    getReservationDisplaySignalAmount(reservation) | number: '1.2-2'
+                                  }}
+                                  € · Pago final:
+                                  {{ reservation.paymentAmountEuro | number: '1.2-2' }} € ·
+                                  Pendiente:
+                                  {{
+                                    getReservationDisplayRemainingAmount(reservation)
+                                      | number: '1.2-2'
+                                  }}
+                                  €
+                                </p>
+                              </article>
+                            }
                           </div>
                         }
                       }
-                    }
-                  </div>
-
-                  <div
-                    class="admin-panel--container__employee-history admin-panel--container__client-modal-card admin-panel--container__client-modal-card--history"
-                  >
-                    <p class="admin-panel--container__employee-history-title">Historial de packs</p>
-                    @if (card.treatments.length === 0) {
-                      <p class="admin-panel--container__hint">
-                        Este cliente aún no tiene packs registrados.
-                      </p>
-                    } @else {
-                      <div
-                        class="admin-panel--container__employee-history-list admin-panel--container__employee-history-list--compact"
-                      >
-                        @for (item of card.treatments; track item.id) {
-                          <article class="admin-panel--container__employee-history-item">
-                            <p class="admin-panel--container__employee-history-text">
-                              <strong>{{ item.name }}</strong> ·
-                              {{ formatDateTime(item.createdAtIso) }}
-                            </p>
-                            @if (item.note) {
-                              <p class="admin-panel--container__employee-history-note">
-                                {{ item.note }}
-                              </p>
-                            }
-                          </article>
-                        }
-                      </div>
-                    }
-                  </div>
+                    </div>
+                  }
                 </div>
               }
             </div>
@@ -3003,7 +3228,6 @@
           (timeChange)="onClientReservationTimeInput($event)"
         ></app-client-reservation-modal>
       }
-
       @if (activeTab() === 'almacen') {
         <h2 class="admin-panel--container__subtitle">Almacén</h2>
         <p class="admin-panel--container__hint">

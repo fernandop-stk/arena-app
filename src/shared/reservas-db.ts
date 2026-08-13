@@ -799,9 +799,10 @@ const createReservationWithSlotsInMemory = (
   const blockedSlots = options?.allowClosedSchedule
     ? getBlockedSlotsFromMemory(payload.dateIso)
     : getEffectiveBlockedSlotsFromMemory(payload.dateIso);
-
-  const hasCapacityConflict = slotTimes.some((slot) => (slotUsage.get(slot) ?? 0) >= maxConcurrent);
   const assigneeWorker = normalizeWorkerEmail(payload.createdByEmail);
+
+  const hasCapacityConflict =
+    !assigneeWorker && slotTimes.some((slot) => (slotUsage.get(slot) ?? 0) >= maxConcurrent);
   const hasWorkerConflict = hasWorkerConflictInMemory(
     '',
     payload.dateIso,
@@ -827,7 +828,7 @@ const createReservationWithSlotsInMemory = (
     customerName: payload.customerName,
     customerPhone: payload.customerPhone,
     appointmentTypeName: payload.appointmentTypeName,
-    additionalComments: `${payload.additionalComments ?? ''}`.trim().slice(0, 500),
+    additionalComments: `${payload.additionalComments ?? ''}`.trim().slice(0, 8000),
     signalAmountEuro: 0,
     signalPaymentMethod: null,
     signalReceivedAtIso: null,
@@ -1170,7 +1171,7 @@ export const createReservationWithSlots = async (
     );
 
     const hasCapacityConflict = activeReservationConflict.rows.some(
-      (row) => (Number(row.usage_count) || 0) >= maxConcurrent,
+      (row) => !normalizedWorkerEmail && (Number(row.usage_count) || 0) >= maxConcurrent,
     );
 
     if (hasCapacityConflict) {
@@ -1232,7 +1233,7 @@ export const createReservationWithSlots = async (
         payload.customerName,
         payload.customerPhone,
         payload.appointmentTypeName,
-        `${payload.additionalComments ?? ''}`.trim().slice(0, 500),
+        `${payload.additionalComments ?? ''}`.trim().slice(0, 8000),
         0,
         null,
         null,
@@ -2132,6 +2133,93 @@ export const assignReservationToWorker = async (
   }
 };
 
+export const updateReservationDetailsByAdmin = async (
+  reservationId: string,
+  payload: {
+    appointmentTypeName: string;
+    customerName: string;
+    customerPhone: string;
+    customerEmail: string;
+    additionalComments?: string;
+  },
+): Promise<{ ok: true } | { ok: false; reason: 'not-found' }> => {
+  await cleanupExpiredProvisionalReservations();
+
+  if (!shouldUseDatabase()) {
+    const reservation = memoryReservations.get(reservationId);
+
+    if (!reservation) {
+      return { ok: false, reason: 'not-found' };
+    }
+
+    reservation.appointmentTypeName = payload.appointmentTypeName;
+    reservation.customerName = payload.customerName;
+    reservation.customerPhone = payload.customerPhone;
+    reservation.customerEmail = payload.customerEmail;
+    reservation.additionalComments =
+      payload.additionalComments !== undefined
+        ? payload.additionalComments.trim().slice(0, 8000)
+        : reservation.additionalComments;
+
+    memoryReservations.set(reservationId, reservation);
+    saveMemoryToFile();
+    return { ok: true };
+  }
+
+  try {
+    await ensureSchema();
+    const db = getPool();
+    const updated = await db.query(
+      `
+      UPDATE reservations
+      SET appointment_type_name = $2,
+          customer_name = $3,
+          customer_phone = $4,
+          customer_email = $5,
+          additional_comments = COALESCE($6, additional_comments)
+      WHERE id = $1
+      `,
+      [
+        reservationId,
+        payload.appointmentTypeName,
+        payload.customerName,
+        payload.customerPhone,
+        payload.customerEmail,
+        payload.additionalComments?.trim().slice(0, 8000) ?? null,
+      ],
+    );
+
+    if (!updated.rowCount) {
+      return { ok: false, reason: 'not-found' };
+    }
+
+    return { ok: true };
+  } catch (error) {
+    if (enableRuntimeMemoryMode(error)) {
+      const reservation = memoryReservations.get(reservationId);
+
+      if (!reservation) {
+        return { ok: false, reason: 'not-found' };
+      }
+
+      reservation.appointmentTypeName = payload.appointmentTypeName;
+      reservation.customerName = payload.customerName;
+      reservation.customerPhone = payload.customerPhone;
+      reservation.customerEmail = payload.customerEmail;
+      reservation.additionalComments =
+        payload.additionalComments !== undefined
+          ? payload.additionalComments.trim().slice(0, 8000)
+          : reservation.additionalComments;
+
+      memoryReservations.set(reservationId, reservation);
+      saveMemoryToFile();
+      return { ok: true };
+    }
+
+    throw error;
+  }
+};
+
 export const updateReservationByAdmin = async (
   reservationId: string,
   payload: {
@@ -2341,7 +2429,7 @@ export const updateReservationByAdmin = async (
         payload.customerName,
         payload.customerPhone,
         payload.customerEmail,
-        payload.additionalComments?.trim().slice(0, 500) ?? null,
+        payload.additionalComments?.trim().slice(0, 8000) ?? null,
       ],
     );
 
@@ -2414,7 +2502,7 @@ export const updateReservationByAdmin = async (
       reservation.customerEmail = payload.customerEmail;
       reservation.additionalComments =
         payload.additionalComments !== undefined
-          ? payload.additionalComments.trim().slice(0, 500)
+          ? payload.additionalComments.trim().slice(0, 8000)
           : reservation.additionalComments;
       reservation.slots = nextSlots;
 
