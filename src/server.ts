@@ -102,6 +102,37 @@ const createNotificationAndBroadcast = async (
   return notification;
 };
 
+const triggerLowStockNotificationIfNeeded = async (
+  product: Pick<StockProductItem, 'id' | 'productName' | 'quantity'>,
+  previousQuantity: number,
+): Promise<void> => {
+  if (product.quantity > 3 || previousQuantity <= 3) {
+    return;
+  }
+
+  const message = `Atención quedan pocas unidades de ${product.productName} en el almacén`;
+  const notifications = await getAllNotifications();
+  const duplicateExists = notifications.some(
+    (notification) =>
+      notification.message === message ||
+      (notification.relatedId === product.id &&
+        notification.message.includes('quedan pocas unidades de') &&
+        notification.message.includes(product.productName)),
+  );
+
+  if (duplicateExists) {
+    return;
+  }
+
+  await createNotificationAndBroadcast({
+    type: 'aviso_importante',
+    title: 'Atención',
+    message,
+    relatedId: product.id,
+    actionUrl: '/admin-panel?tab=almacen',
+  });
+};
+
 const extractHostname = (value: string | undefined): string | null => {
   if (!value) {
     return null;
@@ -3440,6 +3471,85 @@ app.get('/api/cliente/packs', (req, res) => {
   });
 });
 
+app.get('/api/cliente/citas', async (req, res) => {
+  seedAuthUsers();
+  const session = getClientSession(req.headers.cookie);
+
+  if (!session.isAuthenticated || !session.card) {
+    return res
+      .status(401)
+      .json({ ok: false, error: 'Debes iniciar sesión para ver tu historial.' });
+  }
+
+  const normalizePhone = (value: string): string => `${value}`.replace(/\D/g, '');
+  const clientCard = session.card;
+  const cardEmail = `${clientCard.email ?? ''}`.trim().toLowerCase();
+  const cardPhone = normalizePhone(clientCard.phone ?? '');
+
+  try {
+    const reservations = await listReservationsForAdmin();
+    const nowMs = Date.now();
+
+    const citas = reservations
+      .filter((reservation) => reservation.adminStatus !== 'rejected')
+      .filter((reservation) => {
+        const parsedMeta = parseReservationMetaFromComments(reservation.additionalComments);
+        const linkedClientId = parsedMeta.meta?.linkedClientId;
+
+        if (linkedClientId && linkedClientId === clientCard.id) {
+          return true;
+        }
+
+        const reservationEmail = `${reservation.customerEmail ?? ''}`.trim().toLowerCase();
+        const reservationPhone = normalizePhone(reservation.customerPhone ?? '');
+
+        if (cardEmail && reservationEmail && reservationEmail === cardEmail) {
+          return true;
+        }
+
+        if (cardPhone && reservationPhone && reservationPhone === cardPhone) {
+          return true;
+        }
+
+        return false;
+      })
+      .map((reservation) => {
+        const parsedMeta = parseReservationMetaFromComments(reservation.additionalComments);
+        const metaSummary = parsedMeta.meta ? getReservationMetaSummary(parsedMeta.meta) : null;
+        const startMs = getReservationStartMs(reservation.dateIso, reservation.startTime);
+
+        return {
+          id: reservation.id,
+          dateIso: reservation.dateIso,
+          startTime: reservation.startTime,
+          endTime: reservation.endTime,
+          appointmentTypeName: metaSummary?.appointmentTypeName || reservation.appointmentTypeName,
+          isUpcoming: startMs !== null ? startMs >= nowMs : false,
+          adminStatus: reservation.adminStatus,
+          createdAtIso: reservation.createdAtIso,
+        };
+      })
+      .sort((left, right) => {
+        const leftMs = getReservationStartMs(left.dateIso, left.startTime) ?? 0;
+        const rightMs = getReservationStartMs(right.dateIso, right.startTime) ?? 0;
+        return rightMs - leftMs;
+      });
+
+    return res.status(200).json({
+      ok: true,
+      client: {
+        id: clientCard.id,
+        fullName: clientCard.fullName,
+        email: clientCard.email,
+      },
+      citas,
+    });
+  } catch (error) {
+    console.error('Error listando citas de cliente:', error);
+    return res.status(500).json({ ok: false, error: 'No se pudo cargar el historial de citas.' });
+  }
+});
+
 app.post('/api/cliente/alertas', async (req, res) => {
   seedAuthUsers();
   const session = getAlertSession(req.headers.cookie);
@@ -4103,6 +4213,7 @@ app.patch('/api/admin/almacen/:id/quantity', async (req, res) => {
 
   stockProductsById.set(id, updated);
   void persistStockProductsToDisk();
+  await triggerLowStockNotificationIfNeeded(updated, product.quantity);
 
   return res.status(200).json({ ok: true, product: normalizeStockProduct(updated) });
 });
@@ -4168,6 +4279,7 @@ app.post('/api/admin/almacen/:id/sell', async (req, res) => {
 
   stockProductsById.set(id, updated);
   void persistStockProductsToDisk();
+  await triggerLowStockNotificationIfNeeded(updated, product.quantity);
 
   const sale = normalizeStockSale({
     id: buildStockSaleId(),
@@ -5362,6 +5474,7 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
   const paymentReceived = Boolean(req.body?.paymentReceived);
   const paymentMethod = req.body?.paymentMethod as string | undefined;
   const paymentAmountEuroRaw = Number(req.body?.priceEuro ?? NaN);
+  const splitPaymentsRaw = Array.isArray(req.body?.splitPayments) ? req.body.splitPayments : [];
   const paidItemIdsRaw = Array.isArray(req.body?.paidItemIds)
     ? req.body.paidItemIds.map((item: unknown) => `${item ?? ''}`.trim()).filter(Boolean)
     : [];
@@ -5411,17 +5524,62 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
         ? availablePaymentItems.filter((item) => paidItemIdsRaw.includes(item.id))
         : availablePaymentItems;
     const selectedItemsAmount = selectedItems.reduce((acc, item) => acc + item.amount, 0);
+    const splitPayments: Array<{ method: 'efectivo' | 'tarjeta' | 'bizum'; amount: number }> =
+      splitPaymentsRaw
+        .map(
+          (entry: unknown): { method: 'efectivo' | 'tarjeta' | 'bizum'; amount: number } | null => {
+            if (!entry || typeof entry !== 'object') {
+              return null;
+            }
+
+            const method = `${(entry as { method?: string }).method ?? ''}`.trim();
+            const amountRaw = Number((entry as { amount?: number }).amount ?? NaN);
+            const normalizedMethod =
+              method === 'efectivo' || method === 'tarjeta' || method === 'bizum' ? method : null;
+            const normalizedAmount =
+              Number.isFinite(amountRaw) && amountRaw >= 0 ? Number(amountRaw.toFixed(2)) : null;
+
+            return normalizedMethod && normalizedAmount !== null
+              ? { method: normalizedMethod, amount: normalizedAmount }
+              : null;
+          },
+        )
+        .filter(
+          (
+            entry: { method: 'efectivo' | 'tarjeta' | 'bizum'; amount: number } | null,
+          ): entry is { method: 'efectivo' | 'tarjeta' | 'bizum'; amount: number } => !!entry,
+        );
+
     const paymentAmountEuro =
       Number.isFinite(paymentAmountEuroRaw) && paymentAmountEuroRaw >= 0
         ? Number(paymentAmountEuroRaw.toFixed(2))
         : Number(selectedItemsAmount.toFixed(2));
+    const splitAmountEuro = splitPayments.reduce(
+      (acc: number, item: { method: 'efectivo' | 'tarjeta' | 'bizum'; amount: number }) =>
+        acc + item.amount,
+      0,
+    );
+    const combinedPaymentAmountEuro =
+      splitPayments.length > 0 ? Number(splitAmountEuro.toFixed(2)) : paymentAmountEuro;
     const signalAmountEuro = Math.max(0, Number(reservation.signalAmountEuro ?? 0));
-    const finalChargeEuro = Math.max(0, Number((paymentAmountEuro - signalAmountEuro).toFixed(2)));
+    const finalChargeEuro = Math.max(
+      0,
+      Number((combinedPaymentAmountEuro - signalAmountEuro).toFixed(2)),
+    );
     const shouldAccumulate =
       paymentReceived &&
       !reservation.paymentReceived &&
-      paymentMethod &&
-      ['efectivo', 'tarjeta', 'bizum'].includes(paymentMethod);
+      ((paymentMethod && ['efectivo', 'tarjeta', 'bizum'].includes(paymentMethod)) ||
+        splitPayments.length > 0);
+
+    if (splitPayments.length > 0 && Math.abs(splitAmountEuro - paymentAmountEuro) > 0.01) {
+      return res
+        .status(400)
+        .json({
+          ok: false,
+          error: 'La suma del cobro combinado debe coincidir con el total a cobrar.',
+        });
+    }
 
     if (shouldAccumulate && meta?.stock?.length) {
       const stockUpdate = await applyReservationStockOutput(meta);
@@ -5431,12 +5589,16 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
       }
     }
 
-    const updated = await updateReservationPaymentReceived(reservationId, paymentReceived, {
-      paymentMethod:
-        paymentMethod === 'efectivo' || paymentMethod === 'tarjeta' || paymentMethod === 'bizum'
+    const resolvedPaymentMethod =
+      splitPayments.length > 0
+        ? splitPayments[0].method
+        : paymentMethod === 'efectivo' || paymentMethod === 'tarjeta' || paymentMethod === 'bizum'
           ? paymentMethod
-          : undefined,
-      paymentAmountEuro,
+          : undefined;
+
+    const updated = await updateReservationPaymentReceived(reservationId, paymentReceived, {
+      paymentMethod: resolvedPaymentMethod,
+      paymentAmountEuro: combinedPaymentAmountEuro,
     });
 
     if (!updated.ok) {
@@ -5465,16 +5627,32 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
           ? ` · Conceptos: ${selectedItems.map((item) => item.label).join(', ')}`
           : '';
 
-      addPaymentToDailySummary(
-        todayIso,
-        paymentMethod as 'efectivo' | 'tarjeta' | 'bizum',
-        finalChargeEuro,
-        {
-          operationType: 'reservation_payment',
-          concept: `Pago final cita: ${reservation.customerName} · ${reservation.appointmentTypeName} · ${reservation.dateIso} ${reservation.startTime}${signalInfoSuffix}${paidItemsSuffix}`,
-          performedByEmail: session.email,
-        },
-      );
+      if (splitPayments.length > 0) {
+        splitPayments.forEach(
+          (entry: { method: 'efectivo' | 'tarjeta' | 'bizum'; amount: number }) => {
+            addPaymentToDailySummary(todayIso, entry.method, entry.amount, {
+              operationType: 'reservation_payment',
+              concept: `Pago final cita: ${reservation.customerName} · ${reservation.appointmentTypeName} · ${reservation.dateIso} ${reservation.startTime}${signalInfoSuffix}${paidItemsSuffix} · ${entry.method}`,
+              performedByEmail: session.email,
+            });
+          },
+        );
+      } else if (
+        paymentMethod === 'efectivo' ||
+        paymentMethod === 'tarjeta' ||
+        paymentMethod === 'bizum'
+      ) {
+        addPaymentToDailySummary(
+          todayIso,
+          paymentMethod as 'efectivo' | 'tarjeta' | 'bizum',
+          finalChargeEuro,
+          {
+            operationType: 'reservation_payment',
+            concept: `Pago final cita: ${reservation.customerName} · ${reservation.appointmentTypeName} · ${reservation.dateIso} ${reservation.startTime}${signalInfoSuffix}${paidItemsSuffix}`,
+            performedByEmail: session.email,
+          },
+        );
+      }
     }
 
     return res.status(200).json({ ok: true });
@@ -5572,6 +5750,25 @@ app.patch('/api/admin/reservas/:id/stock-line', async (req, res) => {
       services: baseMeta.services,
       stock: nextStock,
     };
+
+    const updatedProduct = normalizeStockProduct({
+      ...product,
+      quantity: product.quantity - quantity,
+    });
+
+    try {
+      await saveStockProductToDb(updatedProduct);
+    } catch (error) {
+      console.error('Error persistiendo stock tras añadir producto a reserva:', error);
+      return res.status(500).json({
+        ok: false,
+        error: 'No se pudo actualizar el stock del almacén. Intenta de nuevo.',
+      });
+    }
+
+    stockProductsById.set(product.id, updatedProduct);
+    void persistStockProductsToDisk();
+    await triggerLowStockNotificationIfNeeded(updatedProduct, product.quantity);
 
     const summary = getReservationMetaSummary(updatedMeta);
     const additionalComments = composeReservationCommentsWithMeta(

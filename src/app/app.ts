@@ -335,6 +335,12 @@ export class App {
             this.closeMenu();
           }
         });
+
+      fromEvent(window, 'arena-auth-session-changed')
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe(() => {
+          this.refreshAuthSession();
+        });
     }
 
     this.destroyRef.onDestroy(() => {

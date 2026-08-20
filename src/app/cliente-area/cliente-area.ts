@@ -11,12 +11,15 @@ interface ClienteSesion {
   phone: string;
 }
 
-interface ClienteTratamiento {
+interface ClienteCita {
   id: string;
-  name: string;
-  note: string;
+  dateIso: string;
+  startTime: string;
+  endTime: string;
+  appointmentTypeName: string;
+  isUpcoming: boolean;
+  adminStatus: 'pending' | 'approved' | 'rejected';
   createdAtIso: string;
-  createdByEmail: string;
 }
 
 interface ClientAlert {
@@ -49,12 +52,12 @@ export class ClienteAreaComponent {
   protected readonly isLoading = signal(true);
   protected readonly errorMessage = signal('');
   protected readonly session = signal<ClienteSesion | null>(null);
-  protected readonly treatments = signal<ClienteTratamiento[]>([]);
+  protected readonly appointments = signal<ClienteCita[]>([]);
   protected readonly alerts = signal<ClientAlert[]>([]);
   protected readonly isLoadingAlerts = signal(false);
   protected readonly isDeletingAlert = signal('');
 
-  protected readonly hasTreatments = computed(() => this.treatments().length > 0);
+  protected readonly hasAppointments = computed(() => this.appointments().length > 0);
   protected readonly hasAlerts = computed(() => this.alerts().length > 0);
 
   protected getWorkerDisplayName(email: string | null | undefined): string {
@@ -91,6 +94,14 @@ export class ClienteAreaComponent {
     this.loadSession();
   }
 
+  private notifyAuthSessionChanged(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.dispatchEvent(new CustomEvent('arena-auth-session-changed'));
+  }
+
   protected handleLogin(): void {
     if (this.loginForm.invalid || this.isSubmitting()) {
       this.loginForm.markAllAsTouched();
@@ -118,6 +129,7 @@ export class ClienteAreaComponent {
           }
 
           this.loadSession();
+          this.notifyAuthSessionChanged();
         },
         error: (error: { error?: { error?: string } }) => {
           this.errorMessage.set(error?.error?.error ?? 'No se pudo iniciar sesión.');
@@ -132,9 +144,10 @@ export class ClienteAreaComponent {
       .subscribe({
         next: () => {
           this.session.set(null);
-          this.treatments.set([]);
+          this.appointments.set([]);
           this.alerts.set([]);
           this.loginForm.reset();
+          this.notifyAuthSessionChanged();
         },
       });
   }
@@ -152,43 +165,46 @@ export class ClienteAreaComponent {
         next: (response) => {
           if (response.isAuthenticated && response.client) {
             this.session.set(response.client);
-            this.loadTreatments();
+            this.loadAppointments();
+            this.notifyAuthSessionChanged();
             return;
           }
 
           this.session.set(null);
-          this.treatments.set([]);
+          this.appointments.set([]);
           this.isLoading.set(false);
           this.isSubmitting.set(false);
+          this.notifyAuthSessionChanged();
         },
         error: () => {
           this.session.set(null);
-          this.treatments.set([]);
+          this.appointments.set([]);
           this.isLoading.set(false);
           this.isSubmitting.set(false);
+          this.notifyAuthSessionChanged();
         },
       });
   }
 
-  private loadTreatments(): void {
+  private loadAppointments(): void {
     this.http
       .get<{
         ok: boolean;
-        treatments: ClienteTratamiento[];
+        citas: ClienteCita[];
         error?: string;
-      }>('/api/cliente/packs', { withCredentials: true })
+      }>('/api/cliente/citas', { withCredentials: true })
       .subscribe({
         next: (response) => {
           if (response.ok) {
-            this.treatments.set(response.treatments ?? []);
+            this.appointments.set(response.citas ?? []);
           } else {
-            this.errorMessage.set(response.error ?? 'No se pudo cargar el historial.');
+            this.errorMessage.set(response.error ?? 'No se pudo cargar el historial de citas.');
           }
 
           this.loadAlerts();
         },
         error: (error: { error?: { error?: string } }) => {
-          this.errorMessage.set(error?.error?.error ?? 'No se pudo cargar el historial.');
+          this.errorMessage.set(error?.error?.error ?? 'No se pudo cargar el historial de citas.');
           this.isLoading.set(false);
           this.isSubmitting.set(false);
         },

@@ -16,7 +16,7 @@
     "dev:stop": "node scripts/dev-stop.cjs",
     "dev:web": "ng serve --port 4200 --host 0.0.0.0",
     "dev:ssr:watch": "node scripts/dev-ssr-watch.cjs",
-    "dev:all": "npm run dev:stop && concurrently -k -n BUILD,SSR,WEB -c yellow,magenta,cyan \"ng build --watch --configuration development\" \"npm run dev:ssr:watch\" \"npm run dev:web\""
+    "dev:all": "npm run dev:stop && concurrently --restart-tries 9999 --restart-after 1500 -n BUILD,SSR,WEB -c yellow,magenta,cyan \"ng build --watch --configuration development\" \"npm run dev:ssr:watch\" \"npm run dev:web\""
   },
   "prettier": {
     "printWidth": 100,

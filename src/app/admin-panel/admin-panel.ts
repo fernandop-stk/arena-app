@@ -27,6 +27,7 @@ import { EmployeeAdminService } from './services/employee-admin.service';
 type AdminTab =
   | 'home'
   | 'agenda'
+  | 'cobro'
   | 'empleados'
   | 'clientes'
   | 'estadisticas'
@@ -43,7 +44,7 @@ type CierreStatsMetric = 'efectivo' | 'tarjeta' | 'bizum' | 'digital' | 'total';
 type AdminCardTarget = 'packs' | 'reservas' | 'agenda' | 'clientes' | 'almacen' | 'cierre';
 type EmployeeManagementTab = 'crear' | 'listado' | 'buscar' | 'superadmin';
 type ClientManagementTab = 'crear' | 'listado' | 'buscar';
-type ClientDetailTab = 'ficha' | 'tratamiento' | 'opciones' | 'estadisticas';
+type ClientDetailTab = 'ficha' | 'tratamiento' | 'opciones' | 'estadisticas' | 'cobro';
 type ClientHistoryTab = 'packs' | 'citas';
 type AdminUserRole = 'superadmin' | 'admin' | 'client';
 type EmployeeWorkStatus = 'idle' | 'working' | 'vacation' | 'sick_leave' | 'recovering_hours';
@@ -115,7 +116,7 @@ interface ReservationServiceLineItem {
 }
 
 interface ReservationStockLineItem {
-  id: string;
+  id?: string;
   productId: string;
   productName: string;
   quantity: number;
@@ -126,6 +127,12 @@ interface ReservationPaymentLineItem {
   id: string;
   label: string;
   amountEuro: number;
+}
+
+interface CobroDayGroup {
+  dateIso: string;
+  label: string;
+  reservations: AdminReservationItem[];
 }
 
 interface AdminBlockedPeriodItem {
@@ -225,8 +232,16 @@ interface ClientCardItem {
 }
 
 interface ClientTreatmentHistoryEntry {
+  id: string;
   name: string;
   createdAtIso: string;
+  note?: string;
+}
+
+interface ClientReservationHistoryGroup {
+  dateIso: string;
+  label: string;
+  reservations: AdminReservationItem[];
 }
 
 interface StockProductItem {
@@ -492,6 +507,23 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly agendaSelectedDateIso = signal('');
   protected readonly showAgendaPackPicker = signal(false);
   protected readonly agendaPackOptions = this.citasService.getAppointmentTypes();
+  protected readonly agendaEditPackOptionNames = computed(() => {
+    const currentName = this.agendaEditDraftName().trim();
+    const optionNames = this.agendaPackOptions.map((pack) => pack.nombre);
+
+    if (!currentName) {
+      return optionNames;
+    }
+
+    const normalizedCurrent = currentName.toLowerCase();
+    const hasCurrent = optionNames.some((name) => name.trim().toLowerCase() === normalizedCurrent);
+
+    if (hasCurrent) {
+      return optionNames;
+    }
+
+    return [currentName, ...optionNames];
+  });
   protected readonly agendaTreatmentCatalog = this.tratamientosService.getTratamientos();
   protected readonly agendaTreatmentOptions = this.agendaTreatmentCatalog.map((t) => ({
     id: t.id,
@@ -520,6 +552,15 @@ export class AdminPanelComponent implements OnDestroy {
     { length: 12 },
     (_, index) => (index + 1) * 30,
   );
+  protected readonly agendaEditDurationOptions = computed(() => {
+    const selectedDuration = Math.floor(Number(this.agendaEditDraftDuration()) || 0);
+
+    if (selectedDuration <= 0 || this.agendaDurationOptions.includes(selectedDuration)) {
+      return this.agendaDurationOptions;
+    }
+
+    return [...this.agendaDurationOptions, selectedDuration].sort((a, b) => a - b);
+  });
   protected readonly agendaDurationDraftByReservationId = signal<Record<string, number>>({});
   protected readonly agendaDropToast = signal('');
   protected readonly agendaDetailReservation = signal<AdminReservationItem | null>(null);
@@ -752,7 +793,18 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly showClientTypePickerModal = signal(false);
   protected readonly clientTypePickerReservationId = signal('');
   protected readonly selectedPaymentMethod = signal<'efectivo' | 'tarjeta' | 'bizum' | ''>('');
+  protected readonly paymentSplitEntries = signal<
+    Array<{ method: 'efectivo' | 'tarjeta' | 'bizum'; amount: number }>
+  >([]);
+  protected readonly paymentSplitEditorMethod = signal<'efectivo' | 'tarjeta' | 'bizum'>(
+    'efectivo',
+  );
+  protected readonly paymentSplitCustomAmount = signal('');
   protected readonly selectedReservationPaymentLineIds = signal<string[]>([]);
+  protected readonly cobroReservationStockProductId = signal('');
+  protected readonly cobroReservationStockUnits = signal('1');
+  protected readonly cobroReservationStockLoading = signal(false);
+  protected readonly cobroReservationStockError = signal('');
   protected readonly paymentMethodReservation = computed<AdminReservationItem | null>(() => {
     const reservationId = this.paymentMethodReservationId();
 
@@ -776,6 +828,39 @@ export class AdminPanelComponent implements OnDestroy {
       .reduce((acc, line) => acc + line.amountEuro, 0);
     const signalAmount = Math.max(0, Number(reservation.signalAmountEuro ?? 0));
     return Math.max(0, Number((totalPrice - signalAmount).toFixed(2)));
+  });
+  protected readonly paymentSplitTotalEuro = computed(() =>
+    this.paymentSplitEntries().reduce((acc, item) => acc + item.amount, 0),
+  );
+  protected readonly paymentSplitRemainingEuro = computed(() => {
+    const total = this.paymentMethodReservationPriceEuro();
+    const splitTotal = this.paymentSplitTotalEuro();
+    return Math.max(0, Number((total - splitTotal).toFixed(2)));
+  });
+  protected readonly cobroDayGroups = computed<CobroDayGroup[]>(() => {
+    const visibleReservations = this.reservations()
+      .filter((reservation) => reservation.adminStatus !== 'rejected')
+      .sort((a, b) => {
+        if (a.dateIso !== b.dateIso) {
+          return a.dateIso.localeCompare(b.dateIso);
+        }
+
+        return a.startTime.localeCompare(b.startTime);
+      });
+
+    const grouped = new Map<string, AdminReservationItem[]>();
+
+    visibleReservations.forEach((reservation) => {
+      const current = grouped.get(reservation.dateIso) ?? [];
+      current.push(reservation);
+      grouped.set(reservation.dateIso, current);
+    });
+
+    return Array.from(grouped.entries()).map(([dateIso, reservations]) => ({
+      dateIso,
+      label: this.formatDate(dateIso),
+      reservations,
+    }));
   });
   protected readonly blockDateIso = signal('');
   protected readonly calendarMonthIso = signal('');
@@ -868,6 +953,7 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly clientDetailTab = signal<ClientDetailTab>('ficha');
   protected readonly clientHistoryTab = signal<ClientHistoryTab>('packs');
   protected readonly showClientReservationModal = signal(false);
+  protected readonly showClientReservationStockModal = signal(false);
   protected readonly clientReservationServiceType = signal<'pack' | 'treatment'>('pack');
   protected readonly clientReservationServiceId = signal(0);
   protected readonly clientReservationDateIso = signal('');
@@ -881,6 +967,9 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly clientReservationStockUnits = signal('1');
   protected readonly clientReservationStockLoading = signal(false);
   protected readonly clientReservationStockError = signal('');
+  protected readonly showClientReservationStockSuccessModal = signal(false);
+  protected readonly clientReservationStockSuccessProductName = signal('');
+  protected readonly clientReservationStockSuccessTotalEuro = signal(0);
   protected readonly paymentModalOpen = signal(false);
   protected readonly paymentSelectTreatmentOpen = signal(false);
   protected readonly selectedTreatmentForPayment = signal<{
@@ -2568,6 +2657,7 @@ export class AdminPanelComponent implements OnDestroy {
     this.clientEditNotes.set(card.notes ?? '');
     this.showClientDetailModal.set(true);
     this.showDeleteClientConfirmModal.set(false);
+    this.showClientReservationStockModal.set(false);
     this.clientDeleteLoading.set(false);
     this.clientTreatmentName.set('');
     this.clientTreatmentNote.set('');
@@ -2596,6 +2686,7 @@ export class AdminPanelComponent implements OnDestroy {
   protected closeClientDetailModal(): void {
     this.showClientDetailModal.set(false);
     this.showClientReservationModal.set(false);
+    this.showClientReservationStockModal.set(false);
     this.showDeleteClientConfirmModal.set(false);
     this.selectedClientId.set('');
     this.clientEditFullName.set('');
@@ -2876,13 +2967,17 @@ export class AdminPanelComponent implements OnDestroy {
       return [];
     }
 
-    const selectedEmail = selected.email.trim().toLowerCase();
-    const selectedPhone = this.normalizePhoneForMatch(selected.phone);
+    return this.getClientReservationHistoryByCard(selected);
+  }
+
+  private getClientReservationHistoryByCard(card: ClientCardItem): AdminReservationItem[] {
+    const selectedEmail = card.email.trim().toLowerCase();
+    const selectedPhone = this.normalizePhoneForMatch(card.phone);
 
     return this.reservations()
       .filter((reservation) => reservation.adminStatus !== 'rejected')
       .filter((reservation) => {
-        if (reservation.linkedClientId && reservation.linkedClientId === selected.id) {
+        if (reservation.linkedClientId && reservation.linkedClientId === card.id) {
           return true;
         }
 
@@ -2907,12 +3002,14 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected getClientTreatmentHistoryEntries(card: ClientCardItem): ClientTreatmentHistoryEntry[] {
-    const reservationHistory = this.getSelectedClientReservationHistory();
+    const reservationHistory = this.getClientReservationHistoryByCard(card);
 
-    return [
+    const entries: ClientTreatmentHistoryEntry[] = [
       ...(card.treatments ?? []).map((item) => ({
+        id: item.id,
         name: item.name,
         createdAtIso: item.createdAtIso,
+        note: item.note,
       })),
       ...reservationHistory.flatMap((reservation) => {
         const serviceItems = this.getReservationDisplayServiceItems(reservation);
@@ -2920,20 +3017,154 @@ export class AdminPanelComponent implements OnDestroy {
         if (serviceItems.length === 0) {
           return [
             {
+              id: `reservation-${reservation.id}-main`,
               name: reservation.appointmentTypeName,
               createdAtIso: `${reservation.dateIso}T${reservation.startTime}:00`,
             },
           ];
         }
 
-        return serviceItems.flatMap((service) =>
-          Array.from({ length: Math.max(1, service.quantity) }, () => ({
+        return serviceItems.flatMap((service, serviceIndex) =>
+          Array.from({ length: Math.max(1, service.quantity) }, (_, quantityIndex) => ({
+            id: `reservation-${reservation.id}-${service.id || serviceIndex}-${quantityIndex}`,
             name: service.name,
             createdAtIso: `${reservation.dateIso}T${reservation.startTime}:00`,
           })),
         );
       }),
     ];
+
+    return entries.sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso));
+  }
+
+  protected getClientReservationHistoryGroups(
+    card: ClientCardItem,
+  ): ClientReservationHistoryGroup[] {
+    const grouped = new Map<string, AdminReservationItem[]>();
+    const reservationHistory = [...this.getClientReservationHistoryByCard(card)].sort((a, b) => {
+      const keyA = `${a.dateIso}T${a.startTime}`;
+      const keyB = `${b.dateIso}T${b.startTime}`;
+      return keyA.localeCompare(keyB);
+    });
+
+    reservationHistory.forEach((reservation) => {
+      const reservations = grouped.get(reservation.dateIso) ?? [];
+      reservations.push(reservation);
+      grouped.set(reservation.dateIso, reservations);
+    });
+
+    return Array.from(grouped.entries()).map(([dateIso, reservations]) => ({
+      dateIso,
+      label: this.formatDate(dateIso),
+      reservations,
+    }));
+  }
+
+  protected selectClientReservationStockTarget(reservationId: string): void {
+    this.clientReservationStockTargetReservationId.set(reservationId);
+    this.clientReservationStockProductId.set(this.getAvailableSellableStockProducts()[0]?.id ?? '');
+    this.clientReservationStockUnits.set('1');
+    this.clientReservationStockError.set('');
+    this.showClientReservationStockModal.set(true);
+    this.setClientDetailTab('cobro');
+  }
+
+  protected openClientReservationStockModal(reservationId?: string): void {
+    if (reservationId) {
+      this.clientReservationStockTargetReservationId.set(reservationId);
+    }
+
+    if (!this.clientReservationStockTargetReservationId()) {
+      const fallbackReservation = this.getClientStockAttachReservationOptions()[0];
+      if (fallbackReservation) {
+        this.clientReservationStockTargetReservationId.set(fallbackReservation.id);
+      }
+    }
+
+    if (!this.clientReservationStockProductId()) {
+      this.clientReservationStockProductId.set(
+        this.getAvailableSellableStockProducts()[0]?.id ?? '',
+      );
+    }
+
+    this.clientReservationStockUnits.set('1');
+    this.clientReservationStockError.set('');
+    this.showClientReservationStockModal.set(true);
+  }
+
+  protected openReservationStockModalForPayment(reservationId: string): void {
+    const reservation = this.reservations().find((item) => item.id === reservationId) ?? null;
+
+    if (reservation) {
+      const matchingClient = this.clientCards().find((card) => {
+        const selectedEmail = `${card.email ?? ''}`.trim().toLowerCase();
+        const selectedPhone = this.normalizePhoneForMatch(card.phone ?? '');
+        const reservationEmail = `${reservation.customerEmail ?? ''}`.trim().toLowerCase();
+        const reservationPhone = this.normalizePhoneForMatch(reservation.customerPhone ?? '');
+
+        return (
+          (reservation.linkedClientId && reservation.linkedClientId === card.id) ||
+          (selectedEmail && reservationEmail && selectedEmail === reservationEmail) ||
+          (selectedPhone && reservationPhone && selectedPhone === reservationPhone)
+        );
+      });
+
+      if (matchingClient) {
+        this.selectedClientId.set(matchingClient.id);
+      }
+    }
+
+    this.openClientReservationStockModal(reservationId);
+  }
+
+  protected closeClientReservationStockModal(): void {
+    if (this.clientReservationStockLoading()) {
+      return;
+    }
+
+    this.showClientReservationStockModal.set(false);
+    this.clientReservationStockProductId.set(this.getAvailableSellableStockProducts()[0]?.id ?? '');
+    this.clientReservationStockUnits.set('1');
+    this.clientReservationStockError.set('');
+  }
+
+  protected closeClientReservationStockSuccessModal(): void {
+    this.showClientReservationStockSuccessModal.set(false);
+    this.clientReservationStockSuccessProductName.set('');
+    this.clientReservationStockSuccessTotalEuro.set(0);
+  }
+
+  protected openClientReservationStockAddMore(): void {
+    this.showClientReservationStockSuccessModal.set(false);
+    this.clientReservationStockSuccessProductName.set('');
+    this.clientReservationStockSuccessTotalEuro.set(0);
+    this.clientReservationStockUnits.set('1');
+    this.clientReservationStockError.set('');
+    this.showClientReservationStockModal.set(true);
+  }
+
+  protected getSelectedClientReservationStockProduct(): StockProductItem | null {
+    const productId = this.clientReservationStockProductId();
+    if (!productId) {
+      return null;
+    }
+
+    return this.getAvailableSellableStockProducts().find((item) => item.id === productId) ?? null;
+  }
+
+  protected getClientReservationStockModalTotal(): number {
+    const product = this.getSelectedClientReservationStockProduct();
+    const units = Math.max(1, Math.floor(Number(this.clientReservationStockUnits().trim()) || 1));
+
+    if (!product) {
+      return 0;
+    }
+
+    return Number((product.price * units).toFixed(2));
+  }
+
+  protected getClientTotalTreatmentCount(card: ClientCardItem): number {
+    return this.getClientTreatmentHistoryEntries(card).length;
   }
 
   protected getReservationDisplayServiceItems(
@@ -3239,7 +3470,9 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected getClientLatestTreatmentLabel(card: ClientCardItem): string {
-    const latest = (card.treatments ?? [])[0];
+    const latest = this.getClientTreatmentHistoryEntries(card)
+      .slice()
+      .sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso))[0];
 
     if (!latest) {
       return 'Sin packs todavía';
@@ -4847,9 +5080,47 @@ export class AdminPanelComponent implements OnDestroy {
             return;
           }
 
-          this.clientCardsMessage.set('Producto añadido a la reserva correctamente.');
+          this.reservations.update((items) =>
+            items.map((item) => {
+              if (item.id !== reservation.id) {
+                return item;
+              }
+
+              const stockItems = [...(item.reservationStockItems ?? [])];
+              const currentIndex = stockItems.findIndex((line) => line.productId === product.id);
+
+              if (currentIndex >= 0) {
+                const currentItem = stockItems[currentIndex];
+                stockItems[currentIndex] = {
+                  ...currentItem,
+                  quantity: currentItem.quantity + units,
+                  unitPriceEuro: product.price,
+                };
+              } else {
+                stockItems.push({
+                  productId: product.id,
+                  productName: product.productName,
+                  quantity: units,
+                  unitPriceEuro: product.price,
+                });
+              }
+
+              return {
+                ...item,
+                reservationStockItems: stockItems,
+              };
+            }),
+          );
+
+          this.clientReservationStockSuccessProductName.set(product.productName);
+          this.clientReservationStockSuccessTotalEuro.set(
+            Number((product.price * units).toFixed(2)),
+          );
           this.clientReservationStockUnits.set('1');
+          this.showClientReservationStockModal.set(false);
+          this.showClientReservationStockSuccessModal.set(true);
           this.loadReservations();
+          this.loadStockProducts();
         },
         error: (error) => {
           const apiError = error?.error?.error;
@@ -5718,7 +5989,8 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected openAgendaReservationInfoModal(reservation: AdminReservationItem): void {
-    this.agendaReservationInfoModalReservation.set(reservation);
+    const latestReservation = this.reservations().find((item) => item.id === reservation.id);
+    this.agendaReservationInfoModalReservation.set(latestReservation ?? reservation);
   }
 
   protected closeAgendaReservationInfoModal(): void {
@@ -5986,7 +6258,13 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected markPaymentReceivedDirect(reservationId: string): void {
     this.paymentMethodReservationId.set(reservationId);
-    this.selectedPaymentMethod.set('');
+    this.selectedPaymentMethod.set('efectivo');
+    this.paymentSplitEntries.set([]);
+    this.paymentSplitEditorMethod.set('efectivo');
+    this.paymentSplitCustomAmount.set('');
+    this.cobroReservationStockError.set('');
+    this.cobroReservationStockLoading.set(false);
+
     const reservation = this.reservations().find((item) => item.id === reservationId) ?? null;
 
     if (reservation) {
@@ -5994,8 +6272,17 @@ export class AdminPanelComponent implements OnDestroy {
         (item) => item.id,
       );
       this.selectedReservationPaymentLineIds.set(defaultLineIds);
+      this.cobroReservationStockProductId.set(
+        this.getAvailableSellableStockProducts()[0]?.id ?? '',
+      );
+      this.cobroReservationStockUnits.set('1');
+      const defaultAmount = this.paymentMethodReservationPriceEuro();
+      this.paymentSplitCustomAmount.set(defaultAmount > 0 ? defaultAmount.toFixed(2) : '');
     } else {
       this.selectedReservationPaymentLineIds.set([]);
+      this.cobroReservationStockProductId.set('');
+      this.cobroReservationStockUnits.set('1');
+      this.paymentSplitCustomAmount.set('');
     }
 
     this.showPaymentMethodModal.set(true);
@@ -6038,6 +6325,18 @@ export class AdminPanelComponent implements OnDestroy {
     return lines;
   }
 
+  protected getReservationPaymentSelectedLinesTotal(reservation: AdminReservationItem): number {
+    const selectedIds = this.selectedReservationPaymentLineIds();
+
+    return this.getReservationPaymentLineItems(reservation)
+      .filter((line) => selectedIds.includes(line.id))
+      .reduce((acc, line) => acc + line.amountEuro, 0);
+  }
+
+  protected getReservationSignalAmount(reservation: AdminReservationItem): number {
+    return Math.max(0, Number(reservation.signalAmountEuro ?? 0));
+  }
+
   protected isReservationPaymentLineSelected(lineId: string): boolean {
     return this.selectedReservationPaymentLineIds().includes(lineId);
   }
@@ -6053,13 +6352,215 @@ export class AdminPanelComponent implements OnDestroy {
     this.selectedReservationPaymentLineIds.set([...current, lineId]);
   }
 
+  protected onCobroReservationStockProductChange(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    this.cobroReservationStockProductId.set(target.value);
+    this.cobroReservationStockError.set('');
+  }
+
+  protected onCobroReservationStockUnitsInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.cobroReservationStockUnits.set(target.value);
+    this.cobroReservationStockError.set('');
+  }
+
+  protected addStockToPaymentReservation(): void {
+    const reservation = this.paymentMethodReservation();
+    const productId = this.cobroReservationStockProductId().trim();
+    const units = Math.max(1, Math.floor(Number(this.cobroReservationStockUnits().trim()) || 1));
+
+    if (!reservation) {
+      this.cobroReservationStockError.set('Selecciona una cita válida.');
+      return;
+    }
+
+    const product = this.getAvailableSellableStockProducts().find((item) => item.id === productId);
+
+    if (!product) {
+      this.cobroReservationStockError.set('Selecciona un producto de stock disponible.');
+      return;
+    }
+
+    if (units > product.quantity) {
+      this.cobroReservationStockError.set(
+        `No hay unidades suficientes de ${product.productName}. Disponible: ${product.quantity}.`,
+      );
+      return;
+    }
+
+    this.cobroReservationStockLoading.set(true);
+    this.cobroReservationStockError.set('');
+
+    this.http
+      .patch<{ ok: boolean; error?: string }>(`/api/admin/reservas/${reservation.id}/stock-line`, {
+        productId: product.id,
+        quantity: units,
+      })
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.cobroReservationStockError.set(
+              response.error ?? 'No se pudo añadir el producto a la cita.',
+            );
+            return;
+          }
+
+          this.reservations.update((items) =>
+            items.map((item) => {
+              if (item.id !== reservation.id) {
+                return item;
+              }
+
+              const stockItems = [...(item.reservationStockItems ?? [])];
+              const currentIndex = stockItems.findIndex((line) => line.productId === product.id);
+
+              if (currentIndex >= 0) {
+                const currentItem = stockItems[currentIndex];
+                stockItems[currentIndex] = {
+                  ...currentItem,
+                  quantity: currentItem.quantity + units,
+                  unitPriceEuro: product.price,
+                };
+              } else {
+                stockItems.push({
+                  productId: product.id,
+                  productName: product.productName,
+                  quantity: units,
+                  unitPriceEuro: product.price,
+                });
+              }
+
+              return {
+                ...item,
+                reservationStockItems: stockItems,
+              };
+            }),
+          );
+
+          const refreshed = this.reservations().find((item) => item.id === reservation.id);
+          if (refreshed) {
+            this.selectedReservationPaymentLineIds.set(
+              this.getReservationPaymentLineItems(refreshed).map((line) => line.id),
+            );
+          }
+
+          this.loadStockProducts();
+          this.cobroReservationStockProductId.set(
+            this.getAvailableSellableStockProducts()[0]?.id ?? '',
+          );
+          this.cobroReservationStockUnits.set('1');
+          this.loadCierreAutoDiario();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.cobroReservationStockError.set(
+            typeof apiError === 'string' && apiError
+              ? apiError
+              : 'No se pudo añadir el producto a la cita.',
+          );
+        },
+        complete: () => {
+          this.cobroReservationStockLoading.set(false);
+        },
+      });
+  }
+
+  protected getReservationPaymentMethodLabel(method: 'efectivo' | 'tarjeta' | 'bizum'): string {
+    switch (method) {
+      case 'efectivo':
+        return 'Efectivo';
+      case 'tarjeta':
+        return 'Tarjeta';
+      case 'bizum':
+        return 'Bizum';
+      default:
+        return 'Pago';
+    }
+  }
+
+  protected onPaymentSplitMethodChange(method: 'efectivo' | 'tarjeta' | 'bizum'): void {
+    this.paymentSplitEditorMethod.set(method);
+    this.selectedPaymentMethod.set(method);
+  }
+
+  protected onPaymentSplitAmountInput(value: string): void {
+    this.paymentSplitCustomAmount.set(value);
+  }
+
+  protected addPaymentSplitEntry(): void {
+    const remaining = this.paymentSplitRemainingEuro();
+    const method = this.paymentSplitEditorMethod();
+    const raw = this.paymentSplitCustomAmount().replace(',', '.').trim();
+    const amount = Number(raw);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      this.actionError.set('Introduce un importe válido para este método de pago.');
+      return;
+    }
+
+    if (amount > remaining + 0.0001) {
+      this.actionError.set(
+        `El importe supera el restante: ${remaining.toFixed(2)} €. Ajusta la cantidad o elige otro método.`,
+      );
+      return;
+    }
+
+    this.actionError.set('');
+    this.paymentSplitEntries.set([
+      ...this.paymentSplitEntries(),
+      { method, amount: Number(amount.toFixed(2)) },
+    ]);
+    const nextRemaining = Math.max(0, Number((remaining - amount).toFixed(2)));
+    this.paymentSplitCustomAmount.set(nextRemaining > 0 ? nextRemaining.toFixed(2) : '');
+  }
+
+  protected removePaymentSplitEntry(index: number): void {
+    this.paymentSplitEntries.set(
+      this.paymentSplitEntries().filter((_, itemIndex) => itemIndex !== index),
+    );
+    this.actionError.set('');
+    const remaining = this.paymentSplitRemainingEuro();
+    this.paymentSplitCustomAmount.set(remaining > 0 ? remaining.toFixed(2) : '');
+  }
+
+  protected isPaymentSplitBalanced(): boolean {
+    if (this.paymentSplitEntries().length === 0) {
+      return true;
+    }
+
+    return (
+      Math.abs(this.paymentSplitTotalEuro() - this.paymentMethodReservationPriceEuro()) <= 0.01
+    );
+  }
+
   protected confirmPaymentMethod(): void {
     const reservationId = this.paymentMethodReservationId();
     const paymentMethod = this.selectedPaymentMethod();
     const priceEuro = Number(this.paymentMethodReservationPriceEuro().toFixed(2));
     const selectedLineIds = this.selectedReservationPaymentLineIds();
+    const splitEntries = this.paymentSplitEntries();
+    const splitTotal = splitEntries.reduce((acc, entry) => acc + entry.amount, 0);
 
-    if (!reservationId || !paymentMethod) {
+    if (!reservationId) {
+      return;
+    }
+
+    const normalizedSplit = splitEntries
+      .map((entry) => ({
+        method: entry.method,
+        amount: Number(entry.amount.toFixed(2)),
+      }))
+      .filter((entry) => entry.amount > 0);
+
+    if (normalizedSplit.length > 0 && Math.abs(splitTotal - priceEuro) > 0.01) {
+      this.actionError.set('La suma de los métodos debe coincidir con el total a cobrar.');
+      return;
+    }
+
+    const resolvedMethod = normalizedSplit[0]?.method ?? paymentMethod;
+
+    if (!resolvedMethod) {
+      this.actionError.set('Selecciona un método de pago.');
       return;
     }
 
@@ -6070,8 +6571,9 @@ export class AdminPanelComponent implements OnDestroy {
     this.http
       .patch<{ ok: boolean; error?: string }>(`/api/admin/reservas/${reservationId}/payment`, {
         paymentReceived: true,
-        paymentMethod,
+        paymentMethod: resolvedMethod,
         priceEuro,
+        splitPayments: normalizedSplit.length > 0 ? normalizedSplit : undefined,
         paidItemIds: selectedLineIds,
       })
       .subscribe({
@@ -6086,7 +6588,7 @@ export class AdminPanelComponent implements OnDestroy {
               ? {
                   ...current,
                   paymentReceived: true,
-                  paymentMethod,
+                  paymentMethod: resolvedMethod,
                   paymentAmountEuro: priceEuro,
                 }
               : current,
@@ -6112,7 +6614,14 @@ export class AdminPanelComponent implements OnDestroy {
     this.showPaymentMethodModal.set(false);
     this.paymentMethodReservationId.set('');
     this.selectedPaymentMethod.set('');
+    this.paymentSplitEntries.set([]);
+    this.paymentSplitEditorMethod.set('efectivo');
+    this.paymentSplitCustomAmount.set('');
     this.selectedReservationPaymentLineIds.set([]);
+    this.cobroReservationStockProductId.set('');
+    this.cobroReservationStockUnits.set('1');
+    this.cobroReservationStockLoading.set(false);
+    this.cobroReservationStockError.set('');
   }
 
   protected setReservationStatus(
@@ -6394,11 +6903,30 @@ export class AdminPanelComponent implements OnDestroy {
             return;
           }
 
-          this.reservations.set(
-            (response.reservations ?? []).map((reservation) =>
-              this.normalizeReservationTimeFields(reservation),
-            ),
+          const normalizedReservations = (response.reservations ?? []).map((reservation) =>
+            this.normalizeReservationTimeFields(reservation),
           );
+          this.reservations.set(normalizedReservations);
+
+          const infoReservation = this.agendaReservationInfoModalReservation();
+          if (infoReservation) {
+            const refreshedInfoReservation = normalizedReservations.find(
+              (item) => item.id === infoReservation.id,
+            );
+            if (refreshedInfoReservation) {
+              this.agendaReservationInfoModalReservation.set(refreshedInfoReservation);
+            }
+          }
+
+          const detailReservation = this.agendaDetailReservation();
+          if (detailReservation) {
+            const refreshedDetailReservation = normalizedReservations.find(
+              (item) => item.id === detailReservation.id,
+            );
+            if (refreshedDetailReservation) {
+              this.agendaDetailReservation.set(refreshedDetailReservation);
+            }
+          }
         },
         error: (error) => {
           const apiError = error?.error?.error;
@@ -6535,6 +7063,20 @@ export class AdminPanelComponent implements OnDestroy {
               (product) => product.isSellable && product.quantity > 0,
             );
             this.clientReservationStockProductId.set(firstClientSellable?.id ?? '');
+          }
+
+          const cobroSelectedStockId = this.cobroReservationStockProductId();
+          if (
+            !cobroSelectedStockId ||
+            !products.some(
+              (product) =>
+                product.id === cobroSelectedStockId && product.isSellable && product.quantity > 0,
+            )
+          ) {
+            const firstCobroSellable = products.find(
+              (product) => product.isSellable && product.quantity > 0,
+            );
+            this.cobroReservationStockProductId.set(firstCobroSellable?.id ?? '');
           }
         },
         error: (error) => {
@@ -7610,6 +8152,8 @@ export class AdminPanelComponent implements OnDestroy {
         return this.hasPermission('clientes_gestionar');
       case 'estadisticas':
         return this.hasPermission('estadisticas_ver');
+      case 'cobro':
+        return true;
       case 'almacen':
         return this.hasPermission('almacen_gestionar');
       case 'cierre':
@@ -7648,6 +8192,8 @@ export class AdminPanelComponent implements OnDestroy {
         return 'Acceder a ficha de cliente';
       case 'estadisticas':
         return 'Acceder a estadisticas';
+      case 'cobro':
+        return 'Acceder a cobro';
       case 'almacen':
         return 'Acceder al almacen';
       case 'cierre':
@@ -8568,10 +9114,21 @@ export class AdminPanelComponent implements OnDestroy {
     }
 
     const availableSellableProducts = this.getAvailableSellableStockProducts();
+    const serviceLineName = `${r.reservationServiceItems?.[0]?.name ?? ''}`.trim();
+    const fallbackReservationName = `${r.appointmentTypeName ?? ''}`.trim();
+    const initialServiceName = serviceLineName || fallbackReservationName;
+    const selectedService = this.getAgendaEditSelectedService(initialServiceName);
+    const serviceLineDuration = Math.max(
+      0,
+      Number(r.reservationServiceItems?.[0]?.durationMinutes ?? 0),
+    );
+    const initialDuration =
+      selectedService?.duracionMinutos ??
+      (serviceLineDuration > 0 ? serviceLineDuration : r.durationMinutes);
 
     this.agendaEditTarget.set('duration');
-    this.agendaEditDraftName.set(r.appointmentTypeName);
-    this.agendaEditDraftDuration.set(r.durationMinutes);
+    this.agendaEditDraftName.set(selectedService?.nombre ?? initialServiceName);
+    this.agendaEditDraftDuration.set(initialDuration);
     this.agendaEditDraftAdditionalComments.set(r.additionalComments ?? '');
     this.agendaEditDraftStockLines.set(
       (r.reservationStockItems ?? []).map((item) => ({ ...item })),
@@ -8672,8 +9229,6 @@ export class AdminPanelComponent implements OnDestroy {
     }`
       .trim()
       .slice(0, 500);
-    const editTarget = this.agendaEditTarget();
-
     this.agendaEditDraftName.set(nextName);
     this.agendaEditDraftDuration.set(nextDuration);
     this.agendaEditDraftAdditionalComments.set(nextAdditionalComments);
@@ -8706,22 +9261,22 @@ export class AdminPanelComponent implements OnDestroy {
             },
           ];
     const selectedServiceLine = this.buildReservationServiceLineFromName(nextName);
-    const nextServiceItems =
-      editTarget === 'services' && selectedServiceLine
-        ? [selectedServiceLine]
-        : currentServiceItems;
-    const nextAppointmentTypeName =
-      editTarget === 'services' && selectedServiceLine
-        ? selectedServiceLine.name
-        : r.appointmentTypeName;
-    const nextDurationMinutes =
-      editTarget === 'services' && selectedServiceLine
-        ? selectedServiceLine.durationMinutes
-        : nextDuration;
+    const nextDurationMinutes = nextDuration;
+    const nextAppointmentTypeName = selectedServiceLine?.name || nextName || r.appointmentTypeName;
+    const nextServiceItems = selectedServiceLine
+      ? [{ ...selectedServiceLine, durationMinutes: nextDurationMinutes }]
+      : currentServiceItems.map((item, index) =>
+          index === 0
+            ? {
+                ...item,
+                name: nextAppointmentTypeName,
+                durationMinutes: nextDurationMinutes,
+              }
+            : item,
+        );
     const nextStockItems = this.agendaEditDraftStockLines();
 
     if (
-      editTarget === 'duration' &&
       !this.isSuperadmin() &&
       nextDurationMinutes !== r.durationMinutes &&
       this.hasReservationConflict(
@@ -9106,7 +9661,34 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
-    const serviceLines = this.agendaManualReserveServiceLines();
+    const selectedService = this.getAgendaManualReserveSelectedService();
+    if (!selectedService) {
+      this.agendaManualReserveError.set('Selecciona un pack o tratamiento válido.');
+      return;
+    }
+
+    const selectedDurationMinutes = Math.max(
+      30,
+      Number(this.agendaManualReserveDuration() || selectedService.duracionMinutos || 60),
+    );
+    const selectedServiceLine: ReservationServiceLineItem = {
+      id: `svc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type: this.agendaManualReserveServiceType(),
+      name: selectedService.nombre,
+      quantity: 1,
+      durationMinutes: selectedDurationMinutes,
+      unitPriceEuro: this.getPackPriceByName(selectedService.nombre),
+      requiresReservationSignal: Boolean(
+        this.agendaManualReserveServiceType() === 'pack' &&
+        'requiresReservationSignal' in selectedService &&
+        selectedService.requiresReservationSignal,
+      ),
+    };
+    const draftServiceLines = this.agendaManualReserveServiceLines();
+    const serviceLines =
+      draftServiceLines.length > 0
+        ? [selectedServiceLine, ...draftServiceLines.slice(1)]
+        : [selectedServiceLine];
     const stockLines = this.agendaManualReserveStockLines();
     const dateIso = this.agendaManualReserveDateIso().trim();
     const time = this.normalizeAgendaTimeValue(this.agendaManualReserveTime().trim());
@@ -9123,7 +9705,10 @@ export class AdminPanelComponent implements OnDestroy {
     const customerEmail = `${selectedClient?.email ?? this.agendaManualReserveCustomerEmail()}`
       .trim()
       .toLowerCase();
-    const durationMinutes = this.getAgendaManualReserveTotalDuration();
+    const durationMinutes = serviceLines.reduce(
+      (acc, line) => acc + line.durationMinutes * Math.max(1, line.quantity),
+      0,
+    );
     const canAssignReservation = this.canAssignReservationToWorker();
     const currentUserEmail = this.ownerEmail().trim().toLowerCase();
     const selectedWorkerEmail = this.normalizeAgendaWorkerEmail(
@@ -9133,11 +9718,6 @@ export class AdminPanelComponent implements OnDestroy {
       this.agendaManualReserveAssignToMe() || !canAssignReservation
         ? currentUserEmail
         : selectedWorkerEmail || currentUserEmail;
-
-    if (serviceLines.length === 0) {
-      this.agendaManualReserveError.set('Añade al menos un pack o tratamiento a la reserva.');
-      return;
-    }
 
     if (!dateIso || !time || !customerName || !customerPhone) {
       this.agendaManualReserveError.set('Completa todos los datos de la reserva.');
@@ -9634,16 +10214,22 @@ export class AdminPanelComponent implements OnDestroy {
       (acc, item) => acc + Math.max(0, item.durationMinutes) * Math.max(1, item.quantity),
       0,
     );
-    const normalizedAppointmentTypeName =
-      serviceParts.length > 0
-        ? serviceParts.join(' + ')
-        : `${reservation.appointmentTypeName ?? ''}`.trim();
+    const reservationAppointmentTypeName = `${reservation.appointmentTypeName ?? ''}`.trim();
+    const appointmentTypeFromMeta = serviceParts.join(' + ').trim();
+    const durationFromReservationField = Math.max(
+      30,
+      Number(reservation.durationMinutes ?? 0) || 30,
+    );
+    const authoritativeDuration =
+      durationFromRange > 0 ? durationFromRange : durationFromReservationField;
+    const effectiveServiceItems = serviceItems;
+    const normalizedAppointmentTypeName = appointmentTypeFromMeta || reservationAppointmentTypeName;
     const normalizedDurationMinutes =
-      serviceDurationMinutes > 0
-        ? serviceDurationMinutes
-        : durationFromRange > 0
-          ? durationFromRange
-          : Math.max(30, Number(reservation.durationMinutes ?? 0) || 30);
+      authoritativeDuration > 0
+        ? authoritativeDuration
+        : serviceDurationMinutes > 0
+          ? serviceDurationMinutes
+          : 30;
 
     return {
       ...reservation,
@@ -9653,7 +10239,7 @@ export class AdminPanelComponent implements OnDestroy {
       appointmentTypeName: normalizedAppointmentTypeName || reservation.appointmentTypeName,
       additionalComments: parsedMeta.plainComments,
       linkedClientId: parsedMeta.linkedClientId,
-      reservationServiceItems: serviceItems,
+      reservationServiceItems: effectiveServiceItems,
       reservationStockItems: stockItems,
       signalAmountEuro: Math.max(0, Number(reservation.signalAmountEuro ?? 0)),
       signalPaymentMethod:

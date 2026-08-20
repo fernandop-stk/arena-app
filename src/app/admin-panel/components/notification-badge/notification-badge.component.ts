@@ -1,4 +1,12 @@
-import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  HostListener,
+  inject,
+  OnDestroy,
+  OnInit,
+  signal,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NotificationService } from '../../services/notification.service';
 
@@ -293,6 +301,7 @@ import { NotificationService } from '../../services/notification.service';
 })
 export class NotificationBadgeComponent implements OnInit, OnDestroy {
   readonly notificationService = inject(NotificationService);
+  private readonly hostElementRef = inject(ElementRef<HTMLElement>);
   protected showPanel = signal(false);
   private readonly refreshStorageKey = 'arena-app:notifications:refresh';
   private readonly onStorageChange = (event: StorageEvent): void => {
@@ -305,6 +314,24 @@ export class NotificationBadgeComponent implements OnInit, OnDestroy {
 
   protected toggleNotificationsPanel() {
     this.showPanel.update((current) => !current);
+  }
+
+  @HostListener('document:click', ['$event'])
+  protected handleDocumentClick(event: MouseEvent): void {
+    if (!this.showPanel()) {
+      return;
+    }
+
+    const clickTarget = event.target as Node | null;
+    if (!clickTarget) {
+      return;
+    }
+
+    if (this.hostElementRef.nativeElement.contains(clickTarget)) {
+      return;
+    }
+
+    this.showPanel.set(false);
   }
 
   protected markAsRead(notificationId: string) {

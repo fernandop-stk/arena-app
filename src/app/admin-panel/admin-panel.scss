@@ -186,7 +186,7 @@
       margin-top: layout.$space-2;
       display: flex;
       flex-wrap: wrap;
-      gap: 0.5rem;
+      gap: 0.75rem;
     }
 
     &__employee-subtab {
@@ -390,13 +390,13 @@
     &__list {
       margin-top: layout.$space-2;
       display: grid;
-      gap: layout.$space-2;
+      gap: 0.9rem;
     }
 
     &__reservation {
       border: 1px solid colors.$color-border;
       border-radius: layout.$radius-md;
-      padding: layout.$space-2;
+      padding: 1rem 1.1rem;
       background: rgba(201, 123, 99, 0.06);
 
       &--blocked {
@@ -449,7 +449,7 @@
     &__employee-history {
       &-list {
         display: grid;
-        gap: 0.65rem;
+        gap: 0.75rem;
       }
 
       &-item {
@@ -457,7 +457,7 @@
         border-radius: 0.85rem;
         padding: 1rem;
         background: rgba(201, 123, 99, 0.06);
-        margin: 0;
+        margin: 0.15rem 0 0;
         display: grid;
         gap: 0.3rem;
       }
@@ -1606,6 +1606,32 @@
       gap: 0.75rem;
     }
 
+    &__agenda-manual-client-mode {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.6rem;
+    }
+
+    &__agenda-manual-client-mode-btn {
+      min-height: 2.2rem;
+      border: 1px solid rgba(201, 123, 99, 0.34);
+      border-radius: 999px;
+      background: #fff;
+      color: colors.$color-primary-dark;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    &__agenda-manual-client-mode-btn--active {
+      background: rgba(201, 123, 99, 0.12);
+      border-color: rgba(201, 123, 99, 0.72);
+    }
+
+    &__agenda-manual-client-search {
+      display: grid;
+      gap: 0.55rem;
+    }
+
     &__agenda-manual-client-list {
       display: grid;
       gap: 0.5rem;
@@ -1617,45 +1643,17 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 0.75rem;
       width: 100%;
-      text-align: left;
       padding: 0.75rem 0.85rem;
       border: 1px solid rgba(201, 123, 99, 0.28);
       border-radius: layout.$radius-sm;
       background: #fff;
       color: colors.$color-primary-dark;
       cursor: pointer;
-      transition:
-        border-color 0.15s ease,
-        background 0.15s ease,
-        box-shadow 0.15s ease;
-
-      &:hover {
-        border-color: rgba(201, 123, 99, 0.52);
-        background: rgba(201, 123, 99, 0.03);
-      }
 
       &--selected {
         border-color: rgba(104, 170, 120, 0.9);
         background: rgba(124, 186, 133, 0.1);
-        box-shadow: inset 0 0 0 1px rgba(104, 170, 120, 0.2);
-      }
-
-      div {
-        display: grid;
-        gap: 0.14rem;
-        min-width: 0;
-      }
-
-      strong {
-        font-size: 0.82rem;
-      }
-
-      span,
-      small {
-        color: colors.$color-text-soft;
-        font-size: 0.72rem;
       }
     }
 
@@ -1973,10 +1971,53 @@
       font-size: 0.95rem;
     }
 
+    &__payment-split-panel {
+      margin: 1rem 0 0.75rem;
+      display: grid;
+      gap: 0.5rem;
+      padding: 0.6rem;
+      border: 1px solid rgba(201, 123, 99, 0.2);
+      border-radius: layout.$radius-md;
+      background: rgba(201, 123, 99, 0.04);
+    }
+    &__payment-split-list {
+      display: grid;
+      gap: 0.35rem;
+      margin: 0;
+    }
+    &__payment-split-entry {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.25rem 0.4rem;
+      border: 1px solid rgba(201, 123, 99, 0.22);
+      border-radius: 0.65rem;
+      background: rgba(255, 255, 255, 0.7);
+    }
+    &__payment-split-entry-label {
+      flex: 1;
+      min-width: 0;
+      color: colors.$color-primary-dark;
+      font-size: 0.88rem;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+    &__payment-split-selector {
+      margin: 0;
+    }
+
     &__payment-method-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 0.6rem;
+    }
+
+    &__payment-split-remaining {
+      margin: 0;
+      padding-top: 0.25rem;
+      border-top: 1px solid rgba(201, 123, 99, 0.15);
+      color: colors.$color-text-soft;
     }
 
     &__payment-method-btn {

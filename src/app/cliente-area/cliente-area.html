@@ -2,7 +2,7 @@
   <div class="cliente-area__container">
     <header class="cliente-area__header">
       <h1>Área de cliente</h1>
-      <p>Accede para consultar tu historial de packs.</p>
+      <p>Accede para consultar tu historial de citas.</p>
     </header>
 
     @if (isLoading()) {
@@ -46,24 +46,23 @@
       </div>
 
       <div class="cliente-area__card">
-        <h2>Historial de packs</h2>
+        <h2>Historial de citas</h2>
 
-        @if (!hasTreatments()) {
-          <p class="cliente-area__empty">Todavía no tienes packs registrados.</p>
+        @if (!hasAppointments()) {
+          <p class="cliente-area__empty">Todavía no tienes citas registradas.</p>
         } @else {
           <div class="cliente-area__list">
-            @for (treatment of treatments(); track treatment.id) {
+            @for (appointment of appointments(); track appointment.id) {
               <article class="cliente-area__item">
                 <div class="cliente-area__item-head">
-                  <h3>{{ treatment.name }}</h3>
-                  <span>{{ treatment.createdAtIso | date: 'dd/MM/yyyy HH:mm' }}</span>
+                  <h3>{{ appointment.appointmentTypeName }}</h3>
+                  <span>
+                    {{ appointment.dateIso | date: 'dd/MM/yyyy' }} · {{ appointment.startTime }} -
+                    {{ appointment.endTime }}
+                  </span>
                 </div>
 
-                @if (treatment.note) {
-                  <p>{{ treatment.note }}</p>
-                }
-
-                <small>Registrado por {{ getWorkerDisplayName(treatment.createdByEmail) }}</small>
+                <small>{{ appointment.isUpcoming ? 'Cita por realizar' : 'Cita realizada' }}</small>
               </article>
             }
           </div>

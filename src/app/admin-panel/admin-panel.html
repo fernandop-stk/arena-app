@@ -107,6 +107,17 @@
           <button
             type="button"
             class="admin-panel--container__tab"
+            [class.admin-panel--container__tab--active]="activeTab() === 'cobro'"
+            [class.admin-panel--container__tab--disabled]="!canAccessAdminTab('cobro')"
+            [attr.aria-disabled]="!canAccessAdminTab('cobro')"
+            [title]="!canAccessAdminTab('cobro') ? noPermissionTooltip : ''"
+            (click)="setActiveTab('cobro')"
+          >
+            Cobro
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__tab"
             [class.admin-panel--container__tab--active]="activeTab() === 'ayuda'"
             (click)="setActiveTab('ayuda')"
           >
@@ -152,6 +163,98 @@
             </button>
           }
         </div>
+      }
+
+      @if (activeTab() === 'cobro') {
+        <h2 class="admin-panel--container__subtitle">Cobro</h2>
+        <p class="admin-panel--container__hint">
+          Revisa las citas por día, añade productos del almacén y cobra con señal o sin ella.
+        </p>
+
+        @if (cobroDayGroups().length === 0) {
+          <p class="admin-panel--container__hint">No hay citas disponibles para cobrar.</p>
+        } @else {
+          <div class="admin-panel--container__list">
+            @for (group of cobroDayGroups(); track group.dateIso) {
+              <section class="admin-panel--container__cobro-day-group">
+                <h3 class="admin-panel--container__reservation-title">{{ group.label }}</h3>
+
+                <div class="admin-panel--container__cobro-day-list">
+                  @for (reservation of group.reservations; track reservation.id) {
+                    <article class="admin-panel--container__reservation">
+                      <div class="admin-panel--container__reservation-head">
+                        <h4 class="admin-panel--container__reservation-title">
+                          {{ reservation.customerName }} · {{ reservation.appointmentTypeName }}
+                        </h4>
+                        <span
+                          class="admin-panel--container__status"
+                          [class.admin-panel--container__status--accepted]="
+                            isReservationAgendaStatusAccepted(reservation)
+                          "
+                          [class.admin-panel--container__status--rejected]="
+                            reservation.adminStatus === 'rejected'
+                          "
+                        >
+                          {{ getReservationAgendaStatusLabel(reservation) }}
+                        </span>
+                      </div>
+
+                      <p class="admin-panel--container__reservation-text">
+                        {{ formatDate(reservation.dateIso) }} · {{ reservation.startTime }} -
+                        {{ reservation.endTime }} ·
+                        {{ formatDuration(reservation.durationMinutes) }}
+                      </p>
+                      <p class="admin-panel--container__reservation-text">
+                        Señal:
+                        @if (reservation.signalAmountEuro > 0) {
+                          Recibida {{ reservation.signalAmountEuro | number: '1.2-2' }} €
+                          @if (reservation.signalPaymentMethod) {
+                            ({{ reservation.signalPaymentMethod }})
+                          }
+                        } @else {
+                          Sin registrar
+                        }
+                      </p>
+                      <p class="admin-panel--container__reservation-text">
+                        Pago final:
+                        @if (reservation.paymentReceived) {
+                          Recibido
+                          @if (reservation.paymentMethod) {
+                            ({{ getPaymentMethodDisplayLabel(reservation.paymentMethod) }})
+                          }
+                          @if (reservation.paymentAmountEuro > 0) {
+                            · {{ reservation.paymentAmountEuro | number: '1.2-2' }} €
+                          }
+                        } @else {
+                          Pendiente
+                        }
+                      </p>
+
+                      <div class="admin-panel--container__reservation-actions">
+                        <button
+                          type="button"
+                          class="admin-panel--container__action-button admin-panel--container__action-button--accept"
+                          [disabled]="isActionLoading(reservation.id)"
+                          (click)="markPaymentReceivedDirect(reservation.id)"
+                        >
+                          Cobrar
+                        </button>
+                        <button
+                          type="button"
+                          class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                          [disabled]="isActionLoading(reservation.id)"
+                          (click)="openReservationStockModalForPayment(reservation.id)"
+                        >
+                          Añadir producto
+                        </button>
+                      </div>
+                    </article>
+                  }
+                </div>
+              </section>
+            }
+          </div>
+        }
       }
 
       @if (activeTab() === 'agenda') {
@@ -1116,6 +1219,100 @@
                   </label>
                 }
 
+                <div class="admin-panel--container__agenda-manual-client-mode">
+                  <button
+                    type="button"
+                    class="admin-panel--container__agenda-manual-client-mode-btn"
+                    [class.admin-panel--container__agenda-manual-client-mode-btn--active]="
+                      agendaManualReserveClientMode() === 'existing'
+                    "
+                    (click)="onAgendaManualReserveClientModeChange('existing')"
+                  >
+                    Buscar clienta
+                  </button>
+                  <button
+                    type="button"
+                    class="admin-panel--container__agenda-manual-client-mode-btn"
+                    [class.admin-panel--container__agenda-manual-client-mode-btn--active]="
+                      agendaManualReserveClientMode() === 'manual'
+                    "
+                    (click)="onAgendaManualReserveClientModeChange('manual')"
+                  >
+                    Clienta nueva
+                  </button>
+                </div>
+
+                @if (agendaManualReserveClientMode() === 'existing') {
+                  <div class="admin-panel--container__agenda-manual-client-search">
+                    <div class="admin-panel--container__search-wrap" style="position: relative">
+                      <input
+                        class="admin-panel--container__input admin-panel--container__search-input"
+                        type="text"
+                        placeholder="Buscar por nombre, email o teléfono"
+                        [value]="agendaManualReserveClientSearch()"
+                        (input)="onAgendaManualReserveClientSearchInput($event)"
+                        style="padding-right: 2.4rem"
+                      />
+                      @if (agendaManualReserveClientSearch()) {
+                        <button
+                          type="button"
+                          class="admin-panel--container__search-clear"
+                          aria-label="Limpiar búsqueda"
+                          (click)="agendaManualReserveClientSearch.set('')"
+                          style="
+                            position: absolute;
+                            top: 50%;
+                            right: 0.55rem;
+                            transform: translateY(-50%);
+                            width: 1.45rem;
+                            height: 1.45rem;
+                            border: 1px solid rgba(201, 123, 99, 0.42);
+                            border-radius: 0.35rem;
+                            background: #fff;
+                            color: #6b5748;
+                            font-size: 0.92rem;
+                            line-height: 1;
+                            display: inline-grid;
+                            place-items: center;
+                            cursor: pointer;
+                          "
+                        >
+                          ×
+                        </button>
+                      }
+                    </div>
+
+                    <div class="admin-panel--container__agenda-manual-client-list">
+                      @for (
+                        client of getAgendaManualReserveFilteredClientCards();
+                        track client.id
+                      ) {
+                        <button
+                          type="button"
+                          class="admin-panel--container__agenda-manual-client-card"
+                          [class.admin-panel--container__agenda-manual-client-card--selected]="
+                            agendaManualReserveSelectedClientId() === client.id
+                          "
+                          (click)="selectAgendaManualReserveClient(client.id)"
+                        >
+                          <div class="admin-panel--container__agenda-manual-selected-copy">
+                            <strong>{{ client.fullName }}</strong>
+                            <span>{{ client.email }}</span>
+                            <span>{{ client.phone }}</span>
+                          </div>
+                          <span class="admin-panel--container__agenda-manual-pill">
+                            {{ client.treatments.length }} packs
+                          </span>
+                        </button>
+                      }
+
+                      @if (getAgendaManualReserveFilteredClientCards().length === 0) {
+                        <p class="admin-panel--container__hint">No hay clientas para ese filtro.</p>
+                      }
+                    </div>
+                  </div>
+                }
+
                 <label class="admin-panel--container__label">
                   Nombre de la clienta
                   <input
@@ -1341,8 +1538,8 @@
                     [value]="agendaEditDraftName()"
                     (change)="onAgendaEditDraftNameChange($event)"
                   >
-                    @for (pack of agendaPackOptions; track pack.id) {
-                      <option [value]="pack.nombre">{{ pack.nombre }}</option>
+                    @for (packName of agendaEditPackOptionNames(); track packName) {
+                      <option [value]="packName">{{ packName }}</option>
                     }
                   </select>
 
@@ -1356,7 +1553,7 @@
                     [value]="agendaEditDraftDuration()"
                     (change)="onAgendaEditDraftDurationChange($event)"
                   >
-                    @for (duration of agendaDurationOptions; track duration) {
+                    @for (duration of agendaEditDurationOptions(); track duration) {
                       <option [value]="duration">{{ formatDuration(duration) }}</option>
                     }
                   </select>
@@ -2167,13 +2364,14 @@
 
         <div class="admin-panel--container__label admin-panel--container__help-search">
           Buscar en ayuda
-          <div class="admin-panel--container__search-wrap">
+          <div class="admin-panel--container__search-wrap" style="position: relative">
             <input
               class="admin-panel--container__input admin-panel--container__search-input"
               type="text"
               placeholder="Ejemplo: cita, cierre, permisos, clienta..."
               [value]="helpSearch()"
               (input)="onHelpSearchInput($event)"
+              style="padding-right: 2.4rem"
             />
             @if (helpSearch()) {
               <button
@@ -2181,6 +2379,23 @@
                 class="admin-panel--container__search-clear"
                 aria-label="Limpiar búsqueda"
                 (click)="clearHelpSearch()"
+                style="
+                  position: absolute;
+                  top: 50%;
+                  right: 0.55rem;
+                  transform: translateY(-50%);
+                  width: 1.45rem;
+                  height: 1.45rem;
+                  border: 1px solid rgba(201, 123, 99, 0.42);
+                  border-radius: 0.35rem;
+                  background: #fff;
+                  color: #6b5748;
+                  font-size: 0.92rem;
+                  line-height: 1;
+                  display: inline-grid;
+                  place-items: center;
+                  cursor: pointer;
+                "
               >
                 ×
               </button>
@@ -2603,13 +2818,14 @@
           @if (clientManagementTab() === 'buscar') {
             <div class="admin-panel--container__label">
               Buscar fichas
-              <div class="admin-panel--container__search-wrap">
+              <div class="admin-panel--container__search-wrap" style="position: relative">
                 <input
                   class="admin-panel--container__input admin-panel--container__search-input search-client"
                   type="text"
                   placeholder="Buscar por nombre, email o teléfono"
                   [value]="clientCardsSearch()"
                   (input)="onClientSearchInput($event)"
+                  style="padding-right: 2.4rem"
                 />
                 @if (clientCardsSearch()) {
                   <button
@@ -2617,6 +2833,23 @@
                     class="admin-panel--container__search-clear"
                     aria-label="Limpiar búsqueda"
                     (click)="clearClientSearch()"
+                    style="
+                      position: absolute;
+                      top: 50%;
+                      right: 0.55rem;
+                      transform: translateY(-50%);
+                      width: 1.45rem;
+                      height: 1.45rem;
+                      border: 1px solid rgba(201, 123, 99, 0.42);
+                      border-radius: 0.35rem;
+                      background: #fff;
+                      color: #6b5748;
+                      font-size: 0.92rem;
+                      line-height: 1;
+                      display: inline-grid;
+                      place-items: center;
+                      cursor: pointer;
+                    "
                   >
                     ×
                   </button>
@@ -2673,7 +2906,7 @@
 
                 <div class="admin-panel--container__employee-stats-grid">
                   <span class="admin-panel--container__employee-stat-chip"
-                    >Total packs: {{ card.treatments.length }}</span
+                    >Total packs: {{ getClientTotalTreatmentCount(card) }}</span
                   >
                   <span class="admin-panel--container__employee-stat-chip"
                     >Último: {{ getClientLatestTreatmentLabel(card) }}</span
@@ -2719,7 +2952,17 @@
                     "
                     (click)="setClientDetailTab('estadisticas')"
                   >
-                    Estadisticas
+                    Estadísticas
+                  </button>
+                  <button
+                    type="button"
+                    class="admin-panel--container__employee-subtab"
+                    [class.admin-panel--container__employee-subtab--active]="
+                      isClientDetailTab('cobro')
+                    "
+                    (click)="setClientDetailTab('cobro')"
+                  >
+                    Cobro
                   </button>
                 </div>
 
@@ -3102,7 +3345,8 @@
                       </div>
 
                       @if (isClientHistoryTab('packs')) {
-                        @if (card.treatments.length === 0) {
+                        @let clientTreatmentHistoryEntries = getClientTreatmentHistoryEntries(card);
+                        @if (clientTreatmentHistoryEntries.length === 0) {
                           <p class="admin-panel--container__hint">
                             Este cliente aún no tiene packs registrados.
                           </p>
@@ -3110,7 +3354,7 @@
                           <div
                             class="admin-panel--container__employee-history-list admin-panel--container__employee-history-list--compact"
                           >
-                            @for (item of card.treatments; track item.id) {
+                            @for (item of clientTreatmentHistoryEntries; track item.id) {
                               <article class="admin-panel--container__employee-history-item">
                                 <p class="admin-panel--container__employee-history-text">
                                   <strong>{{ item.name }}</strong> ·
@@ -3196,6 +3440,150 @@
                             }
                           </div>
                         }
+                      }
+                    </div>
+                  }
+
+                  @if (isClientDetailTab('cobro')) {
+                    <div class="admin-panel--container__client-modal-card">
+                      <p class="admin-panel--container__employee-history-title">Cobro</p>
+                      <p class="admin-panel--container__hint">
+                        Citas ordenadas por día con opción de cobrar y preparar producto.
+                      </p>
+
+                      @if (getClientReservationHistoryGroups(card).length === 0) {
+                        <p class="admin-panel--container__hint">
+                          No hay citas registradas para cobrar.
+                        </p>
+                      } @else {
+                        <div class="admin-panel--container__list">
+                          @for (
+                            group of getClientReservationHistoryGroups(card);
+                            track group.dateIso
+                          ) {
+                            <section class="admin-panel--container__cobro-day-group">
+                              <h4 class="admin-panel--container__reservation-title">
+                                {{ group.label }}
+                              </h4>
+
+                              <div class="admin-panel--container__cobro-day-list">
+                                @for (reservation of group.reservations; track reservation.id) {
+                                  <article class="admin-panel--container__reservation">
+                                    <div class="admin-panel--container__reservation-head">
+                                      <h5 class="admin-panel--container__reservation-title">
+                                        {{ reservation.appointmentTypeName }}
+                                      </h5>
+                                      <span class="admin-panel--container__status">{{
+                                        getClientReservationPaymentBadgeLabel(reservation)
+                                      }}</span>
+                                    </div>
+
+                                    <p class="admin-panel--container__reservation-text">
+                                      {{ reservation.startTime }} - {{ reservation.endTime }} ·
+                                      {{ getClientReservationStatusBadgeLabel(reservation) }}
+                                    </p>
+                                    <p class="admin-panel--container__reservation-text">
+                                      {{ getClientReservationPaymentBadgeLabel(reservation) }}
+                                    </p>
+
+                                    <div class="admin-panel--container__reservation-actions">
+                                      <button
+                                        type="button"
+                                        class="admin-panel--container__action-button admin-panel--container__action-button--accept"
+                                        (click)="markPaymentReceivedDirect(reservation.id)"
+                                      >
+                                        Cobrar
+                                      </button>
+                                      <button
+                                        type="button"
+                                        class="admin-panel--container__action-button admin-panel--container__action-button--soft"
+                                        (click)="openClientReservationStockModal(reservation.id)"
+                                      >
+                                        Añadir producto
+                                      </button>
+                                    </div>
+                                  </article>
+                                }
+                              </div>
+                            </section>
+                          }
+                        </div>
+
+                        <div
+                          class="admin-panel--container__block-form admin-panel--container__block-form--compact admin-panel--container__client-modal-card"
+                        >
+                          <p class="admin-panel--container__hint">Añadir producto a una cita</p>
+                          @if (getClientStockAttachReservationOptions().length === 0) {
+                            <p class="admin-panel--container__hint">
+                              No hay citas activas para asociar productos.
+                            </p>
+                          } @else {
+                            <label class="admin-panel--container__label">
+                              Cita
+                              <select
+                                class="admin-panel--container__input"
+                                [value]="clientReservationStockTargetReservationId()"
+                                (change)="onClientReservationStockTargetChange($event)"
+                              >
+                                @for (
+                                  reservation of getClientStockAttachReservationOptions();
+                                  track reservation.id
+                                ) {
+                                  <option [value]="reservation.id">
+                                    {{ getClientStockAttachReservationLabel(reservation) }}
+                                  </option>
+                                }
+                              </select>
+                            </label>
+                            <label class="admin-panel--container__label">
+                              Producto
+                              <select
+                                class="admin-panel--container__input"
+                                [value]="clientReservationStockProductId()"
+                                (change)="onClientReservationStockProductChange($event)"
+                              >
+                                <option value="">Selecciona producto</option>
+                                @for (
+                                  product of getAvailableSellableStockProducts();
+                                  track product.id
+                                ) {
+                                  <option [value]="product.id">
+                                    {{ product.productName }} · {{ product.quantity }} uds ·
+                                    {{ product.price | number: '1.2-2' }} €
+                                  </option>
+                                }
+                              </select>
+                            </label>
+                            <label class="admin-panel--container__label">
+                              Unidades
+                              <input
+                                class="admin-panel--container__input"
+                                type="number"
+                                min="1"
+                                [value]="clientReservationStockUnits()"
+                                (input)="onClientReservationStockUnitsInput($event)"
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
+                              [disabled]="
+                                clientReservationStockLoading() ||
+                                !clientReservationStockProductId()
+                              "
+                              (click)="addStockToClientReservation()"
+                            >
+                              {{
+                                clientReservationStockLoading() ? 'Guardando...' : 'Añadir producto'
+                              }}
+                            </button>
+                            @if (clientReservationStockError()) {
+                              <p class="admin-panel--container__error">
+                                {{ clientReservationStockError() }}
+                              </p>
+                            }
+                          }
+                        </div>
                       }
                     </div>
                   }
@@ -5810,11 +6198,11 @@
         class="admin-panel--container__modal admin-panel--container__modal--compact"
         role="dialog"
         aria-modal="true"
-        aria-label="Seleccionar método de pago"
+        aria-label="Cobro de cita"
         (click)="$event.stopPropagation()"
       >
         <div class="admin-panel--container__modal-head">
-          <h2 class="admin-panel--container__modal-title">Seleccionar método de pago</h2>
+          <h2 class="admin-panel--container__modal-title">Cobro de cita</h2>
           <button
             type="button"
             class="admin-panel--container__modal-close"
@@ -5827,48 +6215,202 @@
 
         @if (paymentMethodReservation(); as reservation) {
           <p class="admin-panel--container__modal-subtitle">
-            {{ reservation.appointmentTypeName }}
+            {{ reservation.customerName }} · {{ reservation.appointmentTypeName }}
           </p>
-          @if (paymentMethodReservationPriceEuro() > 0) {
-            <p class="admin-panel--container__payment-modal-price">
-              Precio: {{ paymentMethodReservationPriceEuro() | number: '1.2-2' }} €
+
+          <p class="admin-panel--container__reservation-text">
+            {{ formatDate(reservation.dateIso) }} · {{ reservation.startTime }} -
+            {{ reservation.endTime }} · {{ formatDuration(reservation.durationMinutes) }}
+          </p>
+
+          <p class="admin-panel--container__reservation-text">
+            Señal:
+            @if (reservation.signalAmountEuro > 0) {
+              Recibida {{ reservation.signalAmountEuro | number: '1.2-2' }} €
+              @if (reservation.signalPaymentMethod) {
+                ({{ reservation.signalPaymentMethod }})
+              }
+            } @else {
+              Sin registrar
+            }
+          </p>
+
+          <div class="admin-panel--container__payment-line-list">
+            <p class="admin-panel--container__hint" style="margin-bottom: 0.35rem">
+              Conceptos del cobro
             </p>
-          } @else {
-            <p class="admin-panel--container__payment-modal-price">Precio: no configurado</p>
-          }
+            @for (line of getReservationPaymentLineItems(reservation); track line.id) {
+              <label
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 0.6rem;
+                  padding: 0.3rem 0;
+                  cursor: pointer;
+                "
+              >
+                <input
+                  type="checkbox"
+                  [checked]="isReservationPaymentLineSelected(line.id)"
+                  (change)="toggleReservationPaymentLine(line.id)"
+                  style="width: 1rem; height: 1rem; accent-color: #c97b63; cursor: pointer"
+                />
+                <span style="flex: 1; color: #5a433a; font-size: 0.9rem; font-weight: 600">{{
+                  line.label
+                }}</span>
+                <strong>{{ line.amountEuro | number: '1.2-2' }} €</strong>
+              </label>
+            }
+          </div>
+
+          <div class="admin-panel--container__cobro-summary" style="margin: 1rem 0">
+            <p class="admin-panel--container__reservation-text">
+              Subtotal seleccionado:
+              {{ getReservationPaymentSelectedLinesTotal(reservation) | number: '1.2-2' }} €
+            </p>
+            <p class="admin-panel--container__reservation-text">
+              Señal descontada: {{ getReservationSignalAmount(reservation) | number: '1.2-2' }} €
+            </p>
+            <p class="admin-panel--container__reservation-text">
+              Total a cobrar:
+              <strong>{{ paymentMethodReservationPriceEuro() | number: '1.2-2' }} €</strong>
+            </p>
+          </div>
+
+          <div
+            class="admin-panel--container__block-form admin-panel--container__block-form--compact"
+          >
+            <p class="admin-panel--container__hint">Añadir producto al cobro</p>
+            @if (getAvailableSellableStockProducts().length === 0) {
+              <p class="admin-panel--container__hint">No hay productos vendibles con stock.</p>
+            } @else {
+              <label class="admin-panel--container__label">
+                Producto
+                <select
+                  class="admin-panel--container__input"
+                  [value]="cobroReservationStockProductId()"
+                  (change)="onCobroReservationStockProductChange($event)"
+                >
+                  <option value="">Selecciona producto</option>
+                  @for (product of getAvailableSellableStockProducts(); track product.id) {
+                    <option [value]="product.id">
+                      {{ product.productName }} · {{ product.quantity }} uds ·
+                      {{ product.price | number: '1.2-2' }} €
+                    </option>
+                  }
+                </select>
+              </label>
+              <label class="admin-panel--container__label">
+                Unidades
+                <input
+                  class="admin-panel--container__input"
+                  type="number"
+                  min="1"
+                  [value]="cobroReservationStockUnits()"
+                  (input)="onCobroReservationStockUnitsInput($event)"
+                />
+              </label>
+              <button
+                type="button"
+                class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
+                [disabled]="cobroReservationStockLoading() || !cobroReservationStockProductId()"
+                (click)="addStockToPaymentReservation()"
+              >
+                {{ cobroReservationStockLoading() ? 'Añadiendo...' : 'Añadir producto' }}
+              </button>
+              @if (cobroReservationStockError()) {
+                <p class="admin-panel--container__error">{{ cobroReservationStockError() }}</p>
+              }
+            }
+          </div>
         }
 
-        <div class="admin-panel--container__payment-method-grid">
+        <div class="admin-panel--container__payment-split-panel">
+          <p class="admin-panel--container__hint">Cobro combinado</p>
+
+          @if (paymentSplitEntries().length > 0) {
+            <div
+              class="admin-panel--container__payment-line-list admin-panel--container__payment-split-list"
+            >
+              @for (entry of paymentSplitEntries(); track $index) {
+                <div class="admin-panel--container__payment-split-entry">
+                  <span class="admin-panel--container__payment-split-entry-label">
+                    {{ getReservationPaymentMethodLabel(entry.method) }} ·
+                    {{ entry.amount | number: '1.2-2' }} €
+                  </span>
+                  <button
+                    type="button"
+                    class="admin-panel--container__button admin-panel--container__button--secondary admin-panel--container__button--compact"
+                    (click)="removePaymentSplitEntry($index)"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              }
+            </div>
+          }
+
+          <div
+            class="admin-panel--container__payment-method-grid admin-panel--container__payment-split-selector"
+          >
+            <button
+              type="button"
+              class="admin-panel--container__payment-method-btn"
+              [class.admin-panel--container__payment-method-btn--active]="
+                paymentSplitEditorMethod() === 'efectivo'
+              "
+              (click)="onPaymentSplitMethodChange('efectivo')"
+            >
+              💵 Efectivo
+            </button>
+            <button
+              type="button"
+              class="admin-panel--container__payment-method-btn"
+              [class.admin-panel--container__payment-method-btn--active]="
+                paymentSplitEditorMethod() === 'tarjeta'
+              "
+              (click)="onPaymentSplitMethodChange('tarjeta')"
+            >
+              💳 Tarjeta
+            </button>
+            <button
+              type="button"
+              class="admin-panel--container__payment-method-btn"
+              [class.admin-panel--container__payment-method-btn--active]="
+                paymentSplitEditorMethod() === 'bizum'
+              "
+              (click)="onPaymentSplitMethodChange('bizum')"
+            >
+              📱 Bizum
+            </button>
+          </div>
+
+          <label class="admin-panel--container__label">
+            Cantidad para {{ getReservationPaymentMethodLabel(paymentSplitEditorMethod()) }}
+            <input
+              class="admin-panel--container__input"
+              type="number"
+              min="0"
+              step="0.01"
+              [value]="paymentSplitCustomAmount()"
+              (input)="onPaymentSplitAmountInput($any($event.target).value)"
+            />
+          </label>
+
           <button
             type="button"
-            class="admin-panel--container__payment-method-btn"
-            [class.admin-panel--container__payment-method-btn--active]="
-              selectedPaymentMethod() === 'efectivo'
-            "
-            (click)="selectedPaymentMethod.set('efectivo')"
+            class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
+            [disabled]="paymentSplitRemainingEuro() <= 0"
+            (click)="addPaymentSplitEntry()"
           >
-            💵 Efectivo
+            Añadir al cobro
           </button>
-          <button
-            type="button"
-            class="admin-panel--container__payment-method-btn"
-            [class.admin-panel--container__payment-method-btn--active]="
-              selectedPaymentMethod() === 'tarjeta'
-            "
-            (click)="selectedPaymentMethod.set('tarjeta')"
+
+          <p
+            class="admin-panel--container__reservation-text admin-panel--container__payment-split-remaining"
           >
-            💳 Tarjeta
-          </button>
-          <button
-            type="button"
-            class="admin-panel--container__payment-method-btn"
-            [class.admin-panel--container__payment-method-btn--active]="
-              selectedPaymentMethod() === 'bizum'
-            "
-            (click)="selectedPaymentMethod.set('bizum')"
-          >
-            📱 Bizum
-          </button>
+            Restante: <strong>{{ paymentSplitRemainingEuro() | number: '1.2-2' }} €</strong>
+          </p>
         </div>
 
         <div class="admin-panel--container__modal-actions">
@@ -5882,7 +6424,11 @@
           <button
             type="button"
             class="admin-panel--container__button admin-panel--container__button--primary"
-            [disabled]="!selectedPaymentMethod() || actionLoadingId() !== ''"
+            [disabled]="
+              (paymentSplitEntries().length === 0 && !selectedPaymentMethod()) ||
+              actionLoadingId() !== '' ||
+              (paymentSplitEntries().length > 0 && !isPaymentSplitBalanced())
+            "
             (click)="confirmPaymentMethod()"
           >
             {{ actionLoadingId() !== '' ? 'Guardando...' : 'Confirmar' }}
@@ -6408,6 +6954,162 @@
           </button>
         </div>
       </div>
+    </div>
+  }
+
+  @if (showClientReservationStockModal()) {
+    <div
+      class="admin-panel--container__modal-backdrop"
+      (click)="closeClientReservationStockModal()"
+    >
+      <div
+        class="admin-panel--container__modal admin-panel--container__modal--compact"
+        role="dialog"
+        aria-modal="true"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="admin-panel--container__modal-head">
+          <div>
+            <h3 class="admin-panel--container__modal-title">Añadir producto a la cita</h3>
+          </div>
+          <button
+            type="button"
+            class="admin-panel--container__modal-close"
+            (click)="closeClientReservationStockModal()"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+
+        @if (getClientStockAttachReservationOptions().length === 0) {
+          <p class="admin-panel--container__hint">No hay citas activas para asociar productos.</p>
+        } @else {
+          <div class="admin-panel--container__client-modal-fields">
+            <label class="admin-panel--container__label">
+              Cita
+              <select
+                class="admin-panel--container__input"
+                [value]="clientReservationStockTargetReservationId()"
+                (change)="onClientReservationStockTargetChange($event)"
+              >
+                @for (
+                  reservation of getClientStockAttachReservationOptions();
+                  track reservation.id
+                ) {
+                  <option [value]="reservation.id">
+                    {{ getClientStockAttachReservationLabel(reservation) }}
+                  </option>
+                }
+              </select>
+            </label>
+
+            <label class="admin-panel--container__label">
+              Producto
+              <select
+                class="admin-panel--container__input"
+                [value]="clientReservationStockProductId()"
+                (change)="onClientReservationStockProductChange($event)"
+              >
+                <option value="">Selecciona producto</option>
+                @for (product of getAvailableSellableStockProducts(); track product.id) {
+                  <option [value]="product.id">
+                    {{ product.productName }} · {{ product.quantity }} uds ·
+                    {{ product.price | number: '1.2-2' }} €
+                  </option>
+                }
+              </select>
+            </label>
+
+            <label class="admin-panel--container__label">
+              Unidades
+              <input
+                class="admin-panel--container__input"
+                type="number"
+                min="1"
+                [value]="clientReservationStockUnits()"
+                (input)="onClientReservationStockUnitsInput($event)"
+              />
+            </label>
+
+            <p class="admin-panel--container__reservation-text">
+              Total estimado: {{ getClientReservationStockModalTotal() | number: '1.2-2' }} €
+            </p>
+
+            <div class="admin-panel--container__modal-actions">
+              <button
+                type="button"
+                class="admin-panel--container__btn admin-panel--container__btn--secondary"
+                [disabled]="clientReservationStockLoading()"
+                (click)="closeClientReservationStockModal()"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                class="admin-panel--container__btn admin-panel--container__btn--primary"
+                [disabled]="clientReservationStockLoading() || !clientReservationStockProductId()"
+                (click)="addStockToClientReservation()"
+              >
+                {{ clientReservationStockLoading() ? 'Guardando...' : 'Añadir producto' }}
+              </button>
+            </div>
+
+            @if (clientReservationStockError()) {
+              <p class="admin-panel--container__error">{{ clientReservationStockError() }}</p>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  @if (showClientReservationStockSuccessModal()) {
+    <div
+      class="admin-panel--container__modal-backdrop"
+      (click)="closeClientReservationStockSuccessModal()"
+    >
+      <section
+        class="admin-panel--container__modal admin-panel--container__modal--compact"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Producto añadido"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="admin-panel--container__modal-head">
+          <h3 class="admin-panel--container__modal-title">Producto añadido</h3>
+          <button
+            type="button"
+            class="admin-panel--container__modal-close"
+            (click)="closeClientReservationStockSuccessModal()"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+
+        <p class="admin-panel--container__reservation-text" style="margin: 0.4rem 0 1.1rem">
+          Añadido {{ clientReservationStockSuccessProductName() }} por
+          {{ clientReservationStockSuccessTotalEuro() | number: '1.2-2' }} €
+        </p>
+
+        <div class="admin-panel--container__modal-actions">
+          <button
+            type="button"
+            class="admin-panel--container__btn admin-panel--container__btn--secondary"
+            (click)="closeClientReservationStockSuccessModal()"
+          >
+            Cerrar
+          </button>
+          <button
+            type="button"
+            class="admin-panel--container__btn admin-panel--container__btn--primary"
+            (click)="openClientReservationStockAddMore()"
+          >
+            Añadir más
+          </button>
+        </div>
+      </section>
     </div>
   }
 
