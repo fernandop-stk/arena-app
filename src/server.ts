@@ -1026,6 +1026,22 @@ interface ReservationMetaPayload {
   linkedClientId?: string;
   services: ReservationServiceMetaItem[];
   stock: ReservationStockMetaItem[];
+  paymentSummary?: {
+    paidItemIds: string[];
+    paidItems: Array<{
+      id: string;
+      label: string;
+      amountEuro: number;
+    }>;
+    splitPayments: Array<{
+      method: 'efectivo' | 'tarjeta' | 'bizum';
+      amount: number;
+    }>;
+    finalPaymentMethod: 'efectivo' | 'tarjeta' | 'bizum' | null;
+    finalPaymentAmountEuro: number;
+    registeredAtIso: string;
+    registeredByEmail?: string;
+  };
 }
 
 interface CierreCajaItem {
@@ -1527,6 +1543,69 @@ const parseReservationMetaFromComments = (
           .filter((item) => item.productId && item.productName)
       : [];
 
+    const paymentSummaryRaw =
+      parsed.paymentSummary && typeof parsed.paymentSummary === 'object'
+        ? parsed.paymentSummary
+        : null;
+    const paidItemIds = Array.isArray(paymentSummaryRaw?.paidItemIds)
+      ? paymentSummaryRaw.paidItemIds.map((item) => `${item ?? ''}`.trim()).filter(Boolean)
+      : [];
+    const paidItems = Array.isArray(paymentSummaryRaw?.paidItems)
+      ? paymentSummaryRaw.paidItems
+          .map((item) => ({
+            id: `${item?.id ?? ''}`.trim(),
+            label: `${item?.label ?? ''}`.trim(),
+            amountEuro: Math.max(0, Number(item?.amountEuro ?? 0) || 0),
+          }))
+          .filter((item) => item.id && item.label)
+      : [];
+    const splitPayments = Array.isArray(paymentSummaryRaw?.splitPayments)
+      ? paymentSummaryRaw.splitPayments
+          .map((entry) => {
+            const method = `${entry?.method ?? ''}`.trim();
+            const amount = Number(entry?.amount ?? NaN);
+
+            if (!['efectivo', 'tarjeta', 'bizum'].includes(method)) {
+              return null;
+            }
+
+            if (!Number.isFinite(amount) || amount < 0) {
+              return null;
+            }
+
+            return {
+              method: method as 'efectivo' | 'tarjeta' | 'bizum',
+              amount: Number(amount.toFixed(2)),
+            };
+          })
+          .filter(
+            (
+              entry,
+            ): entry is {
+              method: 'efectivo' | 'tarjeta' | 'bizum';
+              amount: number;
+            } => !!entry,
+          )
+      : [];
+    const finalPaymentMethodRaw = `${paymentSummaryRaw?.finalPaymentMethod ?? ''}`.trim();
+    const finalPaymentMethod =
+      finalPaymentMethodRaw === 'efectivo' ||
+      finalPaymentMethodRaw === 'tarjeta' ||
+      finalPaymentMethodRaw === 'bizum'
+        ? finalPaymentMethodRaw
+        : null;
+    const finalPaymentAmountEuro = Math.max(
+      0,
+      Number(paymentSummaryRaw?.finalPaymentAmountEuro ?? 0) || 0,
+    );
+    const registeredAtIsoRaw = `${paymentSummaryRaw?.registeredAtIso ?? ''}`.trim();
+    const registeredAtIso =
+      /^\d{4}-\d{2}-\d{2}T/.test(registeredAtIsoRaw) &&
+      Number.isFinite(new Date(registeredAtIsoRaw).getTime())
+        ? registeredAtIsoRaw
+        : '';
+    const registeredByEmail = `${paymentSummaryRaw?.registeredByEmail ?? ''}`.trim().toLowerCase();
+
     const hasAnyItem = services.length > 0 || stock.length > 0;
 
     return {
@@ -1537,6 +1616,17 @@ const parseReservationMetaFromComments = (
             linkedClientId: `${parsed.linkedClientId ?? ''}`.trim() || undefined,
             services,
             stock,
+            paymentSummary: registeredAtIso
+              ? {
+                  paidItemIds,
+                  paidItems,
+                  splitPayments,
+                  finalPaymentMethod,
+                  finalPaymentAmountEuro: Number(finalPaymentAmountEuro.toFixed(2)),
+                  registeredAtIso,
+                  registeredByEmail: registeredByEmail || undefined,
+                }
+              : undefined,
           }
         : null,
     };
@@ -1737,6 +1827,10 @@ const sanitizeReservationMetaFromRequest = (
     linkedClientId: `${parsed.linkedClientId ?? fallback.linkedClientId ?? ''}`.trim() || undefined,
     services,
     stock,
+    paymentSummary:
+      parsed.paymentSummary && typeof parsed.paymentSummary === 'object'
+        ? parsed.paymentSummary
+        : undefined,
   };
 };
 
@@ -5491,6 +5585,10 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
     }
 
+    if (paymentReceived && reservation.paymentReceived) {
+      return res.status(409).json({ ok: false, error: 'La reserva ya estaba cobrada.' });
+    }
+
     const parsedMeta = parseReservationMetaFromComments(reservation.additionalComments);
     const meta = parsedMeta.meta;
     const metaSummary = meta ? getReservationMetaSummary(meta) : null;
@@ -5562,10 +5660,7 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
     const combinedPaymentAmountEuro =
       splitPayments.length > 0 ? Number(splitAmountEuro.toFixed(2)) : paymentAmountEuro;
     const signalAmountEuro = Math.max(0, Number(reservation.signalAmountEuro ?? 0));
-    const finalChargeEuro = Math.max(
-      0,
-      Number((combinedPaymentAmountEuro - signalAmountEuro).toFixed(2)),
-    );
+    const finalChargeEuro = Math.max(0, Number(combinedPaymentAmountEuro.toFixed(2)));
     const shouldAccumulate =
       paymentReceived &&
       !reservation.paymentReceived &&
@@ -5573,12 +5668,10 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
         splitPayments.length > 0);
 
     if (splitPayments.length > 0 && Math.abs(splitAmountEuro - paymentAmountEuro) > 0.01) {
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          error: 'La suma del cobro combinado debe coincidir con el total a cobrar.',
-        });
+      return res.status(400).json({
+        ok: false,
+        error: 'La suma del cobro combinado debe coincidir con el total a cobrar.',
+      });
     }
 
     if (shouldAccumulate && meta?.stock?.length) {
@@ -5596,9 +5689,103 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
           ? paymentMethod
           : undefined;
 
+    const paidItemsForMeta = selectedItems.map((item) => ({
+      id: item.id,
+      label: item.label,
+      amountEuro: Number(item.amount.toFixed(2)),
+    }));
+    const previousPaymentSummary = meta?.paymentSummary;
+    const previousFinalPaymentAmountEuro = reservation.paymentReceived
+      ? 0
+      : Math.max(0, Number(previousPaymentSummary?.finalPaymentAmountEuro ?? 0));
+    const nextFinalPaymentAmountEuro = Number(
+      (previousFinalPaymentAmountEuro + combinedPaymentAmountEuro).toFixed(2),
+    );
+    const mergedPaidItemIds = Array.from(
+      new Set([
+        ...(previousPaymentSummary?.paidItemIds ?? []),
+        ...selectedItems.map((item) => item.id),
+      ]),
+    );
+    const mergedPaidItemsById = new Map<
+      string,
+      { id: string; label: string; amountEuro: number }
+    >();
+    (previousPaymentSummary?.paidItems ?? []).forEach((item) => {
+      mergedPaidItemsById.set(item.id, {
+        id: item.id,
+        label: item.label,
+        amountEuro: Number(Math.max(0, Number(item.amountEuro ?? 0)).toFixed(2)),
+      });
+    });
+    paidItemsForMeta.forEach((item) => {
+      mergedPaidItemsById.set(item.id, item);
+    });
+    const normalizedCurrentSplit =
+      splitPayments.length > 0
+        ? splitPayments
+        : resolvedPaymentMethod
+          ? [
+              {
+                method: resolvedPaymentMethod,
+                amount: Number(combinedPaymentAmountEuro.toFixed(2)),
+              },
+            ]
+          : [];
+    const splitTotalsByMethod = new Map<'efectivo' | 'tarjeta' | 'bizum', number>();
+    [...(previousPaymentSummary?.splitPayments ?? []), ...normalizedCurrentSplit].forEach(
+      (entry) => {
+        const current = splitTotalsByMethod.get(entry.method) ?? 0;
+        splitTotalsByMethod.set(entry.method, Number((current + entry.amount).toFixed(2)));
+      },
+    );
+    const mergedSplitPayments = Array.from(splitTotalsByMethod.entries())
+      .filter(([, amount]) => amount > 0)
+      .map(([method, amount]) => ({ method, amount: Number(amount.toFixed(2)) }));
+    const nowIso = new Date().toISOString();
+    const baseMeta =
+      meta ??
+      buildDefaultReservationMeta({
+        appointmentTypeName: reservation.appointmentTypeName,
+        durationMinutes: reservation.durationMinutes,
+        requiresReservationSignal: requiresReservationSignalByName(reservation.appointmentTypeName),
+      });
+    const nextMeta: ReservationMetaPayload = {
+      ...baseMeta,
+      paymentSummary: paymentReceived
+        ? {
+            paidItemIds: mergedPaidItemIds,
+            paidItems: Array.from(mergedPaidItemsById.values()),
+            splitPayments: mergedSplitPayments,
+            finalPaymentMethod:
+              mergedSplitPayments.length === 1
+                ? mergedSplitPayments[0].method
+                : (resolvedPaymentMethod ?? previousPaymentSummary?.finalPaymentMethod ?? null),
+            finalPaymentAmountEuro: nextFinalPaymentAmountEuro,
+            registeredAtIso: nowIso,
+            registeredByEmail: session.email || undefined,
+          }
+        : undefined,
+    };
+    const nextAdditionalComments = composeReservationCommentsWithMeta(
+      parsedMeta.plainComments,
+      nextMeta,
+    );
+    const detailsSaved = await updateReservationDetailsByAdmin(reservationId, {
+      appointmentTypeName: reservation.appointmentTypeName,
+      customerName: reservation.customerName,
+      customerPhone: reservation.customerPhone,
+      customerEmail: reservation.customerEmail,
+      additionalComments: nextAdditionalComments,
+    });
+
+    if (!detailsSaved.ok) {
+      return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+    }
+
     const updated = await updateReservationPaymentReceived(reservationId, paymentReceived, {
       paymentMethod: resolvedPaymentMethod,
-      paymentAmountEuro: combinedPaymentAmountEuro,
+      paymentAmountEuro: paymentReceived ? nextFinalPaymentAmountEuro : combinedPaymentAmountEuro,
     });
 
     if (!updated.ok) {
@@ -5652,6 +5839,92 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
             performedByEmail: session.email,
           },
         );
+      }
+    }
+
+    if (paymentReceived) {
+      const normalizePhone = (value: string): string => `${value}`.replace(/\D/g, '');
+      const linkedClientId = nextMeta.linkedClientId;
+      const reservationEmail = `${reservation.customerEmail ?? ''}`.trim().toLowerCase();
+      const reservationPhone = normalizePhone(reservation.customerPhone ?? '');
+      const targetCard = linkedClientId
+        ? (clientCardsById.get(linkedClientId) ?? null)
+        : (Array.from(clientCardsById.values()).find((card) => {
+            const cardEmail = `${card.email ?? ''}`.trim().toLowerCase();
+            const cardPhone = normalizePhone(card.phone ?? '');
+
+            return (
+              (reservationEmail && cardEmail && reservationEmail === cardEmail) ||
+              (reservationPhone && cardPhone && reservationPhone === cardPhone)
+            );
+          }) ?? null);
+
+      if (targetCard) {
+        const serviceTargets = selectedItems
+          .filter((item) => item.id.startsWith('svc-'))
+          .map((item) => {
+            const index = Number(item.id.replace('svc-', ''));
+            const serviceMeta = Number.isFinite(index) ? nextMeta.services[index] : null;
+
+            return {
+              name: serviceMeta?.name ?? item.label,
+              quantity: Math.max(1, Number(serviceMeta?.quantity ?? 1)),
+            };
+          });
+
+        const splitLabel =
+          splitPayments.length > 0
+            ? splitPayments
+                .map((entry) => `${entry.amount.toFixed(2)} € ${entry.method}`)
+                .join(' + ')
+            : `${combinedPaymentAmountEuro.toFixed(2)} € ${resolvedPaymentMethod ?? 'sin método'}`;
+        const signalLabel =
+          signalAmountEuro > 0
+            ? ` · señal ${signalAmountEuro.toFixed(2)} €${reservation.signalPaymentMethod ? ` (${reservation.signalPaymentMethod})` : ''}`
+            : '';
+        const paymentNote = `Cobrada desde agenda (${reservation.dateIso} ${reservation.startTime}) · final ${splitLabel}${signalLabel}`;
+
+        const remainingTargets = new Map<string, number>();
+        serviceTargets.forEach((target) => {
+          const current = remainingTargets.get(target.name) ?? 0;
+          remainingTargets.set(target.name, current + target.quantity);
+        });
+
+        const nextTreatments = (targetCard.treatments ?? []).map((treatment) => {
+          if (treatment.paymentMethod) {
+            return treatment;
+          }
+
+          const pending = remainingTargets.get(treatment.name) ?? 0;
+
+          if (pending <= 0) {
+            return treatment;
+          }
+
+          remainingTargets.set(treatment.name, pending - 1);
+          return {
+            ...treatment,
+            paymentMethod: resolvedPaymentMethod ?? treatment.paymentMethod ?? 'efectivo',
+            priceEuro:
+              treatment.priceEuro !== undefined
+                ? Number(Math.max(0, treatment.priceEuro).toFixed(2))
+                : undefined,
+            note: treatment.note ? `${treatment.note} · ${paymentNote}` : paymentNote,
+          };
+        });
+
+        const updatedCard: ClientCardItem = {
+          ...targetCard,
+          treatments: nextTreatments,
+        };
+
+        try {
+          await saveClientCardToDb(updatedCard);
+          clientCardsById.set(updatedCard.id, updatedCard);
+          void persistClientCardsToDisk();
+        } catch (error) {
+          console.error('Error sincronizando cobro de agenda en ficha clienta:', error);
+        }
       }
     }
 
@@ -5749,6 +6022,7 @@ app.patch('/api/admin/reservas/:id/stock-line', async (req, res) => {
       linkedClientId: clientCardId || baseMeta.linkedClientId,
       services: baseMeta.services,
       stock: nextStock,
+      paymentSummary: baseMeta.paymentSummary,
     };
 
     const updatedProduct = normalizeStockProduct({
@@ -5815,6 +6089,14 @@ app.patch('/api/admin/reservas/:id/stock-line', async (req, res) => {
         maxConcurrentReservations: getMaxConcurrentReservationsForSlot(),
       },
     );
+
+    if (reservation.paymentReceived) {
+      const reopened = await updateReservationPaymentReceived(reservationId, false);
+
+      if (!reopened.ok) {
+        return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+      }
+    }
 
     return res.status(200).json({ ok: true });
   } catch (error) {

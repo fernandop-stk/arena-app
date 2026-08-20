@@ -390,7 +390,7 @@
     &__list {
       margin-top: layout.$space-2;
       display: grid;
-      gap: 0.9rem;
+      gap: 1.8rem;
     }
 
     &__reservation {
@@ -506,6 +506,12 @@
       &--rejected {
         color: #fff;
         background: #b85c5c;
+      }
+
+      &--paid {
+        color: #fff;
+        background: #1e7a4a;
+        box-shadow: 0 1px 6px rgba(30, 122, 74, 0.35);
       }
     }
 

@@ -177,9 +177,24 @@
           <div class="admin-panel--container__list">
             @for (group of cobroDayGroups(); track group.dateIso) {
               <section class="admin-panel--container__cobro-day-group">
-                <h3 class="admin-panel--container__reservation-title">{{ group.label }}</h3>
+                <h3
+                  class="admin-panel--container__reservation-title"
+                  style="
+                    margin-bottom: 0.6rem;
+                    font-size: 0.9rem;
+                    color: #8d6f60;
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                    font-weight: 800;
+                  "
+                >
+                  {{ group.label }}
+                </h3>
 
-                <div class="admin-panel--container__cobro-day-list">
+                <div
+                  class="admin-panel--container__cobro-day-list"
+                  style="display: grid; gap: 1rem"
+                >
                   @for (reservation of group.reservations; track reservation.id) {
                     <article class="admin-panel--container__reservation">
                       <div class="admin-panel--container__reservation-head">
@@ -188,14 +203,20 @@
                         </h4>
                         <span
                           class="admin-panel--container__status"
+                          [class.admin-panel--container__status--paid]="reservation.paymentReceived"
                           [class.admin-panel--container__status--accepted]="
+                            !reservation.paymentReceived &&
                             isReservationAgendaStatusAccepted(reservation)
                           "
                           [class.admin-panel--container__status--rejected]="
                             reservation.adminStatus === 'rejected'
                           "
                         >
-                          {{ getReservationAgendaStatusLabel(reservation) }}
+                          @if (reservation.paymentReceived) {
+                            Cobrada
+                          } @else {
+                            {{ getReservationAgendaStatusLabel(reservation) }}
+                          }
                         </span>
                       </div>
 
@@ -478,6 +499,7 @@
                     [class.admin-panel--container__calendar-day--outside]="!day.isCurrentMonth"
                     [class.admin-panel--container__calendar-day--today]="day.isToday"
                     [class.admin-panel--container__calendar-day--closed]="day.isClosedDay"
+                    [style.filter]="day.isPast ? 'brightness(0.72)' : null"
                     (click)="openAgendaDaySchedule(day.dateIso)"
                   >
                     <span class="admin-panel--container__agenda-day-number-wrap">
@@ -823,6 +845,7 @@
                     <header
                       class="admin-panel--container__agenda-week-column-head"
                       [class.admin-panel--container__agenda-week-column-head--today]="day.isToday"
+                      [style.filter]="day.isPast ? 'brightness(0.78)' : null"
                     >
                       <div class="admin-panel--container__agenda-week-day-head-copy">
                         <p class="admin-panel--container__agenda-week-day-label">{{ day.label }}</p>
@@ -856,9 +879,12 @@
                               (drop)="onAgendaReservationDropToDateTime($event, day.dateIso, slot)"
                               (click)="
                                 getAgendaReservationsByDateAndStartTime(day.dateIso, slot)
-                                  .length === 0 && handleAgendaEmptySlotClick(day.dateIso, slot)
+                                  .length === 0 &&
+                                  !day.isPast &&
+                                  handleAgendaEmptySlotClick(day.dateIso, slot)
                               "
-                              style="cursor: pointer"
+                              [style.cursor]="day.isPast ? 'default' : 'pointer'"
+                              [style.filter]="day.isPast ? 'brightness(0.75)' : null"
                             >
                               @if (
                                 getAgendaAlertsByDateAndStartTime(day.dateIso, slot).length > 0
@@ -3428,8 +3454,22 @@
                                     getReservationDisplaySignalAmount(reservation) | number: '1.2-2'
                                   }}
                                   € · Pago final:
-                                  {{ reservation.paymentAmountEuro | number: '1.2-2' }} € ·
-                                  Pendiente:
+                                  {{ reservation.paymentAmountEuro | number: '1.2-2' }} €
+                                  @if (reservation.paymentSummary?.splitPayments?.length) {
+                                    (
+                                    @for (
+                                      split of reservation.paymentSummary!.splitPayments;
+                                      track split.method + '-' + split.amount + '-' + $index
+                                    ) {
+                                      {{ getPaymentMethodDisplayLabel(split.method) }}
+                                      {{ split.amount | number: '1.2-2' }} €
+                                      @if (!$last) {
+                                        +
+                                      }
+                                    }
+                                    )
+                                  }
+                                  · Pendiente:
                                   {{
                                     getReservationDisplayRemainingAmount(reservation)
                                       | number: '1.2-2'
@@ -3462,37 +3502,54 @@
                             track group.dateIso
                           ) {
                             <section class="admin-panel--container__cobro-day-group">
-                              <h4 class="admin-panel--container__reservation-title">
+                              <h4
+                                class="admin-panel--container__reservation-title"
+                                style="
+                                  margin-bottom: 0.6rem;
+                                  font-size: 0.9rem;
+                                  color: #8d6f60;
+                                  text-transform: uppercase;
+                                  letter-spacing: 0.05em;
+                                  font-weight: 800;
+                                "
+                              >
                                 {{ group.label }}
                               </h4>
 
-                              <div class="admin-panel--container__cobro-day-list">
+                              <div
+                                class="admin-panel--container__cobro-day-list"
+                                style="display: grid; gap: 1rem"
+                              >
                                 @for (reservation of group.reservations; track reservation.id) {
                                   <article class="admin-panel--container__reservation">
                                     <div class="admin-panel--container__reservation-head">
                                       <h5 class="admin-panel--container__reservation-title">
                                         {{ reservation.appointmentTypeName }}
                                       </h5>
-                                      <span class="admin-panel--container__status">{{
-                                        getClientReservationPaymentBadgeLabel(reservation)
-                                      }}</span>
+                                      <span
+                                        class="admin-panel--container__status"
+                                        [class.admin-panel--container__status--paid]="
+                                          reservation.paymentReceived
+                                        "
+                                        >{{
+                                          getClientReservationPaymentBadgeLabel(reservation)
+                                        }}</span
+                                      >
                                     </div>
 
                                     <p class="admin-panel--container__reservation-text">
                                       {{ reservation.startTime }} - {{ reservation.endTime }} ·
                                       {{ getClientReservationStatusBadgeLabel(reservation) }}
                                     </p>
-                                    <p class="admin-panel--container__reservation-text">
-                                      {{ getClientReservationPaymentBadgeLabel(reservation) }}
-                                    </p>
 
                                     <div class="admin-panel--container__reservation-actions">
                                       <button
                                         type="button"
                                         class="admin-panel--container__action-button admin-panel--container__action-button--accept"
+                                        [disabled]="reservation.paymentReceived"
                                         (click)="markPaymentReceivedDirect(reservation.id)"
                                       >
-                                        Cobrar
+                                        {{ reservation.paymentReceived ? 'Ya cobrada' : 'Cobrar' }}
                                       </button>
                                       <button
                                         type="button"
@@ -6224,14 +6281,12 @@
           </p>
 
           <p class="admin-panel--container__reservation-text">
-            Señal:
-            @if (reservation.signalAmountEuro > 0) {
-              Recibida {{ reservation.signalAmountEuro | number: '1.2-2' }} €
-              @if (reservation.signalPaymentMethod) {
-                ({{ reservation.signalPaymentMethod }})
-              }
+            Cobro final:
+            @if (reservation.paymentReceived) {
+              <strong>{{ reservation.paymentAmountEuro | number: '1.2-2' }} €</strong>
+              · {{ getReservationPaymentBreakdownLabel(reservation) }}
             } @else {
-              Sin registrar
+              Pendiente de cobro
             }
           </p>
 
@@ -6240,7 +6295,9 @@
               Conceptos del cobro
             </p>
             @for (line of getReservationPaymentLineItems(reservation); track line.id) {
+              @let lineIsPaid = isReservationPaymentLinePaid(reservation, line.id);
               <label
+                [style.opacity]="lineIsPaid ? 0.72 : 1"
                 style="
                   display: flex;
                   align-items: center;
@@ -6252,75 +6309,63 @@
                 <input
                   type="checkbox"
                   [checked]="isReservationPaymentLineSelected(line.id)"
+                  [disabled]="reservation.paymentReceived || lineIsPaid"
                   (change)="toggleReservationPaymentLine(line.id)"
                   style="width: 1rem; height: 1rem; accent-color: #c97b63; cursor: pointer"
                 />
                 <span style="flex: 1; color: #5a433a; font-size: 0.9rem; font-weight: 600">{{
                   line.label
                 }}</span>
+                @if (lineIsPaid) {
+                  <span
+                    style="
+                      padding: 0.12rem 0.38rem;
+                      border-radius: 999px;
+                      background: rgba(124, 186, 133, 0.14);
+                      color: #2f6a48;
+                      font-size: 0.68rem;
+                      font-weight: 700;
+                      letter-spacing: 0.02em;
+                    "
+                  >
+                    Ya cobrado
+                  </span>
+                }
                 <strong>{{ line.amountEuro | number: '1.2-2' }} €</strong>
               </label>
             }
           </div>
 
           <div class="admin-panel--container__cobro-summary" style="margin: 1rem 0">
-            <p class="admin-panel--container__reservation-text">
-              Subtotal seleccionado:
-              {{ getReservationPaymentSelectedLinesTotal(reservation) | number: '1.2-2' }} €
-            </p>
-            <p class="admin-panel--container__reservation-text">
-              Señal descontada: {{ getReservationSignalAmount(reservation) | number: '1.2-2' }} €
-            </p>
-            <p class="admin-panel--container__reservation-text">
+            @if (getReservationSignalAmount(reservation) > 0) {
+              <p class="admin-panel--container__reservation-text">
+                Subtotal seleccionado:
+                {{ getReservationPaymentSelectedLinesTotal(reservation) | number: '1.2-2' }} €
+              </p>
+              <p class="admin-panel--container__reservation-text">
+                Señal descontada: {{ getReservationSignalAmount(reservation) | number: '1.2-2' }} €
+              </p>
+            }
+            <p
+              class="admin-panel--container__reservation-text"
+              style="margin-top: 0.6rem; font-size: 1.05rem"
+            >
               Total a cobrar:
-              <strong>{{ paymentMethodReservationPriceEuro() | number: '1.2-2' }} €</strong>
+              <strong style="font-size: 1.2rem; color: #5a433a">
+                {{ paymentMethodReservationPriceEuro() | number: '1.2-2' }} €
+              </strong>
             </p>
-          </div>
-
-          <div
-            class="admin-panel--container__block-form admin-panel--container__block-form--compact"
-          >
-            <p class="admin-panel--container__hint">Añadir producto al cobro</p>
-            @if (getAvailableSellableStockProducts().length === 0) {
-              <p class="admin-panel--container__hint">No hay productos vendibles con stock.</p>
-            } @else {
-              <label class="admin-panel--container__label">
-                Producto
-                <select
-                  class="admin-panel--container__input"
-                  [value]="cobroReservationStockProductId()"
-                  (change)="onCobroReservationStockProductChange($event)"
-                >
-                  <option value="">Selecciona producto</option>
-                  @for (product of getAvailableSellableStockProducts(); track product.id) {
-                    <option [value]="product.id">
-                      {{ product.productName }} · {{ product.quantity }} uds ·
-                      {{ product.price | number: '1.2-2' }} €
-                    </option>
+            @if (paymentMethodReservationPriceEuro() > 0) {
+              <p style="margin-top: 0.2rem; font-size: 0.82rem; color: #8d6f60">
+                @for (line of getReservationPaymentLineItems(reservation); track line.id) {
+                  @if (!isReservationPaymentLinePaid(reservation, line.id)) {
+                    <span>{{ line.label }}</span>
+                    @if (!$last) {
+                      <span style="margin: 0 0.2rem">·</span>
+                    }
                   }
-                </select>
-              </label>
-              <label class="admin-panel--container__label">
-                Unidades
-                <input
-                  class="admin-panel--container__input"
-                  type="number"
-                  min="1"
-                  [value]="cobroReservationStockUnits()"
-                  (input)="onCobroReservationStockUnitsInput($event)"
-                />
-              </label>
-              <button
-                type="button"
-                class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
-                [disabled]="cobroReservationStockLoading() || !cobroReservationStockProductId()"
-                (click)="addStockToPaymentReservation()"
-              >
-                {{ cobroReservationStockLoading() ? 'Añadiendo...' : 'Añadir producto' }}
-              </button>
-              @if (cobroReservationStockError()) {
-                <p class="admin-panel--container__error">{{ cobroReservationStockError() }}</p>
-              }
+                }
+              </p>
             }
           </div>
         }
@@ -6339,6 +6384,7 @@
                   <button
                     type="button"
                     class="admin-panel--container__button admin-panel--container__button--secondary admin-panel--container__button--compact"
+                    [disabled]="paymentMethodReservation()?.paymentReceived"
                     (click)="removePaymentSplitEntry($index)"
                   >
                     Quitar
@@ -6352,6 +6398,7 @@
             <button
               type="button"
               class="admin-panel--container__payment-method-btn"
+              [disabled]="paymentMethodReservation()?.paymentReceived"
               [class.admin-panel--container__payment-method-btn--active]="
                 paymentSplitEditorMethod() === 'efectivo'
               "
@@ -6362,6 +6409,7 @@
             <button
               type="button"
               class="admin-panel--container__payment-method-btn"
+              [disabled]="paymentMethodReservation()?.paymentReceived"
               [class.admin-panel--container__payment-method-btn--active]="
                 paymentSplitEditorMethod() === 'tarjeta'
               "
@@ -6372,6 +6420,7 @@
             <button
               type="button"
               class="admin-panel--container__payment-method-btn"
+              [disabled]="paymentMethodReservation()?.paymentReceived"
               [class.admin-panel--container__payment-method-btn--active]="
                 paymentSplitEditorMethod() === 'bizum'
               "
@@ -6388,6 +6437,7 @@
               type="number"
               min="0"
               step="0.01"
+              [disabled]="paymentMethodReservation()?.paymentReceived"
               [value]="paymentSplitCustomAmount()"
               (input)="onPaymentSplitAmountInput($any($event.target).value)"
             />
@@ -6396,7 +6446,9 @@
           <button
             type="button"
             class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact"
-            [disabled]="paymentSplitRemainingEuro() <= 0"
+            [disabled]="
+              paymentMethodReservation()?.paymentReceived || paymentSplitRemainingEuro() <= 0
+            "
             (click)="addPaymentSplitEntry()"
           >
             Añadir al cobro
@@ -6419,13 +6471,20 @@
             type="button"
             class="admin-panel--container__button admin-panel--container__button--primary"
             [disabled]="
+              paymentMethodReservation()?.paymentReceived ||
               (paymentSplitEntries().length === 0 && !selectedPaymentMethod()) ||
               actionLoadingId() !== '' ||
               (paymentSplitEntries().length > 0 && !isPaymentSplitBalanced())
             "
             (click)="confirmPaymentMethod()"
           >
-            {{ actionLoadingId() !== '' ? 'Guardando...' : 'Confirmar' }}
+            {{
+              paymentMethodReservation()?.paymentReceived
+                ? 'Ya cobrada'
+                : actionLoadingId() !== ''
+                  ? 'Guardando...'
+                  : 'Confirmar'
+            }}
           </button>
         </div>
       </section>

@@ -103,6 +103,24 @@ interface AdminReservationItem {
   linkedClientId?: string;
   reservationServiceItems?: ReservationServiceLineItem[];
   reservationStockItems?: ReservationStockLineItem[];
+  paymentSummary?: ReservationPaymentSummary;
+}
+
+interface ReservationPaymentSummary {
+  paidItemIds: string[];
+  paidItems: Array<{
+    id: string;
+    label: string;
+    amountEuro: number;
+  }>;
+  splitPayments: Array<{
+    method: 'efectivo' | 'tarjeta' | 'bizum';
+    amount: number;
+  }>;
+  finalPaymentMethod: 'efectivo' | 'tarjeta' | 'bizum' | null;
+  finalPaymentAmountEuro: number;
+  registeredAtIso: string;
+  registeredByEmail?: string;
 }
 
 interface ReservationServiceLineItem {
@@ -160,6 +178,7 @@ interface AgendaMonthCalendarDay {
   dayNumber: number;
   isCurrentMonth: boolean;
   isToday: boolean;
+  isPast: boolean;
   reservationCount: number;
   isClosedDay: boolean;
 }
@@ -169,6 +188,7 @@ interface AgendaWeekDay {
   label: string;
   shortLabel: string;
   isToday: boolean;
+  isPast: boolean;
   reservationCount: number;
   alertCount: number;
   pendingAlertCount: number;
@@ -821,12 +841,24 @@ export class AdminPanelComponent implements OnDestroy {
       return 0;
     }
 
-    const selectedIds = this.selectedReservationPaymentLineIds();
     const lines = this.getReservationPaymentLineItems(reservation);
+    const signalAmount = Math.max(0, Number(reservation.signalAmountEuro ?? 0));
+    const previousFinalPayment = Math.max(
+      0,
+      Number(reservation.paymentSummary?.finalPaymentAmountEuro ?? 0),
+    );
+    const hasPreviousFinalPayment = !reservation.paymentReceived && previousFinalPayment > 0;
+
+    if (hasPreviousFinalPayment) {
+      // Charge only the delta: new total minus what was already paid and the signal
+      const allLinesTotal = lines.reduce((acc, line) => acc + line.amountEuro, 0);
+      return Math.max(0, Number((allLinesTotal - previousFinalPayment - signalAmount).toFixed(2)));
+    }
+
+    const selectedIds = this.selectedReservationPaymentLineIds();
     const totalPrice = lines
       .filter((line) => selectedIds.includes(line.id))
       .reduce((acc, line) => acc + line.amountEuro, 0);
-    const signalAmount = Math.max(0, Number(reservation.signalAmountEuro ?? 0));
     return Math.max(0, Number((totalPrice - signalAmount).toFixed(2)));
   });
   protected readonly paymentSplitTotalEuro = computed(() =>
@@ -1398,6 +1430,7 @@ export class AdminPanelComponent implements OnDestroy {
         label: date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' }),
         shortLabel: date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' }),
         isToday: dateIso === todayIso,
+        isPast: dateIso < todayIso,
         reservationCount: reservationsByDate.get(dateIso) ?? 0,
         alertCount: alertsByDate.get(dateIso)?.total ?? 0,
         pendingAlertCount: alertsByDate.get(dateIso)?.pending ?? 0,
@@ -1481,6 +1514,7 @@ export class AdminPanelComponent implements OnDestroy {
         dayNumber: dayDate.getDate(),
         isCurrentMonth: dayDate >= monthStart && dayDate <= monthEnd,
         isToday: dateIso === todayIso,
+        isPast: dateIso < todayIso,
         reservationCount: reservationsByDate.get(dateIso) ?? 0,
         isClosedDay: this.isAgendaRecurringClosedDay(dateIso),
       });
@@ -3218,9 +3252,67 @@ export class AdminPanelComponent implements OnDestroy {
   protected getReservationDisplayRemainingAmount(reservation: AdminReservationItem): number {
     const total = this.getReservationDisplayTotalAmount(reservation);
     const signal = this.getReservationDisplaySignalAmount(reservation);
-    const finalPaid = Math.max(0, Number(reservation.paymentAmountEuro ?? 0));
+    const finalPaid = reservation.paymentReceived
+      ? Math.max(0, Number(reservation.paymentAmountEuro ?? 0))
+      : Math.max(
+          0,
+          Number(
+            reservation.paymentSummary?.finalPaymentAmountEuro ??
+              reservation.paymentAmountEuro ??
+              0,
+          ),
+        );
 
     return Math.max(0, Number((total - signal - finalPaid).toFixed(2)));
+  }
+
+  private buildReservationPaymentLineSignature(line: {
+    label: string;
+    amountEuro: number;
+  }): string {
+    return `${line.label.trim().toLowerCase()}|${Number(line.amountEuro).toFixed(2)}`;
+  }
+
+  protected getDefaultReservationPaymentLineIds(reservation: AdminReservationItem): string[] {
+    const availableLines = this.getReservationPaymentLineItems(reservation);
+    const availableLineIds = availableLines.map((item) => item.id);
+    const paidIds = new Set(reservation.paymentSummary?.paidItemIds ?? []);
+    const paidSignatureCounts = new Map<string, number>();
+
+    (reservation.paymentSummary?.paidItems ?? []).forEach((item) => {
+      const signature = this.buildReservationPaymentLineSignature(item);
+      const current = paidSignatureCounts.get(signature) ?? 0;
+      paidSignatureCounts.set(signature, current + 1);
+    });
+
+    const persistedLineIds: string[] = [];
+    availableLines.forEach((line) => {
+      if (paidIds.has(line.id)) {
+        persistedLineIds.push(line.id);
+        return;
+      }
+
+      const signature = this.buildReservationPaymentLineSignature(line);
+      const pendingMatches = paidSignatureCounts.get(signature) ?? 0;
+
+      if (pendingMatches > 0) {
+        persistedLineIds.push(line.id);
+        paidSignatureCounts.set(signature, pendingMatches - 1);
+      }
+    });
+
+    if (reservation.paymentReceived) {
+      return persistedLineIds.length > 0 ? persistedLineIds : availableLineIds;
+    }
+
+    if (persistedLineIds.length > 0) {
+      const unpaidLineIds = availableLineIds.filter((lineId) => !persistedLineIds.includes(lineId));
+      if (unpaidLineIds.length > 0) {
+        return unpaidLineIds;
+      }
+    }
+
+    return availableLineIds;
   }
 
   protected setEmployeeManagementTab(tab: EmployeeManagementTab): void {
@@ -6003,12 +6095,39 @@ export class AdminPanelComponent implements OnDestroy {
     }
 
     const amount = Math.max(0, Number(reservation.paymentAmountEuro ?? 0));
-    const methodLabel = reservation.paymentMethod
-      ? ` · ${this.getPaymentMethodDisplayLabel(reservation.paymentMethod)}`
-      : '';
+    const split = reservation.paymentSummary?.splitPayments ?? [];
+    const methodLabel = split.length
+      ? ` · ${split
+          .map(
+            (entry) =>
+              `${this.getPaymentMethodDisplayLabel(entry.method)} ${entry.amount.toFixed(2)} €`,
+          )
+          .join(' + ')}`
+      : reservation.paymentMethod
+        ? ` · ${this.getPaymentMethodDisplayLabel(reservation.paymentMethod)}`
+        : '';
     const amountLabel = amount > 0 ? ` · ${amount.toFixed(2)} €` : '';
 
     return `Recibido${methodLabel}${amountLabel}`;
+  }
+
+  protected getReservationPaymentBreakdownLabel(reservation: AdminReservationItem): string {
+    const split = reservation.paymentSummary?.splitPayments ?? [];
+
+    if (split.length > 0) {
+      return split
+        .map(
+          (entry) =>
+            `${this.getPaymentMethodDisplayLabel(entry.method)} ${entry.amount.toFixed(2)} €`,
+        )
+        .join(' + ');
+    }
+
+    if (reservation.paymentMethod) {
+      return this.getPaymentMethodDisplayLabel(reservation.paymentMethod);
+    }
+
+    return 'Método no especificado';
   }
 
   protected getClientReservationPaymentBadgeLabel(reservation: AdminReservationItem): string {
@@ -6268,20 +6387,35 @@ export class AdminPanelComponent implements OnDestroy {
     const reservation = this.reservations().find((item) => item.id === reservationId) ?? null;
 
     if (reservation) {
-      const defaultLineIds = this.getReservationPaymentLineItems(reservation).map(
-        (item) => item.id,
-      );
+      const defaultLineIds = this.getDefaultReservationPaymentLineIds(reservation);
       this.selectedReservationPaymentLineIds.set(defaultLineIds);
       this.cobroReservationStockProductId.set(
         this.getAvailableSellableStockProducts()[0]?.id ?? '',
       );
       this.cobroReservationStockUnits.set('1');
-      const defaultAmount = this.paymentMethodReservationPriceEuro();
+
+      const hasPreviousPaymentHistory =
+        Number(reservation.paymentSummary?.finalPaymentAmountEuro ?? 0) > 0;
+      const shouldRestorePreviousSplit = reservation.paymentReceived && hasPreviousPaymentHistory;
+      const persistedSplit = (reservation.paymentSummary?.splitPayments ?? []).map((entry) => ({
+        method: entry.method,
+        amount: Number(entry.amount.toFixed(2)),
+      }));
+
+      this.paymentSplitEntries.set(shouldRestorePreviousSplit ? persistedSplit : []);
+      const defaultMethod =
+        shouldRestorePreviousSplit && persistedSplit[0]
+          ? persistedSplit[0].method
+          : (reservation.paymentMethod ?? 'efectivo');
+      this.selectedPaymentMethod.set(defaultMethod);
+      this.paymentSplitEditorMethod.set(defaultMethod);
+      const defaultAmount = this.paymentSplitRemainingEuro();
       this.paymentSplitCustomAmount.set(defaultAmount > 0 ? defaultAmount.toFixed(2) : '');
     } else {
       this.selectedReservationPaymentLineIds.set([]);
       this.cobroReservationStockProductId.set('');
       this.cobroReservationStockUnits.set('1');
+      this.paymentSplitEntries.set([]);
       this.paymentSplitCustomAmount.set('');
     }
 
@@ -6333,7 +6467,22 @@ export class AdminPanelComponent implements OnDestroy {
       .reduce((acc, line) => acc + line.amountEuro, 0);
   }
 
+  protected isReservationPaymentLinePaid(
+    reservation: AdminReservationItem,
+    lineId: string,
+  ): boolean {
+    return (reservation.paymentSummary?.paidItemIds ?? []).includes(lineId);
+  }
+
   protected getReservationSignalAmount(reservation: AdminReservationItem): number {
+    const hasPreviousFinalPayment =
+      !reservation.paymentReceived &&
+      Math.max(0, Number(reservation.paymentSummary?.finalPaymentAmountEuro ?? 0)) > 0;
+
+    if (hasPreviousFinalPayment) {
+      return 0;
+    }
+
     return Math.max(0, Number(reservation.signalAmountEuro ?? 0));
   }
 
@@ -6342,6 +6491,10 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected toggleReservationPaymentLine(lineId: string): void {
+    if (this.paymentMethodReservation()?.paymentReceived) {
+      return;
+    }
+
     const current = this.selectedReservationPaymentLineIds();
 
     if (current.includes(lineId)) {
@@ -6433,6 +6586,8 @@ export class AdminPanelComponent implements OnDestroy {
               return {
                 ...item,
                 reservationStockItems: stockItems,
+                paymentReceived: false,
+                paymentMethod: null,
               };
             }),
           );
@@ -6440,11 +6595,17 @@ export class AdminPanelComponent implements OnDestroy {
           const refreshed = this.reservations().find((item) => item.id === reservation.id);
           if (refreshed) {
             this.selectedReservationPaymentLineIds.set(
-              this.getReservationPaymentLineItems(refreshed).map((line) => line.id),
+              this.getDefaultReservationPaymentLineIds(refreshed),
             );
+            this.paymentSplitEntries.set([]);
+            this.selectedPaymentMethod.set('efectivo');
+            this.paymentSplitEditorMethod.set('efectivo');
+            const pendingAmount = this.paymentMethodReservationPriceEuro();
+            this.paymentSplitCustomAmount.set(pendingAmount > 0 ? pendingAmount.toFixed(2) : '');
           }
 
           this.loadStockProducts();
+          this.loadReservations();
           this.cobroReservationStockProductId.set(
             this.getAvailableSellableStockProducts()[0]?.id ?? '',
           );
@@ -6488,6 +6649,11 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected addPaymentSplitEntry(): void {
+    if (this.paymentMethodReservation()?.paymentReceived) {
+      this.actionError.set('La cita ya está cobrada.');
+      return;
+    }
+
     const remaining = this.paymentSplitRemainingEuro();
     const method = this.paymentSplitEditorMethod();
     const raw = this.paymentSplitCustomAmount().replace(',', '.').trim();
@@ -6515,6 +6681,10 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected removePaymentSplitEntry(index: number): void {
+    if (this.paymentMethodReservation()?.paymentReceived) {
+      return;
+    }
+
     this.paymentSplitEntries.set(
       this.paymentSplitEntries().filter((_, itemIndex) => itemIndex !== index),
     );
@@ -6535,6 +6705,7 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected confirmPaymentMethod(): void {
     const reservationId = this.paymentMethodReservationId();
+    const reservation = this.paymentMethodReservation();
     const paymentMethod = this.selectedPaymentMethod();
     const priceEuro = Number(this.paymentMethodReservationPriceEuro().toFixed(2));
     const selectedLineIds = this.selectedReservationPaymentLineIds();
@@ -6542,6 +6713,11 @@ export class AdminPanelComponent implements OnDestroy {
     const splitTotal = splitEntries.reduce((acc, entry) => acc + entry.amount, 0);
 
     if (!reservationId) {
+      return;
+    }
+
+    if (reservation?.paymentReceived) {
+      this.actionError.set('Esta cita ya está cobrada.');
       return;
     }
 
@@ -9413,6 +9589,12 @@ export class AdminPanelComponent implements OnDestroy {
     }
 
     const resolvedDateIso = dateIso || this.agendaSelectedDateIso() || this.getTodayIso();
+
+    if (this.isAgendaDateInPast(resolvedDateIso)) {
+      this.actionError.set('No se pueden crear reservas en días pasados.');
+      return;
+    }
+
     const defaultPack = this.agendaPackOptions[0];
     const currentUserEmail = this.ownerEmail().trim().toLowerCase();
     const canAssignReservation = this.canAssignReservationToWorker();
@@ -9691,6 +9873,12 @@ export class AdminPanelComponent implements OnDestroy {
         : [selectedServiceLine];
     const stockLines = this.agendaManualReserveStockLines();
     const dateIso = this.agendaManualReserveDateIso().trim();
+
+    if (this.isAgendaDateInPast(dateIso)) {
+      this.agendaManualReserveError.set('No se pueden crear reservas en días pasados.');
+      return;
+    }
+
     const time = this.normalizeAgendaTimeValue(this.agendaManualReserveTime().trim());
     const selectedClient =
       this.agendaManualReserveClientMode() === 'existing'
@@ -9779,6 +9967,10 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected handleAgendaEmptySlotClick(dateIso: string, slot: string, workerEmail = ''): void {
+    if (this.isAgendaDateInPast(dateIso)) {
+      return;
+    }
+
     if (this.canCreateAgendaManualReservation()) {
       this.openAgendaManualReserveModal(dateIso, slot, workerEmail);
       return;
@@ -9826,6 +10018,10 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected getAgendaClosedSlotLabel(dateIso: string, time: string): string {
+    if (this.isAgendaDateInPast(dateIso)) {
+      return 'Día pasado';
+    }
+
     if (this.isAgendaRecurringClosedDay(dateIso)) {
       return 'Cerrado';
     }
@@ -9835,6 +10031,14 @@ export class AdminPanelComponent implements OnDestroy {
     }
 
     return 'Sin citas';
+  }
+
+  protected isAgendaDateInPast(dateIso: string): boolean {
+    if (!dateIso || !/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
+      return false;
+    }
+
+    return dateIso < this.getTodayIso();
   }
 
   protected confirmQuickReserve(): void {
@@ -10126,6 +10330,7 @@ export class AdminPanelComponent implements OnDestroy {
     linkedClientId?: string;
     services: ReservationServiceLineItem[];
     stock: ReservationStockLineItem[];
+    paymentSummary?: ReservationPaymentSummary;
   } {
     const marker = '[arena-meta]';
     const raw = `${additionalCommentsRaw ?? ''}`;
@@ -10155,6 +10360,15 @@ export class AdminPanelComponent implements OnDestroy {
         linkedClientId?: string;
         services?: ReservationServiceLineItem[];
         stock?: ReservationStockLineItem[];
+        paymentSummary?: {
+          paidItemIds?: unknown[];
+          paidItems?: unknown[];
+          splitPayments?: unknown[];
+          finalPaymentMethod?: unknown;
+          finalPaymentAmountEuro?: unknown;
+          registeredAtIso?: unknown;
+          registeredByEmail?: unknown;
+        };
       };
 
       const services = Array.isArray(parsed.services)
@@ -10183,11 +10397,96 @@ export class AdminPanelComponent implements OnDestroy {
             .filter((item) => item.productId && item.productName)
         : [];
 
+      const paymentSummaryRaw =
+        parsed.paymentSummary && typeof parsed.paymentSummary === 'object'
+          ? parsed.paymentSummary
+          : null;
+      const paidItemIds = Array.isArray(paymentSummaryRaw?.paidItemIds)
+        ? paymentSummaryRaw.paidItemIds.map((item) => `${item ?? ''}`.trim()).filter(Boolean)
+        : [];
+      const paidItems = Array.isArray(paymentSummaryRaw?.paidItems)
+        ? paymentSummaryRaw.paidItems
+            .map((item) => {
+              const candidate = item as {
+                id?: unknown;
+                label?: unknown;
+                amountEuro?: unknown;
+              };
+              return {
+                id: `${candidate?.id ?? ''}`.trim(),
+                label: `${candidate?.label ?? ''}`.trim(),
+                amountEuro: Math.max(0, Number(candidate?.amountEuro ?? 0) || 0),
+              };
+            })
+            .filter((item) => item.id && item.label)
+        : [];
+      const splitPayments = Array.isArray(paymentSummaryRaw?.splitPayments)
+        ? paymentSummaryRaw.splitPayments
+            .map((entry) => {
+              const candidate = entry as { method?: unknown; amount?: unknown };
+              const method = `${candidate?.method ?? ''}`.trim();
+              const amount = Number(candidate?.amount ?? NaN);
+
+              if (!['efectivo', 'tarjeta', 'bizum'].includes(method)) {
+                return null;
+              }
+
+              if (!Number.isFinite(amount) || amount < 0) {
+                return null;
+              }
+
+              return {
+                method: method as 'efectivo' | 'tarjeta' | 'bizum',
+                amount: Number(amount.toFixed(2)),
+              };
+            })
+            .filter(
+              (
+                entry,
+              ): entry is {
+                method: 'efectivo' | 'tarjeta' | 'bizum';
+                amount: number;
+              } => !!entry,
+            )
+        : [];
+      const finalPaymentMethodRaw = `${paymentSummaryRaw?.finalPaymentMethod ?? ''}`.trim();
+      const finalPaymentMethod: 'efectivo' | 'tarjeta' | 'bizum' | null =
+        finalPaymentMethodRaw === 'efectivo' ||
+        finalPaymentMethodRaw === 'tarjeta' ||
+        finalPaymentMethodRaw === 'bizum'
+          ? (finalPaymentMethodRaw as 'efectivo' | 'tarjeta' | 'bizum')
+          : null;
+      const finalPaymentAmountEuro = Math.max(
+        0,
+        Number(paymentSummaryRaw?.finalPaymentAmountEuro ?? 0) || 0,
+      );
+      const registeredAtIsoRaw = `${paymentSummaryRaw?.registeredAtIso ?? ''}`.trim();
+      const registeredAtIso =
+        /^\d{4}-\d{2}-\d{2}T/.test(registeredAtIsoRaw) &&
+        Number.isFinite(new Date(registeredAtIsoRaw).getTime())
+          ? registeredAtIsoRaw
+          : '';
+      const registeredByEmail = `${paymentSummaryRaw?.registeredByEmail ?? ''}`
+        .trim()
+        .toLowerCase();
+      const paymentSummary = registeredAtIso
+        ? {
+            paidItemIds,
+            paidItems,
+            splitPayments,
+            finalPaymentMethod,
+            finalPaymentAmountEuro: Number(finalPaymentAmountEuro.toFixed(2)),
+            registeredAtIso,
+            registeredByEmail: registeredByEmail || undefined,
+          }
+        : undefined;
+
       return {
         plainComments,
         linkedClientId: `${parsed.linkedClientId ?? ''}`.trim() || undefined,
         services,
         stock,
+        paymentSummary,
       };
     } catch {
       return {
@@ -10241,6 +10540,7 @@ export class AdminPanelComponent implements OnDestroy {
       linkedClientId: parsedMeta.linkedClientId,
       reservationServiceItems: effectiveServiceItems,
       reservationStockItems: stockItems,
+      paymentSummary: parsedMeta.paymentSummary,
       signalAmountEuro: Math.max(0, Number(reservation.signalAmountEuro ?? 0)),
       signalPaymentMethod:
         reservation.signalPaymentMethod === 'efectivo' ||
