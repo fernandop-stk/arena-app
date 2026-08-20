@@ -6325,16 +6325,14 @@
           </div>
         }
 
-        <div class="admin-panel--container__payment-split-panel">
+        <div class="admin-panel--container__block-form admin-panel--container__block-form--compact">
           <p class="admin-panel--container__hint">Cobro combinado</p>
 
           @if (paymentSplitEntries().length > 0) {
-            <div
-              class="admin-panel--container__payment-line-list admin-panel--container__payment-split-list"
-            >
+            <div class="admin-panel--container__payment-line-list">
               @for (entry of paymentSplitEntries(); track $index) {
-                <div class="admin-panel--container__payment-split-entry">
-                  <span class="admin-panel--container__payment-split-entry-label">
+                <div class="admin-panel--container__modal-item-header">
+                  <span class="admin-panel--container__payment-treatment-name">
                     {{ getReservationPaymentMethodLabel(entry.method) }} ·
                     {{ entry.amount | number: '1.2-2' }} €
                   </span>
@@ -6350,9 +6348,7 @@
             </div>
           }
 
-          <div
-            class="admin-panel--container__payment-method-grid admin-panel--container__payment-split-selector"
-          >
+          <div class="admin-panel--container__payment-method-grid">
             <button
               type="button"
               class="admin-panel--container__payment-method-btn"
@@ -6406,9 +6402,7 @@
             Añadir al cobro
           </button>
 
-          <p
-            class="admin-panel--container__reservation-text admin-panel--container__payment-split-remaining"
-          >
+          <p class="admin-panel--container__reservation-text">
             Restante: <strong>{{ paymentSplitRemainingEuro() | number: '1.2-2' }} €</strong>
           </p>
         </div>

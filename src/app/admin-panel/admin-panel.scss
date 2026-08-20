@@ -1971,53 +1971,10 @@
       font-size: 0.95rem;
     }
 
-    &__payment-split-panel {
-      margin: 1rem 0 0.75rem;
-      display: grid;
-      gap: 0.5rem;
-      padding: 0.6rem;
-      border: 1px solid rgba(201, 123, 99, 0.2);
-      border-radius: layout.$radius-md;
-      background: rgba(201, 123, 99, 0.04);
-    }
-    &__payment-split-list {
-      display: grid;
-      gap: 0.35rem;
-      margin: 0;
-    }
-    &__payment-split-entry {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.5rem;
-      padding: 0.25rem 0.4rem;
-      border: 1px solid rgba(201, 123, 99, 0.22);
-      border-radius: 0.65rem;
-      background: rgba(255, 255, 255, 0.7);
-    }
-    &__payment-split-entry-label {
-      flex: 1;
-      min-width: 0;
-      color: colors.$color-primary-dark;
-      font-size: 0.88rem;
-      font-weight: 700;
-      line-height: 1.3;
-    }
-    &__payment-split-selector {
-      margin: 0;
-    }
-
     &__payment-method-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 0.6rem;
-    }
-
-    &__payment-split-remaining {
-      margin: 0;
-      padding-top: 0.25rem;
-      border-top: 1px solid rgba(201, 123, 99, 0.15);
-      color: colors.$color-text-soft;
     }
 
     &__payment-method-btn {
