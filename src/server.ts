@@ -5,7 +5,7 @@ import {
   isMainModule,
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
-import express, { type Response } from 'express';
+import express, { type Request, type Response } from 'express';
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { writeFileSync } from 'node:fs';
@@ -76,6 +76,7 @@ const app = express();
 const serverStartedAtIso = new Date().toISOString();
 let notificationsDegradedMode = false;
 const notificationStreamClients = new Set<Response>();
+let runtimeDetectedPublicBaseUrl: string | null = null;
 
 const broadcastNotificationsRefresh = (): void => {
   const payload = `data: ${JSON.stringify({ updatedAtIso: new Date().toISOString() })}\n\n`;
@@ -239,6 +240,7 @@ const normalizeBaseUrl = (value: string | undefined | null): string | null => {
 
 const getPublicAppBaseUrl = (): string => {
   const candidates = [
+    runtimeDetectedPublicBaseUrl,
     process.env['APP_BASE_URL'],
     process.env['PUBLIC_APP_URL'],
     process.env['RENDER_EXTERNAL_URL'],
@@ -267,6 +269,38 @@ const getPublicAppBaseUrl = (): string => {
 
   const port = process.env['PORT']?.trim() || '4000';
   return `http://localhost:${port}`;
+};
+
+const rememberPublicBaseUrlFromRequest = (req: Request): void => {
+  const forwardedProtoRaw = `${req.headers['x-forwarded-proto'] ?? ''}`
+    .split(',')[0]
+    ?.trim()
+    .toLowerCase();
+  const protocol =
+    forwardedProtoRaw === 'http' || forwardedProtoRaw === 'https'
+      ? forwardedProtoRaw
+      : req.protocol === 'https'
+        ? 'https'
+        : 'http';
+  const forwardedHost = `${req.headers['x-forwarded-host'] ?? ''}`.split(',')[0]?.trim();
+  const host = `${req.headers.host ?? ''}`.trim();
+
+  const candidateOrigins = [forwardedHost, host]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => normalizeBaseUrl(`${protocol}://${value}`))
+    .filter((value): value is string => Boolean(value));
+
+  const publicOrigin = candidateOrigins.find((origin) => {
+    try {
+      return !isLocalHostname(new URL(origin).hostname);
+    } catch {
+      return false;
+    }
+  });
+
+  if (publicOrigin) {
+    runtimeDetectedPublicBaseUrl = publicOrigin;
+  }
 };
 
 function resolveEmailRecipient(email: string): string {
@@ -2910,6 +2944,10 @@ const buildAdminMagicLinkEmailHtml = (magicLink: string): string => {
 };
 
 app.use(express.json());
+app.use((req, _res, next) => {
+  rememberPublicBaseUrlFromRequest(req);
+  next();
+});
 
 app.post('/api/auth/register', (req, res) => {
   seedAuthUsers();
@@ -3909,7 +3947,7 @@ app.post('/api/admin/request-link', async (req, res) => {
 
   const expiresAt = Date.now() + 15 * 60 * 1000;
   const token = createAdminMagicToken(email, expiresAt);
-  const baseUrl = process.env['APP_BASE_URL'] ?? `http://localhost:${process.env['PORT'] || 4000}`;
+  const baseUrl = getPublicAppBaseUrl();
   const magicLink = `${baseUrl}/api/admin/verify?token=${encodeURIComponent(token)}`;
 
   try {
