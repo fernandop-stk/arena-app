@@ -1,27 +1,18 @@
 <section class="reserva-calendario">
-  <div class="reserva-calendario--container">
-    <!-- Header -->
-    <header class="reserva-calendario--container__hero">
-      <h1 class="reserva-calendario--container__title">{{ title }}</h1>
-      <p class="reserva-calendario--container__description">{{ description }}</p>
-      <p class="reserva-calendario--container__schedule-note">
-        Horario de citas: lunes cerrado · martes a viernes 10:00 a 18:00 con cierre de 14:00 a 15:00
-        · sábados 09:00 a 13:00.
-      </p>
-    </header>
+    <div class="reserva-calendario--container">
+        <!-- Header -->
+        <header class="reserva-calendario--container__hero">
+            <h1 class="reserva-calendario--container__title">{{ title }}</h1>
+            <p class="reserva-calendario--container__description">{{ description }}</p>
+            <p class="reserva-calendario--container__schedule-note">
+                Horario de citas: lunes cerrado · martes a viernes 10:00 a 18:00 con cierre de 14:00 a 15:00 · sábados 09:00 a 13:00.
+            </p>
+        </header>
 
-    <!-- Step progress indicator -->
-    <nav class="reserva-calendario--container__steps" aria-label="Pasos de reserva">
-      <button
-        type="button"
-        class="reserva-calendario--container__step"
-        [class.reserva-calendario--container__step--active]="currentStep() === 1"
-        [class.reserva-calendario--container__step--done]="currentStep() > 1"
-        [class.reserva-calendario--container__step--future]="currentStep() < 1"
-        [disabled]="currentStep() <= 1"
-        (click)="goToStep(1)"
-        aria-label="Paso 1: Servicio"
-      >
+        <!-- Step progress indicator -->
+        <nav class="reserva-calendario--container__steps" aria-label="Pasos de reserva">
+            <button type="button" class="reserva-calendario--container__step" [class.reserva-calendario--container__step--active]="currentStep() === 1" [class.reserva-calendario--container__step--done]="currentStep() > 1" [class.reserva-calendario--container__step--future]="currentStep() < 1"
+                [disabled]="currentStep() <= 1" (click)="goToStep(1)" aria-label="Paso 1: Servicio">
         <span class="reserva-calendario--container__step-bubble">
           @if (currentStep() > 1) {
             ✓
@@ -32,18 +23,10 @@
         <span class="reserva-calendario--container__step-label">Servicio</span>
       </button>
 
-      <div class="reserva-calendario--container__step-line" aria-hidden="true"></div>
+            <div class="reserva-calendario--container__step-line" aria-hidden="true"></div>
 
-      <button
-        type="button"
-        class="reserva-calendario--container__step"
-        [class.reserva-calendario--container__step--active]="currentStep() === 2"
-        [class.reserva-calendario--container__step--done]="currentStep() > 2"
-        [class.reserva-calendario--container__step--future]="currentStep() < 2"
-        [disabled]="currentStep() < 2"
-        (click)="goToStep(2)"
-        aria-label="Paso 2: Día"
-      >
+            <button type="button" class="reserva-calendario--container__step" [class.reserva-calendario--container__step--active]="currentStep() === 2" [class.reserva-calendario--container__step--done]="currentStep() > 2" [class.reserva-calendario--container__step--future]="currentStep() < 2"
+                [disabled]="currentStep() < 2" (click)="goToStep(2)" aria-label="Paso 2: Día">
         <span class="reserva-calendario--container__step-bubble">
           @if (currentStep() > 2) {
             ✓
@@ -54,86 +37,52 @@
         <span class="reserva-calendario--container__step-label">Día</span>
       </button>
 
-      <div class="reserva-calendario--container__step-line" aria-hidden="true"></div>
+            <div class="reserva-calendario--container__step-line" aria-hidden="true"></div>
 
-      <button
-        type="button"
-        class="reserva-calendario--container__step"
-        [class.reserva-calendario--container__step--active]="currentStep() === 3"
-        [class.reserva-calendario--container__step--done]="currentStep() > 3"
-        [class.reserva-calendario--container__step--future]="currentStep() < 3"
-        [disabled]="currentStep() < 3"
-        (click)="goToStep(3)"
-        aria-label="Paso 3: Hora"
-      >
+            <button type="button" class="reserva-calendario--container__step" [class.reserva-calendario--container__step--active]="currentStep() === 3" [class.reserva-calendario--container__step--done]="currentStep() > 3" [class.reserva-calendario--container__step--future]="currentStep() < 3"
+                [disabled]="currentStep() < 3" (click)="goToStep(3)" aria-label="Paso 3: Hora">
         <span class="reserva-calendario--container__step-bubble">3</span>
         <span class="reserva-calendario--container__step-label">Hora</span>
       </button>
-    </nav>
+        </nav>
 
-    <!-- Selection chips summary (visible from step 2 onwards) -->
-    @if (currentStep() > 1) {
-      <div class="reserva-calendario--container__chips">
-        <button
-          type="button"
-          class="reserva-calendario--container__chip"
-          (click)="goToStep(1)"
-          title="Cambiar servicio"
-        >
+        <!-- Selection chips summary (visible from step 2 onwards) -->
+        @if (currentStep() > 1) {
+        <div class="reserva-calendario--container__chips">
+            <button type="button" class="reserva-calendario--container__chip" (click)="goToStep(1)" title="Cambiar servicio">
           {{ getSelectedTypeName() }}
           <span class="reserva-calendario--container__chip-x" aria-hidden="true">✕</span>
-        </button>
-
-        @if (currentStep() > 2 && selectedDateIso()) {
-          <span class="reserva-calendario--container__chip-sep" aria-hidden="true">›</span>
-          <span
-            class="reserva-calendario--container__chip reserva-calendario--container__chip--duration"
-          >
+        </button> @if (currentStep() > 2 && selectedDateIso()) {
+            <span class="reserva-calendario--container__chip-sep" aria-hidden="true">›</span>
+            <span class="reserva-calendario--container__chip reserva-calendario--container__chip--duration">
             {{ getSelectedDurationLabel() }}
           </span>
-          <span class="reserva-calendario--container__chip-sep" aria-hidden="true">›</span>
-          <button
-            type="button"
-            class="reserva-calendario--container__chip"
-            (click)="goToStep(2)"
-            title="Cambiar día"
-          >
+            <span class="reserva-calendario--container__chip-sep" aria-hidden="true">›</span>
+            <button type="button" class="reserva-calendario--container__chip" (click)="goToStep(2)" title="Cambiar día">
             {{ getSelectedDayLabel() }}
             <span class="reserva-calendario--container__chip-x" aria-hidden="true">✕</span>
-          </button>
-        }
-
-        @if (selectedTime()) {
-          <span class="reserva-calendario--container__chip-sep" aria-hidden="true">›</span>
-          <span
-            class="reserva-calendario--container__chip reserva-calendario--container__chip--time"
-          >
+          </button> } @if (selectedTime()) {
+            <span class="reserva-calendario--container__chip-sep" aria-hidden="true">›</span>
+            <span class="reserva-calendario--container__chip reserva-calendario--container__chip--time">
             {{ selectedTime() }}
-          </span>
-        }
-      </div>
-    }
-
-    <!-- Step 1: Choose service type -->
-    @if (currentStep() === 1) {
-      <div class="reserva-calendario--container__step-content">
-        <h2 class="reserva-calendario--container__subtitle">Elige el servicio</h2>
-        <div class="reserva-calendario--container__types">
-          @for (type of appointmentTypes; track type.id) {
-            <button
-              type="button"
-              class="reserva-calendario--container__type-button"
-              [class.reserva-calendario--container__type-button--selected]="
-                selectedTypeId() === type.id
-              "
-              (click)="onTypeChange(type.id)"
-            >
-              <span class="reserva-calendario--container__type-name">{{ type.nombre }}</span>
-            </button>
-          }
+          </span> }
         </div>
+        }
 
-        <label class="reserva-calendario--container__duration" for="durationMinutes">
+        <!-- Step 1: Choose service type -->
+        @if (currentStep() === 1) {
+        <div class="reserva-calendario--container__step-content">
+            <h2 class="reserva-calendario--container__subtitle">Elige el servicio</h2>
+            <div class="reserva-calendario--container__types">
+                @for (type of appointmentTypes; track type.id) {
+                <button type="button" class="reserva-calendario--container__type-button" [class.reserva-calendario--container__type-button--selected]="
+                selectedTypeId() === type.id
+              " (click)="onTypeChange(type.id)">
+              <span class="reserva-calendario--container__type-name">{{ type.nombre }}</span>
+            </button> }
+            </div>
+
+            <label class="reserva-calendario--container__duration" for="durationMinutes">
           <span class="reserva-calendario--container__duration-label">Duración estimada</span>
           <div class="reserva-calendario--container__duration-select-wrap">
             <select
@@ -166,70 +115,49 @@
                 (input)="onCustomDurationInput($event)"
                 placeholder="Ej: 46 o 78"
               />
-            </label>
-          }
-          <small class="reserva-calendario--container__duration-help">
+            </label> }
+            <small class="reserva-calendario--container__duration-help">
             Por defecto se usa la duración del pack, pero puedes ajustarla manualmente.
           </small>
-        </label>
-      </div>
-    }
+            </label>
+        </div>
+        }
 
-    <!-- Step 2: Choose day -->
-    @if (currentStep() === 2) {
-      <div class="reserva-calendario--container__step-content">
-        <h2 class="reserva-calendario--container__subtitle">Elige el día</h2>
+        <!-- Step 2: Choose day -->
+        @if (currentStep() === 2) {
+        <div class="reserva-calendario--container__step-content">
+            <h2 class="reserva-calendario--container__subtitle">Elige el día</h2>
 
-        @if (isLoadingDays()) {
-          <div class="reserva-calendario--container__loading" role="status" aria-live="polite">
-            <span class="reserva-calendario--container__spinner" aria-hidden="true"></span>
-            <p class="reserva-calendario--container__loading-text">Cargando disponibilidad...</p>
-          </div>
-        } @else {
-          <div class="reserva-calendario--container__legend">
-            <span class="reserva-calendario--container__legend-dot"></span>
-            <span class="reserva-calendario--container__legend-text">Rojo = día completo</span>
-          </div>
-          <div class="reserva-calendario--container__month-nav" aria-label="Navegación por meses">
-            <button
-              type="button"
-              class="reserva-calendario--container__month-arrow"
-              [disabled]="!canGoToPreviousMonth()"
-              (click)="goToPreviousMonth()"
-              aria-label="Mes anterior"
-            >
+            @if (isLoadingDays()) {
+            <div class="reserva-calendario--container__loading" role="status" aria-live="polite">
+                <span class="reserva-calendario--container__spinner" aria-hidden="true"></span>
+                <p class="reserva-calendario--container__loading-text">Cargando disponibilidad...</p>
+            </div>
+            } @else {
+            <div class="reserva-calendario--container__legend">
+                <span class="reserva-calendario--container__legend-dot"></span>
+                <span class="reserva-calendario--container__legend-text">Rojo = día completo</span>
+            </div>
+            <div class="reserva-calendario--container__month-nav" aria-label="Navegación por meses">
+                <button type="button" class="reserva-calendario--container__month-arrow" [disabled]="!canGoToPreviousMonth()" (click)="goToPreviousMonth()" aria-label="Mes anterior">
               ←
             </button>
-            <p class="reserva-calendario--container__month-label">{{ visibleMonthLabel() }}</p>
-            <button
-              type="button"
-              class="reserva-calendario--container__month-arrow"
-              (click)="goToNextMonth()"
-              aria-label="Mes siguiente"
-            >
+                <p class="reserva-calendario--container__month-label">{{ visibleMonthLabel() }}</p>
+                <button type="button" class="reserva-calendario--container__month-arrow" (click)="goToNextMonth()" aria-label="Mes siguiente">
               →
             </button>
-          </div>
-          <div class="reserva-calendario--container__calendar-weekdays" aria-hidden="true">
-            @for (weekday of ['L', 'M', 'X', 'J', 'V', 'S', 'D']; track weekday) {
-              <span>{{ weekday }}</span>
-            }
-          </div>
-          <div class="reserva-calendario--container__calendar">
-            @for (cell of monthGridCells(); track cell.key) {
-              @if (cell.day) {
-                <button
-                  type="button"
-                  class="reserva-calendario--container__day"
-                  [class.reserva-calendario--container__day--selected]="
+            </div>
+            <div class="reserva-calendario--container__calendar-weekdays" aria-hidden="true">
+                @for (weekday of ['L', 'M', 'X', 'J', 'V', 'S', 'D']; track weekday) {
+                <span>{{ weekday }}</span> }
+            </div>
+            <div class="reserva-calendario--container__calendar">
+                @for (cell of monthGridCells(); track cell.key) { @if (cell.day) {
+                <button type="button" class="reserva-calendario--container__day" [class.reserva-calendario--container__day--selected]="
                     selectedDateIso() === cell.day.iso
-                  "
-                  [class.reserva-calendario--container__day--disabled]="
+                  " [class.reserva-calendario--container__day--disabled]="
                     isDayUnavailable(cell.day.iso)
-                  "
-                  [disabled]="isDayUnavailable(cell.day.iso)"
-                  (click)="onSelectDay(cell.day.iso)"
-                >
+                  " (click)="onSelectDay(cell.day.iso)">
                   <span class="reserva-calendario--container__day-name">{{
                     cell.day.dayName
                   }}</span>
@@ -244,57 +172,41 @@
                       {{ getDayStatusLabel(cell.day.iso) }}
                     </span>
                   }
-                </button>
-              } @else {
-                <div
-                  class="reserva-calendario--container__day reserva-calendario--container__day--ghost"
-                ></div>
-              }
+                </button> } @else {
+                <div class="reserva-calendario--container__day reserva-calendario--container__day--ghost"></div>
+                } }
+            </div>
             }
-          </div>
-        }
 
-        <div class="reserva-calendario--container__nav">
-          <button type="button" class="reserva-calendario--container__back" (click)="goToStep(1)">
+            <div class="reserva-calendario--container__nav">
+                <button type="button" class="reserva-calendario--container__back" (click)="goToStep(1)">
             ← Volver
           </button>
+            </div>
         </div>
-      </div>
-    }
+        }
 
-    <!-- Step 3: Choose time -->
-    @if (currentStep() === 3) {
-      <div class="reserva-calendario--container__step-content">
-        <h2 class="reserva-calendario--container__subtitle">Elige la hora</h2>
+        <!-- Step 3: Choose time -->
+        @if (currentStep() === 3) {
+        <div class="reserva-calendario--container__step-content">
+            <h2 class="reserva-calendario--container__subtitle">Elige la hora</h2>
 
-        <div
-          class="reserva-calendario--container__duration-inline"
-          role="group"
-          aria-label="Duración de la cita"
-        >
-          <span class="reserva-calendario--container__duration-inline-label">Duración</span>
-          <div class="reserva-calendario--container__duration-select-wrap">
-            <select
-              id="durationMinutesStep3"
-              class="reserva-calendario--container__duration-select reserva-calendario--container__duration-select--inline"
-              [value]="getDurationSelectValue()"
-              (change)="onDurationChange($event)"
-            >
+            <div class="reserva-calendario--container__duration-inline" role="group" aria-label="Duración de la cita">
+                <span class="reserva-calendario--container__duration-inline-label">Duración</span>
+                <div class="reserva-calendario--container__duration-select-wrap">
+                    <select id="durationMinutesStep3" class="reserva-calendario--container__duration-select reserva-calendario--container__duration-select--inline" [value]="getDurationSelectValue()" (change)="onDurationChange($event)">
               <option value="default">{{ getDefaultDurationLabel() }}</option>
               <option value="custom">Personalizado</option>
               @for (duration of durationOptions; track duration) {
                 <option [value]="duration">{{ getDurationOptionLabel(duration) }}</option>
               }
             </select>
-            <span class="reserva-calendario--container__duration-caret" aria-hidden="true">⌄</span>
-          </div>
-        </div>
+                    <span class="reserva-calendario--container__duration-caret" aria-hidden="true">⌄</span>
+                </div>
+            </div>
 
-        @if (isCustomDurationSelected()) {
-          <label
-            class="reserva-calendario--container__custom-duration reserva-calendario--container__custom-duration--inline"
-            for="customDurationInputStep3"
-          >
+            @if (isCustomDurationSelected()) {
+            <label class="reserva-calendario--container__custom-duration reserva-calendario--container__custom-duration--inline" for="customDurationInputStep3">
             <span>Minutos personalizados</span>
             <input
               id="customDurationInputStep3"
@@ -306,107 +218,75 @@
               (input)="onCustomDurationInput($event)"
               placeholder="Ej: 46 o 78"
             />
-          </label>
-        }
-
-        @if (isLoadingSlots()) {
-          <div class="reserva-calendario--container__loading" role="status" aria-live="polite">
-            <span class="reserva-calendario--container__spinner" aria-hidden="true"></span>
-            <p class="reserva-calendario--container__loading-text">
-              Cargando horarios disponibles...
-            </p>
-          </div>
-        } @else if (slotsError()) {
-          <p class="reserva-calendario--container__hint">{{ slotsError() }}</p>
-        } @else if (timeSlots().length === 0 || !hasAnyAvailableSlot()) {
-          <p class="reserva-calendario--container__hint">
-            No hay horas disponibles para ese día y servicio.
-          </p>
-        } @else {
-          @if (alertError()) {
-            <div class="reserva-calendario--container__alert-error">
-              <p>{{ alertError() }}</p>
+          </label> } @if (isLoadingSlots()) {
+            <div class="reserva-calendario--container__loading" role="status" aria-live="polite">
+                <span class="reserva-calendario--container__spinner" aria-hidden="true"></span>
+                <p class="reserva-calendario--container__loading-text">
+                    Cargando horarios disponibles...
+                </p>
             </div>
-          }
-
-          <div class="reserva-calendario--container__times">
-            @for (slot of timeSlots(); track slot.time) {
-              <div class="reserva-calendario--container__time-item">
-                <button
-                  type="button"
-                  class="reserva-calendario--container__time"
-                  [class.reserva-calendario--container__time--selected]="
-                    selectedTime() === slot.time
-                  "
-                  [class.reserva-calendario--container__time--disabled]="slot.disabled"
-                  [disabled]="slot.disabled"
-                  (click)="onSelectTime(slot.time, slot.disabled)"
-                >
-                  {{ slot.time }}
-                </button>
-                @if (slot.disabled) {
-                  <p class="reserva-calendario--container__time-status">
-                    {{ slot.statusLabel }}
-                  </p>
-                  @if (slot.reason === 'occupied') {
-                    <button
-                      type="button"
-                      class="reserva-calendario--container__alert-btn"
-                      [disabled]="isCreatingAlert()"
-                      (click)="createAlert(slot.time)"
-                      title="Recibirás una notificación por email si se libera esta hora"
-                    >
-                      {{
-                        isCreatingAlert() && alertSlotTime() === slot.time
-                          ? '⏳ Creando...'
-                          : '🔔 Crear alerta'
-                      }}
-                    </button>
-                  }
-                }
-              </div>
+            } @else if (slotsError()) {
+            <p class="reserva-calendario--container__hint">{{ slotsError() }}</p>
+            } @else if (timeSlots().length === 0 || !hasAnyAvailableSlot()) {
+            <p class="reserva-calendario--container__hint">
+                No hay horas disponibles para ese día y servicio.
+            </p>
+            } @else { @if (alertError()) {
+            <div class="reserva-calendario--container__alert-error">
+                <p>{{ alertError() }}</p>
+            </div>
             }
-          </div>
-        }
 
-        <div class="reserva-calendario--container__nav">
-          <button type="button" class="reserva-calendario--container__back" (click)="goToStep(2)">
+            <div class="reserva-calendario--container__times">
+                @for (slot of timeSlots(); track slot.time) {
+                <div class="reserva-calendario--container__time-item">
+                    <button type="button" class="reserva-calendario--container__time" [class.reserva-calendario--container__time--selected]="
+                    selectedTime() === slot.time
+                  " [class.reserva-calendario--container__time--disabled]="slot.disabled" [disabled]="slot.disabled" (click)="onSelectTime(slot.time, slot.disabled)">
+                  {{ slot.time }}
+                </button> @if (slot.disabled) {
+                    <p class="reserva-calendario--container__time-status">
+                        {{ slot.statusLabel }}
+                    </p>
+                    @if (slot.reason === 'occupied') {
+                    <button type="button" class="reserva-calendario--container__alert-btn" (click)="joinWaitlist(slot.time)" title="Apúntate a la lista de espera para este día y hora">
+                      📋 Apuntarme a lista de espera
+                    </button> } }
+                </div>
+                }
+            </div>
+            }
+
+            <div class="reserva-calendario--container__nav">
+                <button type="button" class="reserva-calendario--container__back" (click)="goToStep(2)">
             ← Volver
           </button>
-          <button
-            type="button"
-            class="reserva-calendario--container__continue reserva-calendario--container__continue--primary"
-            [disabled]="!canContinue()"
-            (click)="goToCustomerForm()"
-          >
+                <button type="button" class="reserva-calendario--container__continue reserva-calendario--container__continue--primary" [disabled]="!canContinue()" (click)="goToCustomerForm()">
             {{ continueLabel }}
           </button>
+            </div>
         </div>
-      </div>
-    }
+        }
 
-    <section class="reserva-calendario--container__client-cta" aria-label="Área cliente">
-      <div>
-        <p class="reserva-calendario--container__client-cta-kicker">Área cliente</p>
-        <h2 class="reserva-calendario--container__client-cta-title">
-          Guarda el control de tus packs
-        </h2>
-        <p class="reserva-calendario--container__client-cta-text">
-          Después de reservar, podrás entrar en tu área de cliente para consultar tu historial.
-        </p>
-      </div>
+        <section class="reserva-calendario--container__client-cta" aria-label="Área cliente">
+            <div>
+                <p class="reserva-calendario--container__client-cta-kicker">Área cliente</p>
+                <h2 class="reserva-calendario--container__client-cta-title">
+                    Guarda el control de tus packs
+                </h2>
+                <p class="reserva-calendario--container__client-cta-text">
+                    Después de reservar, podrás entrar en tu área de cliente para consultar tu historial.
+                </p>
+            </div>
 
-      <div class="reserva-calendario--container__client-cta-actions">
-        <a class="reserva-calendario--container__client-cta-button" routerLink="/cliente/area">
+            <div class="reserva-calendario--container__client-cta-actions">
+                <a class="reserva-calendario--container__client-cta-button" routerLink="/cliente/area">
           Ver mi historial
         </a>
-        <a
-          class="reserva-calendario--container__client-cta-button reserva-calendario--container__client-cta-button--ghost"
-          routerLink="/cliente/registro"
-        >
+                <a class="reserva-calendario--container__client-cta-button reserva-calendario--container__client-cta-button--ghost" routerLink="/cliente/registro">
           Crear cuenta
         </a>
-      </div>
-    </section>
-  </div>
+            </div>
+        </section>
+    </div>
 </section>

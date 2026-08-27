@@ -695,11 +695,22 @@ const getBookedSlotsFromMemory = (dateIso: string): Set<string> =>
 const normalizeWorkerEmail = (value: string | null | undefined): string =>
   `${value ?? ''}`.trim().toLowerCase();
 
-const getSlotUsageCountsFromMemory = (dateIso: string): Map<string, number> => {
+const getSlotUsageCountsFromMemory = (
+  dateIso: string,
+  workerEmail?: string,
+): Map<string, number> => {
   const counts = new Map<string, number>();
+  const normalizedWorker = workerEmail ? normalizeWorkerEmail(workerEmail) : '';
 
   Array.from(memoryReservations.values()).forEach((reservation) => {
     if (reservation.dateIso !== dateIso || reservation.adminStatus === 'rejected') {
+      return;
+    }
+
+    if (
+      normalizedWorker &&
+      normalizeWorkerEmail(reservation.createdByEmail) !== normalizedWorker
+    ) {
       return;
     }
 
@@ -1005,6 +1016,7 @@ export const getAvailableSlotsForDate = async (
   dateIso: string,
   durationMinutes: number,
   maxConcurrentReservations = 1,
+  workerEmail?: string,
 ): Promise<string[]> => {
   seedMockReservationsInMemory();
   await cleanupExpiredProvisionalReservations();
@@ -1019,7 +1031,10 @@ export const getAvailableSlotsForDate = async (
     return [];
   }
 
-  const maxConcurrent = Math.max(1, Math.floor(maxConcurrentReservations));
+  const normalizedWorkerEmail = workerEmail ? normalizeWorkerEmail(workerEmail) : '';
+  const maxConcurrent = normalizedWorkerEmail
+    ? 1
+    : Math.max(1, Math.floor(maxConcurrentReservations));
   let bookedCountBySlot = new Map<string, number>();
   let blockedSet: Set<string>;
 
@@ -1027,16 +1042,28 @@ export const getAvailableSlotsForDate = async (
     try {
       await ensureSchema();
       const db = getPool();
-      const booked = await db.query<{ slot_time: string; usage_count: string }>(
-        `
-        SELECT rs.slot_time, COUNT(*)::text AS usage_count
-        FROM reservation_slots rs
-        INNER JOIN reservations r ON r.id = rs.reservation_id
-        WHERE rs.date_iso = $1 AND r.admin_status <> 'rejected'
-        GROUP BY rs.slot_time
-        `,
-        [dateIso],
-      );
+      const booked = normalizedWorkerEmail
+        ? await db.query<{ slot_time: string; usage_count: string }>(
+            `
+            SELECT rs.slot_time, COUNT(*)::text AS usage_count
+            FROM reservation_slots rs
+            INNER JOIN reservations r ON r.id = rs.reservation_id
+            WHERE rs.date_iso = $1 AND r.admin_status <> 'rejected'
+              AND LOWER(COALESCE(r.created_by_email, '')) = $2
+            GROUP BY rs.slot_time
+            `,
+            [dateIso, normalizedWorkerEmail],
+          )
+        : await db.query<{ slot_time: string; usage_count: string }>(
+            `
+            SELECT rs.slot_time, COUNT(*)::text AS usage_count
+            FROM reservation_slots rs
+            INNER JOIN reservations r ON r.id = rs.reservation_id
+            WHERE rs.date_iso = $1 AND r.admin_status <> 'rejected'
+            GROUP BY rs.slot_time
+            `,
+            [dateIso],
+          );
 
       bookedCountBySlot = booked.rows.reduce((acc, row) => {
         acc.set(row.slot_time, Number(row.usage_count) || 0);
@@ -1053,11 +1080,11 @@ export const getAvailableSlotsForDate = async (
         throw error;
       }
 
-      bookedCountBySlot = getSlotUsageCountsFromMemory(dateIso);
+      bookedCountBySlot = getSlotUsageCountsFromMemory(dateIso, normalizedWorkerEmail);
       blockedSet = getEffectiveBlockedSlotsFromMemory(dateIso);
     }
   } else {
-    bookedCountBySlot = getSlotUsageCountsFromMemory(dateIso);
+    bookedCountBySlot = getSlotUsageCountsFromMemory(dateIso, normalizedWorkerEmail);
     blockedSet = getEffectiveBlockedSlotsFromMemory(dateIso);
   }
 
@@ -1277,7 +1304,108 @@ export const createReservationWithSlots = async (
   }
 };
 
+export const WAITLIST_COMMENT_MARKER = '[LISTA_DE_ESPERA]';
+
+export const createWaitlistReservation = async (
+  payload: ReservaPersistRequest,
+): Promise<{ ok: true; reservationId: string } | { ok: false; error: string }> => {
+  seedMockReservationsInMemory();
+
+  const startMinutes = toMinutes(payload.time);
+
+  if (Number.isNaN(startMinutes) || payload.durationMinutes <= 0) {
+    return { ok: false, error: 'invalid-time' };
+  }
+
+  const plainComments = `${payload.additionalComments ?? ''}`.trim();
+  const additionalComments = (plainComments ? `${WAITLIST_COMMENT_MARKER} ${plainComments}` : WAITLIST_COMMENT_MARKER)
+    .slice(0, 8000);
+  const endTime = toTime(startMinutes + payload.durationMinutes);
+  const reservationId = `waitlist-${payload.dateIso}-${startMinutes}-${Date.now()}`;
+
+  if (!shouldUseDatabase()) {
+    const createdAtIso = new Date().toISOString();
+
+    memoryReservations.set(reservationId, {
+      id: reservationId,
+      dateIso: payload.dateIso,
+      startTime: payload.time,
+      endTime,
+      durationMinutes: payload.durationMinutes,
+      customerEmail: payload.customerEmail,
+      customerName: payload.customerName,
+      customerPhone: payload.customerPhone,
+      appointmentTypeName: payload.appointmentTypeName,
+      additionalComments,
+      signalAmountEuro: 0,
+      signalPaymentMethod: null,
+      signalReceivedAtIso: null,
+      signalRegisteredByEmail: null,
+      paymentReceived: false,
+      paymentMethod: null,
+      paymentAmountEuro: 0,
+      adminStatus: 'pending',
+      clientConfirmationStatus: 'pending',
+      clientConfirmationReminderSentAtIso: null,
+      createdByEmail: null,
+      createdAtIso,
+      expiresAtIso: null,
+      slots: [],
+    });
+
+    rebuildMemoryReservationSlotIndex();
+    saveMemoryToFile();
+    return { ok: true, reservationId };
+  }
+
+  try {
+    await ensureSchema();
+    const db = getPool();
+
+    await db.query(
+      `
+      INSERT INTO reservations (
+        id, date_iso, start_time, end_time, duration_minutes,
+        customer_email, customer_name, customer_phone, appointment_type_name,
+        additional_comments, signal_amount_euro, signal_payment_method,
+        signal_received_at, signal_registered_by_email, client_confirmation_status,
+        created_by_email, expires_at
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+      `,
+      [
+        reservationId,
+        payload.dateIso,
+        payload.time,
+        endTime,
+        payload.durationMinutes,
+        payload.customerEmail,
+        payload.customerName,
+        payload.customerPhone,
+        payload.appointmentTypeName,
+        additionalComments,
+        0,
+        null,
+        null,
+        null,
+        'pending',
+        null,
+        null,
+      ],
+    );
+
+    return { ok: true, reservationId };
+  } catch (error) {
+    if (enableRuntimeMemoryMode(error)) {
+      return createWaitlistReservation(payload);
+    }
+
+    throw error;
+  }
+};
+
 export const deleteReservationById = async (reservationId: string): Promise<void> => {
+
   seedMockReservationsInMemory();
 
   if (!shouldUseDatabase()) {

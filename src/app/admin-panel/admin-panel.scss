@@ -1,3498 +1,2989 @@
 @use '../../styles/variables/colors' as colors;
 @use '../../styles/variables/layout' as layout;
 @use '../../styles/variables/typography' as typography;
-
 .admin-panel {
-  min-height: 100vh;
-  padding: layout.$space-3 layout.$space-2;
-
-  &--container {
-    max-width: layout.$max-content-width;
-    margin: 0 auto;
-    background: colors.$color-surface;
-    border: 1px solid colors.$color-border;
-    border-radius: layout.$radius-lg;
-    box-shadow: layout.$shadow-card;
-    padding: layout.$space-3;
-
-    &__hint {
-      margin-top: 1rem;
-      color: colors.$color-text-soft;
-      font-weight: 600;
-      position: relative;
-      top: 5px;
-    }
-
-    &__hero {
-      margin-bottom: layout.$space-2;
-      display: grid;
-      grid-template-columns: 1fr auto;
-      align-items: center;
-      gap: layout.$space-3;
-      justify-items: start;
-    }
-
-    &__hero-left {
-      text-align: left;
-    }
-
-    &__hero-right {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-    }
-
-    &__title {
-      margin: 0;
-      color: colors.$color-text;
-      font-family: typography.$font-heading;
-      font-size: 1.6rem;
-
-      &--static {
-        color: colors.$color-primary-dark;
-      }
-    }
-
-    &__description {
-      margin: layout.$space-1 0 0;
-      color: colors.$color-text-soft;
-
-      &--hero {
-        max-width: 36rem;
-      }
-    }
-
-    &__module-grid {
-      margin-top: layout.$space-2;
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: layout.$space-2;
-
-      @media (max-width: 840px) {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    &__module-card {
-      border: 1px solid rgba(201, 123, 99, 0.3);
-      border-radius: layout.$radius-lg;
-      background:
-        linear-gradient(rgba(252, 243, 234, 0.82), rgba(252, 243, 234, 0.9)),
-        url('/assets/branding/espuma.jpeg') center / cover no-repeat;
-      min-height: 11.5rem;
-      padding: layout.$space-3;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 0.35rem;
-      text-align: center;
-      cursor: pointer;
-      transition:
-        transform 0.2s ease,
-        box-shadow 0.2s ease,
-        border-color 0.2s ease;
-
-      &:hover {
-        transform: translateY(-2px);
-        border-color: rgba(201, 123, 99, 0.5);
-        box-shadow: 0 10px 20px rgba(121, 92, 69, 0.12);
-      }
-
-      &--disabled {
-        opacity: 0.55;
-        filter: grayscale(0.3);
-        transform: none;
-        cursor: not-allowed;
-
-        &:hover {
-          transform: none;
-          border-color: rgba(201, 123, 99, 0.3);
-          box-shadow: none;
-        }
-      }
-    }
-
-    &__module-card-icon {
-      width: 4rem;
-      height: 4rem;
-      border-radius: 999px;
-      display: grid;
-      place-items: center;
-      font-size: 1.9rem;
-      background: linear-gradient(135deg, #c97b63 0%, #d9a441 100%);
-      color: #fff;
-    }
-
-    &__module-card-title {
-      margin: 0;
-      color: colors.$color-primary-dark;
-      font-family: typography.$font-heading;
-      font-size: clamp(1.35rem, 3.1vw, 1.9rem);
-      font-weight: 900;
-      line-height: 1.15;
-      letter-spacing: 0.01em;
-      text-wrap: balance;
-    }
-
-    &__subtitle {
-      margin: layout.$space-2 0 0;
-      color: colors.$color-text;
-      font-family: typography.$font-heading;
-      font-size: 1.1rem;
-    }
-
-    &__tabs {
-      margin-top: layout.$space-2;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-    }
-
-    &__tab {
-      min-height: 2.2rem;
-      border-radius: 999px;
-      border: 1px solid colors.$color-border;
-      background: colors.$color-surface;
-      color: colors.$color-primary-dark;
-      padding: 0 0.85rem;
-      font-size: 0.8rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition:
-        background 0.2s ease,
-        border-color 0.2s ease,
-        box-shadow 0.2s ease;
-
-      &:hover:not(.admin-panel--container__tab--active) {
-        border-color: rgba(201, 123, 99, 0.5);
-        background: rgba(201, 123, 99, 0.08);
-      }
-
-      &--active {
-        background: colors.$color-primary;
-        border: none;
-        color: #fff;
-        box-shadow: 0 4px 12px rgba(201, 123, 99, 0.25);
-      }
-
-      &--disabled {
-        opacity: 0.52;
-        cursor: not-allowed;
-      }
-    }
-
-    &__employee-subtabs {
-      margin-top: layout.$space-2;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-    }
-
-    &__employee-subtab {
-      min-height: 2.2rem;
-      border-radius: 999px;
-      border: 1px solid colors.$color-border;
-      background: colors.$color-surface;
-      color: colors.$color-primary-dark;
-      padding: 0 0.85rem;
-      font-size: 0.8rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition:
-        background 0.2s ease,
-        border-color 0.2s ease,
-        box-shadow 0.2s ease;
-
-      &:hover:not(.admin-panel--container__employee-subtab--active) {
-        border-color: rgba(201, 123, 99, 0.5);
-        background: rgba(201, 123, 99, 0.08);
-      }
-
-      &--active {
-        background: colors.$color-primary;
-        border: none;
-        color: #fff;
-        box-shadow: 0 4px 12px rgba(201, 123, 99, 0.25);
-      }
-    }
-
-    &__employee-filters {
-      margin-top: layout.$space-2;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: layout.$space-1;
-    }
-
-    &__help-grid {
-      margin-top: layout.$space-2;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: layout.$space-2;
-    }
-
-    &__help-highlight {
-      margin-top: layout.$space-2;
-      border: 1px solid rgba(217, 164, 65, 0.42);
-      border-radius: layout.$radius-md;
-      background: linear-gradient(120deg, rgba(217, 164, 65, 0.16), rgba(201, 123, 99, 0.08));
-      padding: layout.$space-2;
-      display: grid;
-      gap: 0.25rem;
-    }
-
-    &__help-highlight-title {
-      margin: 0;
-      color: colors.$color-primary-dark;
-      font-weight: 800;
-      font-size: 0.9rem;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-    }
-
-    &__help-highlight-text {
-      margin: 0;
-      color: colors.$color-text;
-      line-height: 1.45;
-      font-size: 0.9rem;
-    }
-
-    &__help-search {
-      margin-top: layout.$space-2;
-      max-width: 34rem;
-    }
-
-    &__help-card {
-      border: 1px solid rgba(201, 123, 99, 0.28);
-      border-radius: layout.$radius-md;
-      background: linear-gradient(
-        180deg,
-        rgba(201, 123, 99, 0.08) 0%,
-        rgba(255, 255, 255, 0.92) 100%
-      );
-      padding: layout.$space-2;
-      display: grid;
-      gap: 0.7rem;
-    }
-
-    &__help-title {
-      margin: 0;
-      color: colors.$color-primary-dark;
-      font-family: typography.$font-heading;
-      font-size: 1rem;
-    }
-
-    &__help-text {
-      margin: 0;
-      color: colors.$color-text-soft;
-      line-height: 1.45;
-      font-size: 0.9rem;
-    }
-
-    &__help-links {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.45rem;
-    }
-
-    &__help-checklist {
-      margin: 0;
-      padding: 0;
-      list-style: none;
-      display: grid;
-      gap: 0.35rem;
-
-      li {
-        position: relative;
-        padding-left: 1.25rem;
-        color: colors.$color-text;
-        font-size: 0.86rem;
-        line-height: 1.42;
-
-        &::before {
-          content: '✓';
-          position: absolute;
-          left: 0;
-          top: 0;
-          color: colors.$color-primary;
-          font-weight: 800;
-        }
-      }
-    }
-
-    &__faq {
-      margin-top: layout.$space-3;
-      border-top: 1px dashed rgba(201, 123, 99, 0.45);
-      padding-top: layout.$space-2;
-      display: grid;
-      gap: layout.$space-2;
-    }
-
-    &__faq-title {
-      margin: 0;
-      color: colors.$color-primary-dark;
-      font-family: typography.$font-heading;
-      font-size: 1.05rem;
-    }
-
-    &__faq-list {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: layout.$space-2;
-    }
-
-    &__faq-item {
-      border: 1px solid rgba(93, 64, 48, 0.16);
-      border-radius: layout.$radius-md;
-      background: #fff;
-      padding: layout.$space-2;
-      display: grid;
-      gap: 0.6rem;
-    }
-
-    &__faq-question {
-      margin: 0;
-      color: colors.$color-text;
-      font-size: 0.92rem;
-      font-weight: 800;
-      line-height: 1.3;
-    }
-
-    &__faq-answer {
-      margin: 0;
-      color: colors.$color-text-soft;
-      font-size: 0.86rem;
-      line-height: 1.42;
-    }
-
-    &__help-empty {
-      margin-top: layout.$space-2;
-      border: 1px dashed rgba(201, 123, 99, 0.45);
-      border-radius: layout.$radius-md;
-      background: rgba(201, 123, 99, 0.06);
-      padding: layout.$space-2;
-    }
-
-    &__error {
-      margin: layout.$space-1 0 0;
-      color: colors.$color-error;
-      font-weight: 600;
-      font-size: 0.9rem;
-    }
-
-    &__success {
-      margin: layout.$space-1 0 0;
-      color: colors.$color-primary-dark;
-      font-weight: 700;
-      font-size: 0.9rem;
-    }
-
-    &__list {
-      margin-top: layout.$space-2;
-      display: grid;
-      gap: 1.8rem;
-    }
-
-    &__reservation {
-      border: 1px solid colors.$color-border;
-      border-radius: layout.$radius-md;
-      padding: 1rem 1.1rem;
-      background: rgba(201, 123, 99, 0.06);
-
-      &--blocked {
-        background: rgba(217, 164, 65, 0.08);
-      }
-    }
-
-    &__reservation-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: layout.$space-1;
-      flex-wrap: wrap;
-    }
-
-    &__reservation-title {
-      margin: 0;
-      color: colors.$color-primary-dark;
-      font-size: 1rem;
-    }
-
-    &__reservation-text {
-      margin: 0.45rem 0 0;
-      color: colors.$color-text-soft;
-      font-size: 0.9rem;
-      line-height: 1.4;
-      word-break: break-word;
-
-      &--role-confirm {
-        margin-top: 0.2rem;
-      }
-
-      &--client-confirmation {
-        color: colors.$color-primary-dark;
-        font-weight: 800;
-      }
-    }
-
-    &__client-modal-content {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    &__client-modal-fields {
-      display: grid;
-      gap: 0.7rem;
-    }
-
-    &__employee-history {
-      &-list {
-        display: grid;
-        gap: 0.75rem;
-      }
-
-      &-item {
-        border: 1px solid colors.$color-secondary;
-        border-radius: 0.85rem;
-        padding: 1rem;
-        background: rgba(201, 123, 99, 0.06);
-        margin: 0.15rem 0 0;
-        display: grid;
-        gap: 0.3rem;
-      }
-
-      &-text {
-        margin: 0;
-        color: colors.$color-text;
-        font-size: 0.8rem;
-        line-height: 1.45;
-      }
-
-      &-note {
-        margin: 0.3rem 0 0;
-        padding-left: 1rem;
-        color: colors.$color-text-soft;
-        font-size: 0.76rem;
-        line-height: 1.45;
-      }
-    }
-
-    &__role-confirm-employee {
-      margin: 0;
-      color: colors.$color-text-soft;
-      font-weight: 700;
-    }
-
-    &__role-confirm-employee-name {
-      color: colors.$color-primary-dark;
-    }
-
-    &__status {
-      padding: 0.2rem 0.55rem;
-      border-radius: 999px;
-      font-size: 0.73rem;
-      font-weight: 800;
-      letter-spacing: 0.03em;
-      text-transform: uppercase;
-      color: #8d6f60;
-      background: rgba(201, 123, 99, 0.15);
-
-      &--accepted {
-        color: #fff;
-        background: #b76b54;
-      }
-
-      &--rejected {
-        color: #fff;
-        background: #b85c5c;
-      }
-
-      &--paid {
-        color: #fff;
-        background: #1e7a4a;
-        box-shadow: 0 1px 6px rgba(30, 122, 74, 0.35);
-      }
-    }
-
-    &__reservation-actions {
-      margin-top: layout.$space-2;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-
-      &--role-confirm {
-        justify-content: space-between;
-        margin-top: 0;
-      }
-    }
-
-    &__action-button {
-      min-height: 2.3rem;
-      border-radius: 999px;
-      padding: 0 0.9rem;
-      border: 1px solid colors.$color-border;
-      background: colors.$color-surface;
-      color: colors.$color-primary-dark;
-      font-size: 0.82rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition:
-        background 0.2s ease,
-        border-color 0.2s ease,
-        box-shadow 0.2s ease,
-        opacity 0.2s ease;
-
-      // &:hover:not(:disabled) {
-      //   border-color: rgba(201, 123, 99, 0.5);
-      //   background: rgba(201, 123, 99, 0.08);
-      // }
-
-      &:disabled {
-        opacity: 0.55;
-        cursor: not-allowed;
-      }
-
-      &--soft {
-        background: rgba(201, 123, 99, 0.1);
-        border-color: rgba(201, 123, 99, 0.35);
-
-        &:hover:not(:disabled) {
-          background: rgba(201, 123, 99, 0.18);
-          border-color: rgba(201, 123, 99, 0.55);
-        }
-      }
-
-      &--secondary {
-        border-color: rgba(201, 123, 99, 0.55);
-        background: #fff;
-        color: colors.$color-primary-dark;
-
-        &:hover:not(:disabled) {
-          border-color: rgba(201, 123, 99, 0.75);
-          background: rgba(201, 123, 99, 0.1);
-        }
-      }
-
-      &--accept {
-        background: colors.$color-primary;
-        border: none;
-        color: #fff;
-
-        &:hover:not(:disabled) {
-          box-shadow: 0 4px 12px rgba(201, 123, 99, 0.3);
-        }
-
-        &:disabled {
-          opacity: 0.65;
-        }
-      }
-
-      &--reject {
-        background: rgba(184, 92, 92, 0.12);
-        border-color: rgba(184, 92, 92, 0.5);
-        color: colors.$color-error;
-
-        &:hover:not(:disabled) {
-          background: rgba(184, 92, 92, 0.2);
-          border-color: rgba(184, 92, 92, 0.7);
-        }
-
-        &:disabled {
-          opacity: 0.65;
-        }
-      }
-
-      &--role-confirm {
-        min-width: 7.5rem;
-      }
-    }
-
-    &__reservation-filters {
-      margin-top: layout.$space-2;
-      margin-bottom: layout.$space-2;
-      padding: layout.$space-2;
-      border: 1px solid rgba(201, 123, 99, 0.2);
-      border-radius: layout.$radius-md;
-      background: rgba(201, 123, 99, 0.04);
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: layout.$space-1;
-      align-items: flex-end;
-    }
-
-    &__reservation-filter-field {
-      display: grid;
-      gap: 0.35rem;
-    }
-
-    &__reservation-filter-label {
-      display: flex;
-      align-items: center;
-      gap: 0.35rem;
-      color: colors.$color-text;
-      font-size: 0.82rem;
-      font-weight: 700;
-      text-transform: capitalize;
-
-      svg {
-        width: 1rem;
-        height: 1rem;
-        opacity: 0.75;
-      }
-    }
-
-    &__reservation-filter-input {
-      min-height: 2.4rem;
-      border-radius: layout.$radius-sm;
-      border: 1px solid colors.$color-border;
-      background: #fff;
-      color: colors.$color-text;
-      padding: 0 0.7rem;
-      font-size: 0.88rem;
-      font-weight: 500;
-      transition:
-        border-color 0.2s ease,
-        box-shadow 0.2s ease;
-
-      &::placeholder {
-        color: rgba(93, 64, 48, 0.5);
-      }
-
-      &:focus {
-        outline: none;
-        border-color: rgba(201, 123, 99, 0.6);
-        box-shadow: 0 0 0 2px rgba(201, 123, 99, 0.15);
-      }
-    }
-
-    &__reservation-filter-clear {
-      min-height: 2.4rem;
-      border-radius: layout.$radius-sm;
-      border: 1px solid rgba(184, 92, 92, 0.4);
-      background: rgba(184, 92, 92, 0.08);
-      color: colors.$color-error;
-      padding: 0 0.8rem;
-      font-size: 0.82rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition:
-        background 0.2s ease,
-        border-color 0.2s ease;
-
-      &:hover {
-        background: rgba(184, 92, 92, 0.14);
-        border-color: rgba(184, 92, 92, 0.55);
-      }
-    }
-
-    &__reservation-filter-count {
-      margin: 0;
-      color: colors.$color-text-soft;
-      font-size: 0.82rem;
-      font-weight: 600;
-      text-transform: capitalize;
-    }
-
-    &__block-form {
-      margin-top: layout.$space-2;
-      border: 1px solid colors.$color-border;
-      border-radius: layout.$radius-md;
-      padding: layout.$space-2;
-      background: rgba(201, 123, 99, 0.04);
-      display: grid;
-      gap: 0.75rem;
-    }
-
-    &__calendar-card {
-      margin-top: layout.$space-2;
-      border: 1px solid colors.$color-border;
-      border-radius: layout.$radius-md;
-      padding: layout.$space-2;
-      background: rgba(201, 123, 99, 0.04);
-    }
-
-    &__calendar-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: layout.$space-1;
-      flex-wrap: wrap;
-    }
-
-    &__calendar-title {
-      margin: 0;
-      color: colors.$color-primary-dark;
-      font-size: 1rem;
-    }
-
-    &__calendar-subtitle {
-      margin: 0.35rem 0 0;
-      color: colors.$color-text-soft;
-      font-size: 0.84rem;
-      font-weight: 600;
-    }
-
-    &__month-nav {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      align-items: center;
-      gap: 0.5rem;
-      border: 1px solid colors.$color-border;
-      border-radius: 999px;
-      background: #fff;
-      padding: 0.25rem;
-      width: min(100%, 24rem);
-    }
-
-    &__month-nav-button {
-      width: 2rem;
-      height: 2rem;
-      border: 1px solid colors.$color-border;
-      border-radius: 999px;
-      background: #fff;
-      color: colors.$color-primary-dark;
-      display: inline-grid;
-      place-items: center;
-      padding: 0;
-      line-height: 0;
-      cursor: pointer;
-
-      &:hover {
-        background: rgba(201, 123, 99, 0.08);
-        border-color: rgba(201, 123, 99, 0.45);
-      }
-    }
-
-    &__month-nav-icon {
-      width: 1rem;
-      height: 1rem;
-      display: block;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 2.2;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    &__month-nav-label {
-      min-width: 0;
-      text-align: center;
-      font-size: 0.86rem;
-      font-weight: 800;
-      color: colors.$color-primary-dark;
-      text-transform: capitalize;
-      padding: 0 0.25rem;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    &__month-input {
-      min-height: 2.2rem;
-      border-radius: layout.$radius-sm;
-      border: 1px solid colors.$color-border;
-      background: #fff;
-      color: colors.$color-text;
-      padding: 0 0.6rem;
-      font-size: 0.86rem;
-    }
-
-    &__calendar-weekdays {
-      margin-top: 0.8rem;
-      display: grid;
-      grid-template-columns: repeat(7, minmax(0, 1fr));
-      gap: 0.35rem;
-
-      span {
-        text-align: center;
-        color: colors.$color-text-soft;
-        font-size: 0.72rem;
-        font-weight: 800;
-      }
-    }
-
-    &__calendar-grid {
-      margin-top: 0.35rem;
-      display: grid;
-      grid-template-columns: repeat(7, minmax(0, 1fr));
-      gap: 0.35rem;
-    }
-
-    &__calendar-day {
-      min-height: 4.1rem;
-      border-radius: 0.95rem;
-      border: 1px solid colors.$color-border;
-      background: #fff;
-      color: colors.$color-text;
-      cursor: pointer;
-      padding: 0.4rem 0.45rem 0.38rem;
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;
-      justify-content: flex-start;
-      gap: 0.35rem;
-      aspect-ratio: 1 / 1;
-      overflow: hidden;
-      transition:
-        border-color 0.18s ease,
-        transform 0.18s ease,
-        box-shadow 0.18s ease,
-        background 0.18s ease;
-
-      &:hover:not(:disabled) {
-        transform: translateY(-1px);
-        box-shadow: 0 6px 16px rgba(84, 55, 39, 0.08);
-      }
-
-      &:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      &--outside {
-        opacity: 0.32;
-      }
-
-      &--today {
-        border-color: rgba(201, 123, 99, 0.8);
-      }
-
-      &--selected {
-        border-color: colors.$color-secondary;
-        box-shadow: 0 0 0 2px rgba(217, 164, 65, 0.2);
-      }
-
-      &--full {
-        background: rgba(184, 92, 92, 0.14);
-        border-color: rgba(184, 92, 92, 0.4);
-      }
-
-      &--partial {
-        background: rgba(217, 164, 65, 0.15);
-        border-color: rgba(217, 164, 65, 0.45);
-      }
-
-      &--closed {
-        background: rgba(184, 92, 92, 0.14);
-        border-color: rgba(184, 92, 92, 0.38);
-      }
-    }
-
-    &__calendar-day-number {
-      font-size: 0.98rem;
-      font-weight: 900;
-      line-height: 1;
-    }
-
-    &__agenda-day-number-wrap {
-      width: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.4rem;
-    }
-
-    &__agenda-day-count {
-      min-width: 1.35rem;
-      height: 1.35rem;
-      border-radius: 999px;
-      background: colors.$color-primary;
-      color: #fff;
-      font-size: 0.68rem;
-      font-weight: 800;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0 0.22rem;
-      line-height: 1;
-      flex-shrink: 0;
-    }
-
-    &__agenda-closed-badge {
-      width: 100%;
-      margin-top: auto;
-      justify-self: center;
-      text-align: center;
-    }
-
-    &__calendar-day-meta {
-      font-size: 0.62rem;
-      font-weight: 700;
-      color: colors.$color-text-soft;
-      line-height: 1.05;
-      text-align: center;
-    }
-
-    &__label {
-      display: grid;
-      gap: 0.3rem;
-      color: colors.$color-text;
-      font-size: 0.86rem;
-      font-weight: 700;
-    }
-
-    &__selected-date {
-      min-height: 2.8rem;
-      border-radius: layout.$radius-sm;
-      border: 1px solid colors.$color-border;
-      background: #fff;
-      padding: 0.55rem 0.75rem;
-      display: grid;
-      gap: 0.15rem;
-
-      strong {
-        color: colors.$color-primary-dark;
-        font-size: 0.95rem;
-      }
-
-      span {
-        color: colors.$color-text-soft;
-        font-size: 0.78rem;
-        letter-spacing: 0.03em;
-      }
-    }
-
-    &__block-mode {
-      display: grid;
-      gap: 0.5rem;
-      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-    }
-
-    &__block-mode-option {
-      min-height: 2.45rem;
-      border-radius: 999px;
-      border: 1px solid colors.$color-border;
-      background: #fff;
-      color: colors.$color-primary-dark;
-      font-size: 0.84rem;
-      font-weight: 700;
-      padding: 0 0.85rem;
-      text-align: center;
-      cursor: pointer;
-      transition:
-        background 0.2s ease,
-        border-color 0.2s ease,
-        box-shadow 0.2s ease,
-        transform 0.15s ease;
-
-      &:hover {
-        border-color: rgba(201, 123, 99, 0.55);
-        background: rgba(201, 123, 99, 0.09);
-      }
-
-      &--active {
-        border-color: rgba(201, 123, 99, 0.7);
-        background: linear-gradient(
-          90deg,
-          rgba(201, 123, 99, 0.16) 0%,
-          rgba(217, 164, 65, 0.18) 100%
-        );
-        box-shadow: 0 0 0 2px rgba(217, 164, 65, 0.18);
-      }
-    }
-
-    &__checkbox-label {
-      display: flex;
-      align-items: center;
-      gap: 0.45rem;
-      color: colors.$color-text-soft;
-      font-size: 0.86rem;
-      font-weight: 600;
-    }
-
-    &__input {
-      min-height: 2.5rem;
-      border-radius: layout.$radius-sm;
-      border: 1px solid colors.$color-border;
-      background: #fff;
-      color: colors.$color-text;
-      padding: 0 0.75rem;
-      font-size: 0.9rem;
-
-      &:focus {
-        outline: none;
-        border-color: rgba(201, 123, 99, 0.62);
-        box-shadow: 0 0 0 2px rgba(201, 123, 99, 0.16);
-      }
-    }
-
-    &__time-select-wrap {
-      position: relative;
-
-      &::after {
-        content: '';
-        position: absolute;
-        right: 0.8rem;
-        top: 50%;
-        width: 0.5rem;
-        height: 0.5rem;
-        border-right: 2px solid rgba(183, 107, 84, 0.85);
-        border-bottom: 2px solid rgba(183, 107, 84, 0.85);
-        transform: translateY(-60%) rotate(45deg);
-        pointer-events: none;
-      }
-    }
-
-    &__time-select {
-      width: 100%;
-      appearance: none;
-      -webkit-appearance: none;
-      -moz-appearance: none;
-      padding-right: 2rem;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-      color: colors.$color-primary-dark;
-      background: linear-gradient(180deg, #fff 0%, rgba(252, 243, 234, 0.75) 100%);
-
-      &:focus {
-        outline: none;
-        border-color: rgba(201, 123, 99, 0.6);
-        box-shadow: 0 0 0 2px rgba(201, 123, 99, 0.18);
-      }
-    }
-
-    &__time-range {
-      display: grid;
-      gap: 0.75rem;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    }
-
-    &__modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(39, 24, 16, 0.4);
-      backdrop-filter: blur(2px);
-      display: grid;
-      place-items: center;
-      z-index: 40;
-      padding: 1rem;
-
-      &--centered {
-        align-items: center;
-        justify-items: center;
-      }
-    }
-
-    &__modal {
-      width: min(32rem, 100%);
-      max-height: 80vh;
-      overflow: auto;
-      border: 1px solid colors.$color-border;
-      border-radius: layout.$radius-md;
-      background: #fff;
-      box-shadow: 0 16px 36px rgba(57, 39, 28, 0.2);
-      padding: 1rem;
-      display: grid;
-      gap: 0.85rem;
-      position: relative;
-      top: 40px;
-
-      &--compact {
-        width: min(36rem, 100%);
-      }
-
-      &--client {
-        width: min(64rem, 96vw);
-        max-height: 88vh;
-      }
-
-      &--tracking-calendar,
-      &--role-confirm {
-        width: min(34rem, 100%);
-      }
-
-      &--agenda-calendar {
-        width: min(54rem, 100%);
-      }
-      &--agenda-day {
-        width: min(66rem, 100%);
-      }
-
-      &--agenda-week {
-        width: min(98vw, 1440px);
-        max-height: 92vh;
-      }
-
-      &--agenda-week-schedule {
-        width: min(95vw, 1200px);
-        max-height: 80vh;
-        position: relative;
-        top: 40px;
-      }
-
-      &--quick-reserve {
-        width: min(32rem, 100%);
-      }
-
-      &--client-type-picker {
-        width: min(36rem, 100%);
-      }
-    }
-
-    &__modal-subtitle {
-      margin: 0;
-      font-size: 0.85rem;
-      color: colors.$color-text-soft;
-      padding: 0 0 0.5rem;
-    }
-
-    &__payment-method-options {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 0.5rem;
-      margin-top: 0.5rem;
-      width: 100%;
-    }
-
-    &__payment-option {
-      min-height: 2.4rem;
-      border: 1px solid rgba(150, 121, 106, 0.6);
-      border-radius: 0.5rem;
-      background: rgba(255, 255, 255, 0.8);
-      color: colors.$color-primary-dark;
-      font-size: 0.76rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition:
-        border-color 0.15s ease,
-        background 0.15s ease,
-        box-shadow 0.15s ease,
-        transform 0.15s ease;
-
-      &:hover:not(.admin-panel--container__payment-option--selected) {
-        border-color: rgba(201, 123, 99, 0.7);
-        background: rgba(201, 123, 99, 0.06);
-      }
-
-      &--selected {
-        border-color: rgba(104, 170, 120, 0.9);
-        background: rgba(124, 186, 133, 0.12);
-        box-shadow: inset 0 0 0 1px rgba(104, 170, 120, 0.35);
-      }
-
-      &--neutral {
-        border-style: dashed;
-      }
-    }
-
-    &__client-type-options {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.75rem;
-    }
-
-    &__client-type-btn {
-      display: grid;
-      grid-template-rows: auto auto 1fr;
-      gap: 0.3rem;
-      padding: 1.1rem;
-      border: 2px solid colors.$color-border;
-      border-radius: layout.$radius-md;
-      background: #fff;
-      cursor: pointer;
-      text-align: left;
-      transition:
-        border-color 0.15s ease,
-        background 0.15s ease;
-
-      &:hover {
-        border-color: colors.$color-primary;
-        background: rgba(201, 123, 99, 0.05);
-      }
-
-      &--new {
-        border-color: rgba(201, 123, 99, 0.4);
-        background: rgba(201, 123, 99, 0.04);
-
-        &:hover {
-          border-color: colors.$color-primary;
-          background: rgba(201, 123, 99, 0.1);
-        }
-      }
-
-      &--selected {
-        border-color: rgba(104, 170, 120, 0.9);
-        background: rgba(124, 186, 133, 0.12);
-        box-shadow: inset 0 0 0 1px rgba(104, 170, 120, 0.3);
-      }
-    }
-
-    &__client-type-icon {
-      font-size: 1.6rem;
-      line-height: 1;
-    }
-
-    &__client-type-label {
-      font-weight: 700;
-      font-size: 0.95rem;
-      color: colors.$color-primary-dark;
-    }
-
-    &__client-type-desc {
-      font-size: 0.78rem;
-      color: colors.$color-text-soft;
-      line-height: 1.4;
-    }
-
-    &__agenda-week-grid {
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 0.65rem;
-      overflow: auto;
-      padding-bottom: 0.35rem;
-    }
-
-    &__agenda-week-column {
-      border: 1px solid colors.$color-border;
-      border-radius: layout.$radius-sm;
-      background: #fff;
-      min-width: 160px;
-      display: grid;
-      grid-template-rows: auto 1fr;
-    }
-
-    &__agenda-week-column-head {
-      padding: 0.45rem 0.5rem;
-      border-bottom: 1px solid rgba(201, 123, 99, 0.24);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.4rem;
-
-      &--today {
-        background: rgba(201, 123, 99, 0.1);
-      }
-    }
-
-    &__agenda-week-day-head-copy {
-      display: grid;
-      gap: 0.2rem;
-    }
-
-    &__agenda-week-day-label {
-      margin: 0;
-      color: colors.$color-primary-dark;
-      font-size: 0.76rem;
-      font-weight: 800;
-      text-transform: capitalize;
-    }
-
-    &__agenda-alert-day-count {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: fit-content;
-      padding: 0.12rem 0.45rem;
-      border-radius: 999px;
-      background: rgba(217, 164, 65, 0.16);
-      color: #8d6421;
-      font-size: 0.64rem;
-      font-weight: 800;
-      letter-spacing: 0.02em;
-    }
-
-    &__agenda-closed-badge {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: fit-content;
-      padding: 0.12rem 0.45rem;
-      border-radius: 999px;
-      background: rgba(184, 92, 92, 0.12);
-      color: colors.$color-error;
-      font-size: 0.64rem;
-      font-weight: 800;
-      letter-spacing: 0.02em;
-    }
-
-    &__agenda-week-hour-list {
-      padding: 0.35rem;
-      display: grid;
-      gap: 0.35rem;
-      max-height: 66vh;
-      overflow: auto;
-    }
-
-    &__agenda-week-hour-row {
-      display: grid;
-      gap: 0.25rem;
-    }
-
-    &__agenda-week-hour-label {
-      color: colors.$color-text-soft;
-      font-size: 0.67rem;
-      font-weight: 700;
-    }
-
-    &__agenda-week-dropzone {
-      min-height: 2.2rem;
-      border: 1px dashed rgba(201, 123, 99, 0.35);
-      border-radius: 0.5rem;
-      background: rgba(201, 123, 99, 0.035);
-      padding: 0.28rem;
-      display: grid;
-      gap: 0.3rem;
-      overflow: visible;
-    }
-
-    &__agenda-slot-closed {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 1.9rem;
-      border-radius: 0.45rem;
-      border: 1px dashed rgba(184, 92, 92, 0.36);
-      background: rgba(184, 92, 92, 0.08);
-      color: colors.$color-error;
-      font-size: 0.68rem;
-      font-weight: 700;
-      text-align: center;
-      padding: 0.2rem 0.35rem;
-    }
-
-    &__agenda-alert-list {
-      display: grid;
-      gap: 0.3rem;
-    }
-
-    &__agenda-alert-card {
-      border-radius: 0.55rem;
-      border: 1px solid rgba(217, 164, 65, 0.28);
-      background: rgba(255, 248, 236, 0.96);
-      padding: 0.32rem 0.36rem;
-      display: grid;
-      gap: 0.35rem;
-
-      &--approved {
-        border-color: rgba(126, 159, 125, 0.38);
-        background: rgba(236, 247, 236, 0.95);
-      }
-
-      &--rejected {
-        border-color: rgba(184, 106, 106, 0.32);
-        background: rgba(253, 238, 238, 0.96);
-      }
-    }
-
-    &__agenda-alert-card__content {
-      display: grid;
-      gap: 0.1rem;
-    }
-
-    &__agenda-alert-title {
-      margin: 0;
-      color: colors.$color-primary-dark;
-      font-size: 0.68rem;
-      font-weight: 800;
-      word-break: break-word;
-    }
-
-    &__agenda-alert-meta {
-      margin: 0;
-      color: colors.$color-text-soft;
-      font-size: 0.62rem;
-      font-weight: 600;
-      word-break: break-word;
-    }
-
-    &__agenda-alert-status {
-      display: inline-flex;
-      align-items: center;
-      width: fit-content;
-      padding: 0.1rem 0.38rem;
-      border-radius: 999px;
-      background: rgba(126, 159, 125, 0.14);
-      color: #547052;
-      font-size: 0.58rem;
-      font-weight: 800;
-    }
-
-    &__agenda-alert-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.24rem;
-    }
-
-    &__agenda-alert-btn {
-      border: 1px solid transparent;
-      border-radius: 999px;
-      padding: 0.16rem 0.42rem;
-      font-size: 0.58rem;
-      font-weight: 800;
-      cursor: pointer;
-
-      &:disabled {
-        opacity: 0.55;
-        cursor: wait;
-      }
-
-      &--approve {
-        background: rgba(126, 159, 125, 0.16);
-        color: #4d6a4d;
-        border-color: rgba(126, 159, 125, 0.28);
-      }
-
-      &--reject {
-        background: rgba(184, 106, 106, 0.12);
-        color: #9d5555;
-        border-color: rgba(184, 106, 106, 0.22);
-      }
-    }
-
-    &__agenda-hour-list {
-      display: grid;
-      gap: 0.55rem;
-    }
-
-    &__agenda-worker-section {
-      display: grid;
-      gap: 0.6rem;
-      border: 1px solid rgba(201, 123, 99, 0.2);
-      border-radius: 0.7rem;
-      padding: 0.75rem;
-      background: rgba(255, 255, 255, 0.78);
-    }
-
-    &__agenda-worker-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.6rem;
-      padding-bottom: 0.35rem;
-      border-bottom: 1px solid rgba(201, 123, 99, 0.18);
-    }
-
-    &__agenda-worker-title {
-      margin: 0;
-      color: colors.$color-primary-dark;
-      font-size: 0.84rem;
-      font-weight: 800;
-      letter-spacing: 0.01em;
-    }
-
-    &__agenda-hour-row {
-      display: grid;
-      grid-template-columns: minmax(3.7rem, auto) 1fr;
-      gap: 0.6rem;
-      align-items: start;
-    }
-
-    &__agenda-hour-label {
-      color: colors.$color-text-soft;
-      font-size: 0.78rem;
-      font-weight: 800;
-      padding-top: 0.45rem;
-    }
-
-    &__agenda-hour-dropzone {
-      min-height: 3rem;
-      border: 1px dashed rgba(201, 123, 99, 0.4);
-      border-radius: layout.$radius-sm;
-      background: rgba(201, 123, 99, 0.04);
-      padding: 0.4rem;
-      display: grid;
-      gap: 0.45rem;
-      overflow: visible;
-    }
-
-    &__agenda-hour-empty {
-      color: colors.$color-text-soft;
-      font-size: 0.75rem;
-      font-weight: 600;
-      align-self: center;
-      justify-self: start;
-    }
-
-    &__agenda-slot-occupied {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 1.9rem;
-      border-radius: 0.45rem;
-      border: 1px dashed rgba(201, 123, 99, 0.35);
-      background: rgba(201, 123, 99, 0.08);
-      color: colors.$color-text-soft;
-      font-size: 0.68rem;
-      font-weight: 700;
-      text-align: center;
-      padding: 0.2rem 0.35rem;
-    }
-
-    &__agenda-manual-form {
-      display: grid;
-      gap: 0.85rem;
-    }
-
-    &__agenda-manual-section {
-      display: grid;
-      gap: 0.75rem;
-      padding: 0.85rem 0.9rem;
-      border: 1px solid rgba(201, 123, 99, 0.24);
-      border-radius: layout.$radius-md;
-      background: rgba(255, 255, 255, 0.72);
-    }
-
-    &__agenda-manual-section-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.6rem;
-      font-size: 0.86rem;
-      font-weight: 800;
-      color: colors.$color-primary-dark;
-    }
-
-    &__agenda-manual-pill {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 1.75rem;
-      padding: 0.2rem 0.55rem;
-      border-radius: 999px;
-      background: rgba(201, 123, 99, 0.12);
-      border: 1px solid rgba(201, 123, 99, 0.24);
-      color: colors.$color-primary-dark;
-      font-size: 0.7rem;
-      font-weight: 700;
-    }
-
-    &__agenda-manual-summary {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.75rem;
-      padding: 0.7rem 0.8rem;
-      border-radius: layout.$radius-sm;
-      background: rgba(104, 170, 120, 0.08);
-      border: 1px solid rgba(104, 170, 120, 0.2);
-      color: colors.$color-primary-dark;
-      font-size: 0.82rem;
-
-      strong {
-        font-size: 0.9rem;
-      }
-    }
-
-    &__agenda-manual-selected-list {
-      display: grid;
-      gap: 0.5rem;
-    }
-
-    &__agenda-manual-selected-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.75rem;
-      padding: 0.7rem 0.8rem;
-      border: 1px solid rgba(201, 123, 99, 0.2);
-      border-radius: layout.$radius-sm;
-      background: #fff;
-    }
-
-    &__agenda-manual-selected-copy {
-      display: grid;
-      gap: 0.15rem;
-      min-width: 0;
-
-      strong {
-        font-size: 0.82rem;
-        color: colors.$color-primary-dark;
-      }
-
-      span {
-        font-size: 0.72rem;
-        color: colors.$color-text-soft;
-      }
-    }
-
-    &__agenda-manual-stock-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.7fr);
-      gap: 0.75rem;
-    }
-
-    &__agenda-manual-client-mode {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0.6rem;
-    }
-
-    &__agenda-manual-client-mode-btn {
-      min-height: 2.2rem;
-      border: 1px solid rgba(201, 123, 99, 0.34);
-      border-radius: 999px;
-      background: #fff;
-      color: colors.$color-primary-dark;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    &__agenda-manual-client-mode-btn--active {
-      background: rgba(201, 123, 99, 0.12);
-      border-color: rgba(201, 123, 99, 0.72);
-    }
-
-    &__agenda-manual-client-search {
-      display: grid;
-      gap: 0.55rem;
-    }
-
-    &__agenda-manual-client-list {
-      display: grid;
-      gap: 0.5rem;
-      max-height: 12rem;
-      overflow: auto;
-    }
-
-    &__agenda-manual-client-card {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      width: 100%;
-      padding: 0.75rem 0.85rem;
-      border: 1px solid rgba(201, 123, 99, 0.28);
-      border-radius: layout.$radius-sm;
-      background: #fff;
-      color: colors.$color-primary-dark;
-      cursor: pointer;
-
-      &--selected {
-        border-color: rgba(104, 170, 120, 0.9);
-        background: rgba(124, 186, 133, 0.1);
-      }
-    }
-
-    &__checkbox-inline {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-weight: 600;
-      color: colors.$color-primary-dark;
-
-      input {
-        margin: 0;
-      }
-    }
-
-    &__agenda-reservation-card {
-      --appointment-color: #{colors.$color-primary};
-      border: 1px solid color-mix(in srgb, var(--appointment-color) 48%, white);
-      border-left-width: 0.38rem;
-      border-radius: layout.$radius-sm;
-      background: color-mix(in srgb, var(--appointment-color) 12%, white);
-      padding: 0.45rem 0.5rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.24rem;
-      min-height: 100%;
-      cursor: grab;
-
-      .admin-panel--container__action-button {
-        margin-top: auto !important;
-        width: 100% !important;
-        align-self: stretch !important;
-        justify-content: center;
-      }
-    }
-
-    &__agenda-reservation-actions-inline {
-      margin-top: auto;
-      display: flex;
-      gap: 0.35rem;
-      align-items: center;
-
-      .admin-panel--container__action-button {
-        margin-top: 0 !important;
-        width: auto !important;
-        flex: 1 1 0;
-        align-self: auto !important;
-      }
-    }
-
-    &__agenda-payment-info-line {
-      margin: 0.35rem 0;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.7rem;
-      color: colors.$color-primary-dark;
-      font-size: 0.86rem;
-    }
-
-    &__agenda-reservation-head {
-      display: flex;
-      align-items: center;
-      gap: 0.35rem;
-    }
-
-    &__agenda-treatment-dot {
-      width: 0.56rem;
-      height: 0.56rem;
-      border-radius: 999px;
-      background: var(--appointment-color);
-      flex-shrink: 0;
-    }
-
-    &__agenda-reservation-title {
-      margin: 0;
-      color: colors.$color-primary-dark;
-      font-size: 0.84rem;
-      font-weight: 800;
-    }
-
-    &__agenda-reservation-meta {
-      margin: 0;
-      color: colors.$color-text-soft;
-      font-size: 0.76rem;
-      font-weight: 600;
-    }
-
-    &__agenda-duration-controls {
-      margin-top: 0.2rem;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 0.5rem;
-      align-items: center;
-    }
-
-    &__agenda-duration-select {
-      min-height: 2.2rem;
-      font-size: 0.8rem;
-      padding: 0 0.55rem;
-    }
-
-    &__agenda-drop-toast {
-      position: fixed;
-      bottom: 2rem;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 9999;
-      background: #2d1f0e;
-      color: #fff;
-      font-size: 0.88rem;
-      font-weight: 600;
-      padding: 0.75rem 1.25rem;
-      border-radius: layout.$radius-md;
-      box-shadow: 0 4px 18px rgb(0 0 0 / 28%);
-      pointer-events: none;
-      max-width: min(42rem, 90vw);
-      text-align: center;
-      animation: agenda-toast-in 0.22s ease;
-    }
-
-    @keyframes agenda-toast-in {
-      from {
-        opacity: 0;
-        transform: translateX(-50%) translateY(0.6rem);
-      }
-      to {
-        opacity: 1;
-        transform: translateX(-50%) translateY(0);
-      }
-    }
-
-    &__modal--agenda-detail {
-      max-width: min(34rem, 100%);
-      display: grid;
-      gap: 1rem;
-    }
-
-    &__modal--manual-reserve {
-      width: min(44rem, 100%);
-      max-width: min(44rem, 100%);
-      display: grid;
-      gap: 1rem;
-    }
-
-    &__agenda-detail-info {
-      display: flex;
-      gap: 0.75rem;
-      align-items: stretch;
-    }
-
-    &__agenda-detail-color-bar {
-      width: 0.35rem;
-      border-radius: 999px;
-      flex-shrink: 0;
-    }
-
-    &__agenda-detail-rows {
-      display: grid;
-      gap: 0.35rem;
-      flex: 1;
-    }
-
-    &__agenda-detail-row {
-      margin: 0;
-      display: flex;
-      gap: 0.5rem;
-      font-size: 0.88rem;
-      color: colors.$color-text;
-      line-height: 1.45;
-      align-items: flex-start;
-      flex-wrap: wrap;
-
-      > span:last-child {
-        flex: 1;
-        min-width: 0;
-        word-break: break-word;
-      }
-    }
-
-    &__agenda-detail-label {
-      font-weight: 700;
-      color: colors.$color-primary-dark;
-      min-width: 6rem;
-      flex-shrink: 0;
-    }
-
-    &__agenda-detail-actions {
-      display: flex;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-    }
-
-    &__agenda-edit-form {
-      display: grid;
-      gap: 0.5rem;
-    }
-
-    &__modal-head {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 0.5rem;
-    }
-
-    &__modal-title {
-      margin: 0;
-      color: colors.$color-primary-dark;
-      font-size: 1rem;
-    }
-
-    &__modal-subtitle {
-      margin: 0.2rem 0 0;
-      color: colors.$color-text-soft;
-      font-size: 0.82rem;
-      font-weight: 600;
-    }
-
-    &__modal-body {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 1rem;
-      padding: 1.5rem 0;
-      text-align: center;
-    }
-
-    &__quick-reserve-icon {
-      width: 3.5rem;
-      height: 3.5rem;
-      border-radius: 50%;
-      background: linear-gradient(
-        135deg,
-        colors.$color-primary 0%,
-        colors.$color-primary-dark 100%
-      );
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #fff;
-      flex-shrink: 0;
-
-      svg {
-        width: 1.8rem;
-        height: 1.8rem;
-        stroke-width: 2.5;
-      }
-    }
-
-    &__quick-reserve-title {
-      margin: 0;
-      color: colors.$color-primary-dark;
-      font-size: 1.25rem;
-      font-weight: 700;
-      line-height: 1.4;
-    }
-
-    &__quick-reserve-text {
-      margin: 0;
-      color: colors.$color-text-soft;
-      font-size: 0.9rem;
-      line-height: 1.5;
-    }
-
-    &__modal-actions {
-      display: flex;
-      gap: 0.75rem;
-      width: 100%;
-      justify-content: flex-end;
-      padding-top: 0.5rem;
-      border-top: 1px solid rgba(201, 123, 99, 0.15);
-    }
-
-    &__client-modal-treatments {
-      display: grid;
-      gap: 0.5rem;
-      max-height: 45vh;
-      overflow: auto;
-      padding-right: 0.15rem;
-    }
-
-    &__payment-treatment-row {
-      width: 100%;
-      text-align: left;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.75rem;
-      padding: 0.75rem;
-      border: 1px solid rgba(201, 123, 99, 0.3);
-      border-radius: layout.$radius-sm;
-      background: rgba(201, 123, 99, 0.05);
-      cursor: pointer;
-
-      &:hover {
-        background: rgba(201, 123, 99, 0.1);
-      }
-    }
-
-    &__payment-treatment-name {
-      font-weight: 700;
-      color: colors.$color-primary-dark;
-    }
-
-    &__payment-treatment-price {
-      color: colors.$color-text-soft;
-      font-size: 0.85rem;
-      font-weight: 600;
-      text-align: right;
-    }
-
-    &__payment-modal-price {
-      margin: 0.2rem 0 0.25rem;
-      color: colors.$color-text-soft;
-      font-size: 0.95rem;
-    }
-
-    &__payment-method-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0.6rem;
-    }
-
-    &__payment-method-btn {
-      min-height: 2.7rem;
-      border-radius: layout.$radius-sm;
-      border: 1px solid colors.$color-border;
-      background: #fff;
-      color: colors.$color-primary-dark;
-      font-weight: 700;
-      cursor: pointer;
-
-      &--active {
-        border-color: colors.$color-primary;
-        background: colors.$color-primary;
-        color: #fff;
-      }
-    }
-
-    &__modal-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-
-    &__modal-close {
-      width: 2rem;
-      height: 2rem;
-      border-radius: 999px;
-      border: 1px solid colors.$color-border;
-      background: #fff;
-      color: colors.$color-primary-dark;
-      font-size: 1.25rem;
-      line-height: 1;
-      cursor: pointer;
-      padding-bottom: 5px;
-
-      &:hover {
-        background: rgba(201, 123, 99, 0.08);
-      }
-    }
-
-    &__modal-list {
-      display: grid;
-      gap: 0.65rem;
-    }
-
-    &__modal-item {
-      border: 1px solid colors.$color-border;
-      border-radius: layout.$radius-sm;
-      background: rgba(201, 123, 99, 0.05);
-      padding: 0.7rem 0.75rem;
-    }
-
-    &__modal-item-header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 0.5rem;
-    }
-
-    &__modal-item-title {
-      margin: 0;
-      color: colors.$color-primary-dark;
-      font-size: 0.9rem;
-      font-weight: 800;
-      flex: 1;
-    }
-
-    &__modal-status {
-      flex-shrink: 0;
-      display: inline-block;
-      padding: 0.15rem 0.55rem;
-      border-radius: 999px;
-      font-size: 0.72rem;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-      text-transform: uppercase;
-      white-space: nowrap;
-
-      &--pending {
-        background: rgba(217, 164, 65, 0.18);
-        color: #a07a14;
-        border: 1px solid rgba(217, 164, 65, 0.45);
-      }
-
-      &--accepted {
-        background: rgba(60, 160, 90, 0.14);
-        color: #2a7a48;
-        border: 1px solid rgba(60, 160, 90, 0.4);
-      }
-
-      &--rejected {
-        background: rgba(200, 60, 60, 0.12);
-        color: #a02020;
-        border: 1px solid rgba(200, 60, 60, 0.35);
-      }
-    }
-
-    &__modal-item-text {
-      margin: 0.2rem 0 0;
-      color: colors.$color-text-soft;
-      font-size: 0.82rem;
-      font-weight: 600;
-
-      &--client-confirmation {
-        color: colors.$color-primary-dark;
-        font-weight: 800;
-      }
-    }
-
-    &__table-wrapper {
-      width: 100%;
-      overflow-x: auto;
-      border: 1px solid colors.$color-border;
-      border-radius: layout.$radius-md;
-      background: #fff;
-    }
-
-    &__table {
-      width: 100%;
-      min-width: 42rem;
-      border-collapse: collapse;
-
-      th,
-      td {
-        padding: 0.65rem 0.75rem;
-        text-align: left;
-        border-bottom: 1px solid rgba(201, 123, 99, 0.14);
-        font-size: 0.84rem;
-        vertical-align: top;
-      }
-
-      th {
-        font-weight: 800;
-        color: colors.$color-primary-dark;
-        background: rgba(201, 123, 99, 0.08);
-        position: sticky;
-        top: 0;
-        z-index: 1;
-      }
-
-      tbody tr:last-child td {
-        border-bottom: 0;
-      }
-    }
-
-    &__badge {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 999px;
-      padding: 0.18rem 0.55rem;
-      font-size: 0.72rem;
-      font-weight: 800;
-
-      &--green {
-        color: #1f7a45;
-        background: rgba(60, 160, 90, 0.16);
-        border: 1px solid rgba(60, 160, 90, 0.42);
-      }
-
-      &--gray {
-        color: #5e5e5e;
-        background: rgba(120, 120, 120, 0.12);
-        border: 1px solid rgba(120, 120, 120, 0.3);
-      }
-    }
-
-    &__grid {
-      display: grid;
-      gap: layout.$space-2;
-      margin-top: layout.$space-2;
-    }
-
-    &__card {
-      border: 1px solid colors.$color-border;
-      border-radius: layout.$radius-md;
-      padding: layout.$space-2;
-      background: rgba(201, 123, 99, 0.05);
-
-      h2 {
-        margin: 0;
-        color: colors.$color-primary-dark;
-        font-size: 1.05rem;
-      }
-
-      p {
-        margin: layout.$space-1 0 0;
-        color: colors.$color-text-soft;
-        line-height: 1.45;
-      }
-    }
-
-    &__actions {
-      margin-top: layout.$space-3;
-      display: flex;
-      flex-wrap: wrap;
-      gap: layout.$space-1;
-      justify-content: flex-end;
-    }
-
-    &__button {
-      min-height: 2.6rem;
-      border-radius: 999px;
-      padding: 0 1rem;
-      font-size: 0.88rem;
-      font-weight: 700;
-      text-decoration: none;
-      border: none;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      transition:
-        background 0.2s ease,
-        border-color 0.2s ease,
-        box-shadow 0.2s ease;
-
-      &:hover:not(:disabled) {
-        box-shadow: 0 4px 12px rgba(201, 123, 99, 0.25);
-      }
-
-      &:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-
-      &--primary {
-        background: colors.$color-primary;
-        color: #fff;
-      }
-
-      &--secondary {
-        border: 1px solid colors.$color-border;
-        background: colors.$color-surface;
-        color: colors.$color-primary-dark;
-
-        &:hover:not(:disabled) {
-          border-color: rgba(201, 123, 99, 0.5);
-          background: rgba(201, 123, 99, 0.08);
-        }
-      }
-    }
-
-    &__btn-wrapper {
-      display: flex;
-      justify-content: center;
-      margin-top: layout.$space-2;
-    }
-
-    &__form-row {
-      display: grid;
-      gap: layout.$space-1;
-    }
-
-    &__form-group {
-      display: grid;
-      gap: 0.35rem;
-
-      &--cierre-notes {
-        min-width: 0;
-      }
-    }
-
-    &__textarea {
-      min-height: 5.2rem;
-      resize: vertical;
-      border-radius: layout.$radius-sm;
-      border: 1px solid colors.$color-border;
-      background: #fff;
-      color: colors.$color-text;
-      padding: 0.7rem 0.75rem;
-      font-size: 0.9rem;
-      line-height: 1.4;
-
-      &:focus {
-        outline: none;
-        border-color: rgba(201, 123, 99, 0.62);
-        box-shadow: 0 0 0 2px rgba(201, 123, 99, 0.16);
-      }
-    }
-
-    &__btn {
-      min-height: 2.6rem;
-      border-radius: 999px;
-      padding: 0 1rem;
-      font-size: 0.88rem;
-      font-weight: 700;
-      text-decoration: none;
-      border: none;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      transition:
-        background 0.2s ease,
-        border-color 0.2s ease,
-        box-shadow 0.2s ease;
-      width: min(233px, 100%);
-
-      &:hover:not(:disabled) {
-        box-shadow: 0 4px 12px rgba(201, 123, 99, 0.25);
-      }
-
-      &:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-
-      &--primary {
-        background: colors.$color-primary;
-        color: #fff;
-      }
-
-      &--secondary {
-        border: 1px solid colors.$color-border;
-        background: colors.$color-surface;
-        color: colors.$color-primary-dark;
-
-        &:hover:not(:disabled) {
-          border-color: rgba(201, 123, 99, 0.5);
-          background: rgba(201, 123, 99, 0.08);
-        }
-      }
-    }
-
-    &__section {
-      margin-top: layout.$space-2;
-      border: 1px solid colors.$color-border;
-      border-radius: layout.$radius-md;
-      padding: layout.$space-2;
-      background: #fff;
-      align-items: center;
-    }
-
-    &__cierre-card {
-      background: rgba(201, 123, 99, 0.04);
-
-      &--compact {
-        background: rgba(201, 123, 99, 0.08);
-      }
-
-      &--chart {
-        background: #fff;
-      }
-    }
-
-    &__cierre-layout {
-      margin-top: layout.$space-2;
-      display: grid;
-      grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.25fr);
-      gap: layout.$space-2;
-      align-items: start;
-    }
-
-    &__cierre-stack {
-      display: grid;
-      gap: layout.$space-1;
-    }
-
-    &__cierre-form {
-      display: grid;
-      gap: layout.$space-1;
-      align-content: start;
-      padding: layout.$space-2;
-      border-radius: layout.$radius-md;
-      border: 1px solid rgba(201, 123, 99, 0.2);
-      background: rgba(255, 255, 255, 0.82);
-    }
-
-    &__cierre-summary {
-      display: grid;
-      gap: 0.35rem;
-      padding: 0.9rem 1rem;
-      border-radius: layout.$radius-md;
-      border: 1px solid rgba(201, 123, 99, 0.18);
-      background: rgba(255, 255, 255, 0.82);
-
-      &--auto {
-        .admin-panel--container__action-button {
-          margin-top: 0.45rem;
-          justify-self: start;
-        }
-      }
-    }
-
-    &__cierre-summary-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.8rem;
-      padding: 0.18rem 0;
-
-      &--meta {
-        align-items: flex-start;
-        padding-bottom: 0.45rem;
-        margin-bottom: 0.2rem;
-        border-bottom: 1px solid rgba(201, 123, 99, 0.16);
-      }
-
-      &--total {
-        margin-top: 0.2rem;
-        padding-top: 0.55rem;
-        border-top: 1px solid rgba(201, 123, 99, 0.16);
-      }
-    }
-
-    &__cierre-summary-label {
-      color: colors.$color-text;
-      font-size: 0.84rem;
-      font-weight: 700;
-      line-height: 1.3;
-    }
-
-    &__cierre-summary-value {
-      color: colors.$color-primary-dark;
-      font-size: 0.84rem;
-      font-weight: 800;
-      text-align: right;
-      line-height: 1.3;
-      word-break: break-word;
-    }
-
-    &__cierre-row-actions {
-      display: flex;
-      gap: 0.35rem;
-      white-space: nowrap;
-    }
-
-    &__hint--compact {
-      font-size: 0.78rem;
-    }
-
-    &__permissions-editor {
-      margin-top: layout.$space-1;
-      border: 1px solid rgba(201, 123, 99, 0.25);
-      border-radius: layout.$radius-sm;
-      background: rgba(201, 123, 99, 0.04);
-      padding: 0.8rem 1rem;
-      display: grid;
-      gap: 0.65rem;
-    }
-
-    &__permissions-editor-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-
-    &__permissions-editor-title {
-      color: colors.$color-primary-dark;
-      font-size: 0.85rem;
-      font-weight: 800;
-    }
-
-    &__permissions-read {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.4rem;
-    }
-
-    &__permissions-checklist {
-      display: grid;
-      gap: 0.4rem;
-    }
-
-    &__permission-row {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      font-size: 0.86rem;
-      font-weight: 500;
-      color: colors.$color-text;
-      cursor: pointer;
-
-      input[type='checkbox'] {
-        width: 1rem;
-        height: 1rem;
-        accent-color: colors.$color-primary;
-        flex-shrink: 0;
-        cursor: pointer;
-      }
-    }
-
-    &__reservation-actions--saved-view-row {
-      justify-content: space-between;
-      align-items: center;
-      width: 100%;
-      margin-top: 0;
-    }
-
-    &__saved-view-button {
-      border: 1px solid rgba(201, 123, 99, 0.35);
-      background: rgba(201, 123, 99, 0.08);
-      color: colors.$color-primary-dark;
-      cursor: pointer;
-
-      &--active {
-        background: colors.$color-primary;
-        border-color: colors.$color-primary;
-        color: #fff;
-      }
-    }
-
-    &__client-stats-toolbar,
-    &__client-stats-filters {
-      margin-top: layout.$space-2;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: layout.$space-1;
-      align-items: end;
-      padding-bottom: 1rem;
-    }
-
-    &__client-stats-filters {
-      grid-template-columns: minmax(170px, 0.9fr) minmax(260px, 1.2fr) minmax(220px, 1fr) auto;
-
-      > * {
-        min-width: 0;
-      }
-    }
-
-    &__client-stats-range {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: layout.$space-1;
-
-      &--stats {
-        min-width: 0;
-      }
-    }
-
-    &__client-stats-actions {
-      margin-top: 0;
-      justify-content: flex-end;
-      align-self: end;
-
-      .admin-panel--container__action-button {
-        white-space: nowrap;
-      }
-    }
-
-    &__label--stats-period,
-    &__label--stats-employee {
-      min-width: 0;
-    }
-
-    &__employee-stat-chip {
-      padding: 0.4rem 0.6rem;
-      border-radius: 999px;
-      font-size: 0.74rem;
-      font-weight: 800;
-      color: #6e5142;
-      background: rgba(201, 123, 99, 0.14);
-      margin: 3px;
-      &--multiline {
-        white-space: normal;
-        line-height: 1.25;
-      }
-    }
-
-    &__employee-clear-filter {
-      min-height: 2rem;
-      border-radius: 999px;
-      border: 1px solid rgba(201, 123, 99, 0.35);
-      background: rgba(201, 123, 99, 0.08);
-      color: colors.$color-primary-dark;
-      padding: 0 0.7rem;
-      font-size: 0.74rem;
-      font-weight: 800;
-      cursor: pointer;
-
-      &:hover {
-        background: rgba(201, 123, 99, 0.14);
-      }
-
-      &--saved-view-remove {
-        min-height: 1.85rem;
-      }
-    }
-
-    &__client-chart {
-      margin-top: layout.$space-2;
-      border: 1px solid colors.$color-border;
-      border-radius: layout.$radius-md;
-      background: #fff;
-      padding: layout.$space-2;
-      display: grid;
-      gap: 0.75rem;
-      min-width: 0;
-      overflow: hidden;
-
-      &--stats {
-        background: rgba(255, 255, 255, 0.96);
-      }
-    }
-
-    &__client-chart-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.6rem;
-      flex-wrap: wrap;
-    }
-
-    &__client-chart-controls {
-      display: flex;
-      align-items: center;
-      gap: 0.45rem;
-      flex-wrap: wrap;
-    }
-
-    &__client-pie-layout {
-      display: grid;
-      grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
-      gap: layout.$space-2;
-      align-items: center;
-    }
-
-    &__client-pie-chart {
-      width: min(220px, 90vw);
-      aspect-ratio: 1 / 1;
-      border-radius: 50%;
-      display: grid;
-      place-items: center;
-      margin: 0 auto;
-      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
-
-      &--stats {
-        width: min(240px, 90vw);
-      }
-    }
-
-    &__client-pie-hole {
-      width: 56%;
-      aspect-ratio: 1 / 1;
-      border-radius: 50%;
-      background: #fff;
-      border: 1px solid rgba(201, 123, 99, 0.25);
-      display: grid;
-      place-items: center;
-      text-align: center;
-      gap: 0.15rem;
-
-      span {
-        color: colors.$color-text-soft;
-        font-size: 0.72rem;
-        font-weight: 700;
-      }
-
-      strong {
-        color: colors.$color-primary-dark;
-        font-size: 1rem;
-      }
-    }
-
-    &__client-chart-list {
-      display: grid;
-      gap: 0.42rem;
-      align-content: start;
-    }
-
-    &__client-chart-row {
-      border: 1px solid rgba(201, 123, 99, 0.2);
-      border-radius: layout.$radius-sm;
-      padding: 0.45rem 0.55rem;
-      background: rgba(201, 123, 99, 0.05);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.5rem;
-      margin-left: 0;
-      min-width: 0;
-
-      &--filter {
-        cursor: pointer;
-      }
-
-      &--filter-active {
-        border-color: rgba(201, 123, 99, 0.58);
-        background: rgba(201, 123, 99, 0.14);
-      }
-    }
-
-    &__client-chart-legend {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.42rem;
-      min-width: 0;
-      flex-wrap: wrap;
-    }
-
-    &__client-chart-dot {
-      width: 0.62rem;
-      height: 0.62rem;
-      border-radius: 999px;
-      flex-shrink: 0;
-    }
-
-    &__client-chart-label {
-      color: colors.$color-text;
-      font-size: 0.82rem;
-      font-weight: 700;
-    }
-
-    &__client-chart-value {
-      color: colors.$color-text-soft;
-      font-size: 0.78rem;
-      font-weight: 700;
-      white-space: nowrap;
-    }
-
-    &__client-bar-scroll {
-      overflow-x: auto;
-      padding-bottom: 0.25rem;
-    }
-
-    &__client-bar-scroll-inner {
-      width: 100%;
-    }
-
-    &__client-bar-chart {
-      min-height: 14rem;
-      display: grid;
-      grid-template-columns: minmax(2.8rem, auto) minmax(0, 1fr);
-      gap: 0.6rem;
-    }
-
-    &__client-bar-axis {
-      display: grid;
-      align-content: space-between;
-      justify-items: end;
-      color: colors.$color-text-soft;
-      font-size: 0.72rem;
-      font-weight: 700;
-      padding: 0.2rem 0;
-    }
-
-    &__client-bar-main {
-      display: grid;
-      gap: 0.45rem;
-      min-width: 0;
-    }
-
-    &__client-bar-plot {
-      min-height: 11rem;
-      border: 1px solid rgba(201, 123, 99, 0.2);
-      border-radius: layout.$radius-sm;
-      background:
-        repeating-linear-gradient(
-          to top,
-          rgba(201, 123, 99, 0.08) 0,
-          rgba(201, 123, 99, 0.08) 1px,
-          transparent 1px,
-          transparent 25%
-        ),
-        #fff;
-      padding: 0.5rem 0.45rem 0.4rem;
-      display: grid;
-      align-items: end;
-    }
-
-    &__client-columns {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(2.4rem, 1fr));
-      gap: 0.5rem;
-      align-items: stretch;
-      min-height: 9.7rem;
-      height: 9.7rem;
-    }
-
-    &__client-column-item {
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-      justify-items: center;
-      align-items: stretch;
-      gap: 0.3rem;
-      min-width: 0;
-      height: 100%;
-
-      &--filter {
-        border: none;
-        background: transparent;
-        padding: 0;
-        cursor: pointer;
-      }
-
-      &--filter-active .admin-panel--container__client-column-bar {
-        box-shadow: 0 0 0 2px rgba(201, 123, 99, 0.34);
-      }
-
-      &--tooltip {
-        position: relative;
-      }
-
-      &--tooltip:focus .admin-panel--container__client-column-tooltip,
-      &--tooltip:hover .admin-panel--container__client-column-tooltip {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    &__client-column-tooltip {
-      position: absolute;
-      bottom: calc(100% + 0.35rem);
-      left: 50%;
-      transform: translateX(-50%) translateY(0.25rem);
-      background: #2f2217;
-      color: #fff;
-      border-radius: 0.45rem;
-      padding: 0.28rem 0.45rem;
-      font-size: 0.68rem;
-      font-weight: 700;
-      white-space: nowrap;
-      pointer-events: none;
-      opacity: 0;
-      transition:
-        opacity 0.18s ease,
-        transform 0.18s ease;
-      z-index: 2;
-    }
-
-    &__client-column-value {
-      color: colors.$color-primary-dark;
-      font-size: 0.74rem;
-      font-weight: 800;
-      line-height: 1;
-    }
-
-    &__client-column-bar {
-      width: 100%;
-      max-width: 1.5rem;
-      min-height: 0.2rem;
-      align-self: end;
-      border-radius: 0.4rem 0.4rem 0.2rem 0.2rem;
-      box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.08);
-      transition:
-        transform 0.2s ease,
-        opacity 0.2s ease;
-    }
-
-    &__client-column-item:hover &__client-column-bar,
-    &__client-column-item:focus-within &__client-column-bar {
-      transform: translateY(-1px);
-      opacity: 0.95;
-    }
-
-    &__client-column-labels {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(2.4rem, 1fr));
-      gap: 0.5rem;
-      align-items: start;
-
-      &--dense {
-        .admin-panel--container__client-column-label {
-          font-size: 0.62rem;
-        }
-      }
-    }
-
-    &__client-column-label {
-      text-align: center;
-      color: colors.$color-text-soft;
-      font-size: 0.69rem;
-      font-weight: 700;
-      line-height: 1.2;
-      word-break: break-word;
-
-      &--hidden {
-        opacity: 0.28;
-      }
-    }
-
-    &__employee-ranking-list {
-      display: grid;
-      gap: 0.52rem;
-    }
-
-    &__employee-ranking-row {
-      border: 1px solid rgba(201, 123, 99, 0.24);
-      border-radius: layout.$radius-sm;
-      background: rgba(201, 123, 99, 0.05);
-      padding: 0.55rem 0.7rem;
-      display: grid;
-      gap: 0.42rem;
-      text-align: left;
-
-      &--interactive {
-        cursor: pointer;
-      }
-
-      &--active {
-        border-color: rgba(201, 123, 99, 0.55);
-        background: rgba(201, 123, 99, 0.14);
-      }
-    }
-
-    &__employee-ranking-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 0.55rem;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    &__employee-ranking-name {
-      color: colors.$color-primary-dark;
-      font-size: 0.86rem;
-      font-weight: 800;
-    }
-
-    &__employee-ranking-value {
-      color: colors.$color-text;
-      font-size: 0.78rem;
-      font-weight: 700;
-    }
-
-    &__employee-ranking-track {
-      height: 0.52rem;
-      border-radius: 999px;
-      background: rgba(201, 123, 99, 0.15);
-      overflow: hidden;
-    }
-
-    &__employee-ranking-fill {
-      height: 100%;
-      border-radius: inherit;
-    }
-
-    &__employee-specialty-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 0.65rem;
-    }
-
-    &__employee-specialty-card {
-      border: 1px solid rgba(201, 123, 99, 0.24);
-      border-radius: layout.$radius-sm;
-      background: rgba(201, 123, 99, 0.05);
-      padding: 0.65rem;
-      display: grid;
-      gap: 0.55rem;
-      text-align: left;
-
-      &--interactive {
-        cursor: pointer;
-      }
-
-      &--active {
-        border-color: rgba(201, 123, 99, 0.58);
-        background: rgba(201, 123, 99, 0.14);
-      }
-    }
-
-    &__employee-specialty-head {
-      display: flex;
-      align-items: start;
-      justify-content: space-between;
-      gap: 0.45rem;
-      flex-wrap: wrap;
-    }
-
-    &__employee-specialty-name {
-      margin: 0;
-      color: colors.$color-primary-dark;
-      font-size: 0.86rem;
-      font-weight: 800;
-    }
-
-    &__employee-specialty-meta {
-      margin: 0.2rem 0 0;
-      color: colors.$color-text-soft;
-      font-size: 0.74rem;
-      font-weight: 700;
-    }
-
-    &__employee-specialty-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.35rem;
-    }
-
-    &__employee-specialty-tag {
-      border-radius: 999px;
-      border: 1px solid rgba(201, 123, 99, 0.28);
-      background: rgba(201, 123, 99, 0.1);
-      color: colors.$color-primary-dark;
-      padding: 0.16rem 0.46rem;
-      font-size: 0.7rem;
-      font-weight: 800;
-    }
-
-    &__employee-badges {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-    }
-
-    &__employee-detail-tabs {
-      display: inline-flex;
-      flex-wrap: wrap;
-      gap: 0.2rem;
-      padding: 0.2rem;
-      border-radius: layout.$radius-sm;
-      background: rgba(201, 123, 99, 0.08);
-      width: fit-content;
-    }
-
-    &__employee-detail-tab {
-      min-height: 2rem;
-      border: 1px solid rgba(201, 123, 99, 0.25);
-      border-radius: 0.45rem;
-      background: rgba(255, 255, 255, 0.9);
-      color: colors.$color-primary-dark;
-      padding: 0 0.9rem;
-      font-size: 0.82rem;
-      font-weight: 800;
-      cursor: pointer;
-      transition:
-        background 0.2s ease,
-        border-color 0.2s ease,
-        box-shadow 0.2s ease,
-        transform 0.15s ease;
-
-      &:hover {
-        border-color: rgba(201, 123, 99, 0.45);
-        background: rgba(201, 123, 99, 0.12);
-      }
-
-      &--active {
-        background: #fff;
-        border-color: rgba(201, 123, 99, 0.55);
-        box-shadow: 0 6px 16px rgba(121, 92, 69, 0.08);
-      }
-    }
-
-    &__employee-tab-panel {
-      display: grid;
-      gap: 1rem;
-
-      &--actions {
-        padding-top: 0.2rem;
-      }
-    }
-
-    &__employee-action-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 0.8rem;
-      align-items: stretch;
-    }
-
-    &__employee-action-tile {
-      min-height: 3.35rem;
-      padding: 0.8rem 1rem;
-      border-radius: 1rem;
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 0.65rem;
-      text-align: left;
-      line-height: 1.25;
-      box-shadow: 0 8px 20px rgba(84, 55, 39, 0.06);
-
-      &:hover:not(:disabled) {
-        transform: translateY(-1px);
-      }
-
-      &:disabled {
-        box-shadow: none;
-      }
-    }
-
-    &__employee-action-icon {
-      width: 1.5rem;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      font-size: 1rem;
-      line-height: 1;
-    }
-
-    &__employee-note-label {
-      gap: 0.45rem;
-    }
-
-    @media (max-width: 640px) {
-      padding: layout.$space-2;
-
-      &__module-card {
-        min-height: 10rem;
-      }
-
-      &__month-nav {
-        width: 100%;
-      }
-
-      &__month-nav-label {
-        min-width: 0;
-        width: auto;
-        order: 0;
-      }
-
-      &__calendar-weekdays,
-      &__calendar-grid {
-        gap: 0.2rem;
-      }
-
-      &__calendar-day {
-        min-height: 3.2rem;
-        aspect-ratio: 1 / 1;
-        padding: 0.22rem 0.22rem 0.2rem;
-        border-radius: 0.8rem;
-      }
-
-      &__calendar-day-number {
-        font-size: 0.84rem;
-      }
-
-      &__agenda-day-count {
-        min-width: 1.02rem;
-        height: 1.02rem;
-        font-size: 0.56rem;
-      }
-
-      &__calendar-day-number {
-        font-size: 0.8rem;
-      }
-
-      &__calendar-day-meta {
-        font-size: 0.58rem;
-      }
-
-      &__calendar-day--agenda {
-        position: relative;
-        justify-content: center;
-      }
-
-      &__agenda-day-number-wrap {
-        width: 100%;
-        justify-content: center;
-      }
-
-      &__agenda-day-count {
-        position: absolute;
-        top: 0.18rem;
-        right: 0.18rem;
-      }
-
-      &__agenda-closed-badge {
-        display: none;
-      }
-
-      &__calendar-day--closed {
-        background: rgba(184, 92, 92, 0.18);
-        border-color: rgba(184, 92, 92, 0.46);
-
-        .admin-panel--container__calendar-day-number {
-          color: colors.$color-error;
-        }
-      }
-
-      &__button,
-      &__btn,
-      &__action-button {
-        width: 100%;
-      }
-
-      &__agenda-hour-row {
-        grid-template-columns: 1fr;
-        gap: 0.3rem;
-      }
-
-      &__agenda-hour-label {
-        padding-top: 0;
-      }
-
-      &__agenda-duration-controls {
-        grid-template-columns: 1fr;
-      }
-
-      &__agenda-week-grid {
-        grid-template-columns: minmax(0, 1fr);
-      }
-
-      &__agenda-week-hour-list {
-        max-height: 50vh;
-      }
-
-      &__table {
-        min-width: 36rem;
-      }
-
-      &__client-pie-layout {
-        grid-template-columns: 1fr;
-      }
-
-      &__client-bar-chart {
-        grid-template-columns: 1fr;
-      }
-
-      &__client-bar-axis {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        align-content: initial;
-        justify-items: start;
-      }
-
-      &__client-stats-range {
-        grid-template-columns: 1fr;
-      }
-
-      &__client-stats-filters {
-        grid-template-columns: 1fr;
-      }
-
-      &__client-stats-actions {
-        margin-top: 0;
-      }
-
-      &__client-chart-row {
-        align-items: start;
-      }
-
-      &__client-chart-legend {
-        flex-wrap: wrap;
-      }
-
-      &__client-chart-value {
-        white-space: normal;
-      }
-
-      &__cierre-layout,
-      &__form-row--cierre {
-        grid-template-columns: 1fr;
-      }
-
-      &__cierre-summary {
-        padding: 0.8rem 0.85rem;
-
-        &--auto {
-          .admin-panel--container__action-button {
-            width: 100%;
-            justify-self: stretch;
-          }
-        }
-      }
-
-      &__cierre-summary-row {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: 0.12rem;
-      }
-
-      &__cierre-summary-value {
-        text-align: left;
-      }
-
-      &__cierre-form {
-        padding: 0.85rem;
-      }
-
-      @media (max-width: 1120px) {
-        &__client-stats-filters {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        &__label--stats-period,
-        &__label--stats-employee,
-        &__client-stats-actions {
-          grid-column: span 1;
-        }
-
-        &__client-stats-range--stats {
-          grid-column: 1 / -1;
-        }
-
-        &__client-stats-actions {
-          justify-content: flex-start;
-        }
-      }
-      &__textarea {
-        min-height: 4.4rem;
-      }
-
-      &__employee-ranking-head,
-      &__employee-specialty-head {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-
-      &__employee-action-grid {
-        grid-template-columns: 1fr;
-        gap: 0.7rem;
-      }
-
-      &__employee-detail-tabs {
-        width: 100%;
-      }
-    }
-    &__modal-close-money-data {
-      max-width: 800px;
-      width: 100%;
-      height: 100%;
-      max-height: 660px;
-      @media (max-width: 640px) {
-        max-height: 400px;
-        max-width: 375px;
-      }
-    }
-  }
-
-  @media (min-width: layout.$breakpoint-tablet) {
-    padding: layout.$space-5 layout.$space-3;
-
+    min-height: 100vh;
+    padding: layout.$space-3 layout.$space-2;
     &--container {
-      padding: layout.$space-4;
-
-      &__grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
+        max-width: layout.$max-content-width;
+        margin: 0 auto;
+        background: colors.$color-surface;
+        border: 1px solid colors.$color-border;
+        border-radius: layout.$radius-lg;
+        box-shadow: layout.$shadow-card;
+        padding: layout.$space-3;
+        &__hint {
+            margin-top: 1rem;
+            color: colors.$color-text-soft;
+            font-weight: 600;
+            position: relative;
+            top: 5px;
+        }
+        &__hero {
+            margin-bottom: layout.$space-2;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            align-items: center;
+            gap: layout.$space-3;
+            justify-items: start;
+        }
+        &__hero-left {
+            text-align: left;
+        }
+        &__hero-right {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+        }
+        &__title {
+            margin: 0;
+            color: colors.$color-text;
+            font-family: typography.$font-heading;
+            font-size: 1.6rem;
+            &--static {
+                color: colors.$color-primary-dark;
+            }
+        }
+        &__description {
+            margin: layout.$space-1 0 0;
+            color: colors.$color-text-soft;
+            &--hero {
+                max-width: 36rem;
+            }
+        }
+        &__module-grid {
+            margin-top: layout.$space-2;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: layout.$space-2;
+            @media (max-width: 840px) {
+                grid-template-columns: 1fr;
+            }
+        }
+        &__module-card {
+            border: 1px solid rgba(201, 123, 99, 0.3);
+            border-radius: layout.$radius-lg;
+            background: linear-gradient(rgba(252, 243, 234, 0.82), rgba(252, 243, 234, 0.9)), url('/assets/branding/espuma.jpeg') center / cover no-repeat;
+            min-height: 11.5rem;
+            padding: layout.$space-3;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+            &:hover {
+                transform: translateY(-2px);
+                border-color: rgba(201, 123, 99, 0.5);
+                box-shadow: 0 10px 20px rgba(121, 92, 69, 0.12);
+            }
+            &--disabled {
+                opacity: 0.55;
+                filter: grayscale(0.3);
+                transform: none;
+                cursor: not-allowed;
+                &:hover {
+                    transform: none;
+                    border-color: rgba(201, 123, 99, 0.3);
+                    box-shadow: none;
+                }
+            }
+        }
+        &__module-card-icon {
+            width: 4rem;
+            height: 4rem;
+            border-radius: 999px;
+            display: grid;
+            place-items: center;
+            font-size: 1.9rem;
+            background: linear-gradient(135deg, #c97b63 0%, #d9a441 100%);
+            color: #fff;
+        }
+        &__module-card-title {
+            margin: 0;
+            color: colors.$color-primary-dark;
+            font-family: typography.$font-heading;
+            font-size: clamp(1.35rem, 3.1vw, 1.9rem);
+            font-weight: 900;
+            line-height: 1.15;
+            letter-spacing: 0.01em;
+            text-wrap: balance;
+        }
+        &__subtitle {
+            margin: layout.$space-2 0 0;
+            color: colors.$color-text;
+            font-family: typography.$font-heading;
+            font-size: 1.1rem;
+        }
+        &__tabs {
+            margin-top: layout.$space-2;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        &__tab {
+            min-height: 2.2rem;
+            border-radius: 999px;
+            border: 1px solid colors.$color-border;
+            background: colors.$color-surface;
+            color: colors.$color-primary-dark;
+            padding: 0 0.85rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+            &:hover:not(.admin-panel--container__tab--active) {
+                border-color: rgba(201, 123, 99, 0.5);
+                background: rgba(201, 123, 99, 0.08);
+            }
+            &--active {
+                background: colors.$color-primary;
+                border: none;
+                color: #fff;
+                box-shadow: 0 4px 12px rgba(201, 123, 99, 0.25);
+            }
+            &--disabled {
+                opacity: 0.52;
+                cursor: not-allowed;
+            }
+        }
+        &__employee-subtabs {
+            margin-top: layout.$space-2;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+        &__employee-subtab {
+            min-height: 2.2rem;
+            border-radius: 999px;
+            border: 1px solid colors.$color-border;
+            background: colors.$color-surface;
+            color: colors.$color-primary-dark;
+            padding: 0 0.85rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+            &:hover:not(.admin-panel--container__employee-subtab--active) {
+                border-color: rgba(201, 123, 99, 0.5);
+                background: rgba(201, 123, 99, 0.08);
+            }
+            &--active {
+                background: colors.$color-primary;
+                border: none;
+                color: #fff;
+                box-shadow: 0 4px 12px rgba(201, 123, 99, 0.25);
+            }
+        }
+        &__employee-filters {
+            margin-top: layout.$space-2;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: layout.$space-1;
+        }
+        &__help-grid {
+            margin-top: layout.$space-2;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: layout.$space-2;
+        }
+        &__help-highlight {
+            margin-top: layout.$space-2;
+            border: 1px solid rgba(217, 164, 65, 0.42);
+            border-radius: layout.$radius-md;
+            background: linear-gradient(120deg, rgba(217, 164, 65, 0.16), rgba(201, 123, 99, 0.08));
+            padding: layout.$space-2;
+            display: grid;
+            gap: 0.25rem;
+        }
+        &__help-highlight-title {
+            margin: 0;
+            color: colors.$color-primary-dark;
+            font-weight: 800;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+        &__help-highlight-text {
+            margin: 0;
+            color: colors.$color-text;
+            line-height: 1.45;
+            font-size: 0.9rem;
+        }
+        &__help-search {
+            margin-top: layout.$space-2;
+            max-width: 34rem;
+        }
+        &__help-card {
+            border: 1px solid rgba(201, 123, 99, 0.28);
+            border-radius: layout.$radius-md;
+            background: linear-gradient( 180deg, rgba(201, 123, 99, 0.08) 0%, rgba(255, 255, 255, 0.92) 100%);
+            padding: layout.$space-2;
+            display: grid;
+            gap: 0.7rem;
+        }
+        &__help-title {
+            margin: 0;
+            color: colors.$color-primary-dark;
+            font-family: typography.$font-heading;
+            font-size: 1rem;
+        }
+        &__help-text {
+            margin: 0;
+            color: colors.$color-text-soft;
+            line-height: 1.45;
+            font-size: 0.9rem;
+        }
+        &__help-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+        }
+        &__help-checklist {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            display: grid;
+            gap: 0.35rem;
+            li {
+                position: relative;
+                padding-left: 1.25rem;
+                color: colors.$color-text;
+                font-size: 0.86rem;
+                line-height: 1.42;
+                &::before {
+                    content: '✓';
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    color: colors.$color-primary;
+                    font-weight: 800;
+                }
+            }
+        }
+        &__faq {
+            margin-top: layout.$space-3;
+            border-top: 1px dashed rgba(201, 123, 99, 0.45);
+            padding-top: layout.$space-2;
+            display: grid;
+            gap: layout.$space-2;
+        }
+        &__faq-title {
+            margin: 0;
+            color: colors.$color-primary-dark;
+            font-family: typography.$font-heading;
+            font-size: 1.05rem;
+        }
+        &__faq-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: layout.$space-2;
+        }
+        &__faq-item {
+            border: 1px solid rgba(93, 64, 48, 0.16);
+            border-radius: layout.$radius-md;
+            background: #fff;
+            padding: layout.$space-2;
+            display: grid;
+            gap: 0.6rem;
+        }
+        &__faq-question {
+            margin: 0;
+            color: colors.$color-text;
+            font-size: 0.92rem;
+            font-weight: 800;
+            line-height: 1.3;
+        }
+        &__faq-answer {
+            margin: 0;
+            color: colors.$color-text-soft;
+            font-size: 0.86rem;
+            line-height: 1.42;
+        }
+        &__help-empty {
+            margin-top: layout.$space-2;
+            border: 1px dashed rgba(201, 123, 99, 0.45);
+            border-radius: layout.$radius-md;
+            background: rgba(201, 123, 99, 0.06);
+            padding: layout.$space-2;
+        }
+        &__error {
+            margin: layout.$space-1 0 0;
+            color: colors.$color-error;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        &__success {
+            margin: layout.$space-1 0 0;
+            color: colors.$color-primary-dark;
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+        &__list {
+            margin-top: layout.$space-2;
+            display: grid;
+            gap: 1.8rem;
+        }
+        &__reservation {
+            border: 1px solid colors.$color-border;
+            border-radius: layout.$radius-md;
+            padding: 1rem 1.1rem;
+            background: rgba(201, 123, 99, 0.06);
+            &--blocked {
+                background: rgba(217, 164, 65, 0.08);
+            }
+        }
+        &__reservation-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: layout.$space-1;
+            flex-wrap: wrap;
+        }
+        &__reservation-title {
+            margin: 0;
+            color: colors.$color-primary-dark;
+            font-size: 1rem;
+        }
+        &__reservation-text {
+            margin: 0.45rem 0 0;
+            color: colors.$color-text-soft;
+            font-size: 0.9rem;
+            line-height: 1.4;
+            word-break: break-word;
+            &--role-confirm {
+                margin-top: 0.2rem;
+            }
+            &--client-confirmation {
+                color: colors.$color-primary-dark;
+                font-weight: 800;
+            }
+        }
+        &__client-modal-content {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        &__client-modal-fields {
+            display: grid;
+            gap: 0.7rem;
+        }
+        &__employee-history {
+            &-list {
+                display: grid;
+                gap: 0.75rem;
+            }
+            &-item {
+                border: 1px solid colors.$color-secondary;
+                border-radius: 0.85rem;
+                padding: 1rem;
+                background: rgba(201, 123, 99, 0.06);
+                margin: 0.15rem 0 0;
+                display: grid;
+                gap: 0.3rem;
+            }
+            &-text {
+                margin: 0;
+                color: colors.$color-text;
+                font-size: 0.8rem;
+                line-height: 1.45;
+            }
+            &-note {
+                margin: 0.3rem 0 0;
+                padding-left: 1rem;
+                color: colors.$color-text-soft;
+                font-size: 0.76rem;
+                line-height: 1.45;
+            }
+        }
+        &__role-confirm-employee {
+            margin: 0;
+            color: colors.$color-text-soft;
+            font-weight: 700;
+        }
+        &__role-confirm-employee-name {
+            color: colors.$color-primary-dark;
+        }
+        &__status {
+            padding: 0.2rem 0.55rem;
+            border-radius: 999px;
+            font-size: 0.73rem;
+            font-weight: 800;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            color: #8d6f60;
+            background: rgba(201, 123, 99, 0.15);
+            &--accepted {
+                color: #fff;
+                background: #b76b54;
+            }
+            &--rejected {
+                color: #fff;
+                background: #b85c5c;
+            }
+            &--paid {
+                color: #fff;
+                background: #1e7a4a;
+                box-shadow: 0 1px 6px rgba(30, 122, 74, 0.35);
+            }
+        }
+        &__reservation-actions {
+            margin-top: layout.$space-2;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            &--role-confirm {
+                justify-content: space-between;
+                margin-top: 0;
+            }
+        }
+        &__action-button {
+            min-height: 2.3rem;
+            border-radius: 999px;
+            padding: 0 0.9rem;
+            border: 1px solid colors.$color-border;
+            background: colors.$color-surface;
+            color: colors.$color-primary-dark;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+            // &:hover:not(:disabled) {
+            //   border-color: rgba(201, 123, 99, 0.5);
+            //   background: rgba(201, 123, 99, 0.08);
+            // }
+            &:disabled {
+                opacity: 0.55;
+                cursor: not-allowed;
+            }
+            &--soft {
+                background: rgba(201, 123, 99, 0.1);
+                border-color: rgba(201, 123, 99, 0.35);
+                &:hover:not(:disabled) {
+                    background: rgba(201, 123, 99, 0.18);
+                    border-color: rgba(201, 123, 99, 0.55);
+                }
+            }
+            &--secondary {
+                border-color: rgba(201, 123, 99, 0.55);
+                background: #fff;
+                color: colors.$color-primary-dark;
+                &:hover:not(:disabled) {
+                    border-color: rgba(201, 123, 99, 0.75);
+                    background: rgba(201, 123, 99, 0.1);
+                }
+            }
+            &--accept {
+                background: colors.$color-primary;
+                border: none;
+                color: #fff;
+                &:hover:not(:disabled) {
+                    box-shadow: 0 4px 12px rgba(201, 123, 99, 0.3);
+                }
+                &:disabled {
+                    opacity: 0.65;
+                }
+            }
+            &--reject {
+                background: rgba(184, 92, 92, 0.12);
+                border-color: rgba(184, 92, 92, 0.5);
+                color: colors.$color-error;
+                &:hover:not(:disabled) {
+                    background: rgba(184, 92, 92, 0.2);
+                    border-color: rgba(184, 92, 92, 0.7);
+                }
+                &:disabled {
+                    opacity: 0.65;
+                }
+            }
+            &--role-confirm {
+                min-width: 7.5rem;
+            }
+        }
+        &__reservation-filters {
+            margin-top: layout.$space-2;
+            margin-bottom: layout.$space-2;
+            padding: layout.$space-2;
+            border: 1px solid rgba(201, 123, 99, 0.2);
+            border-radius: layout.$radius-md;
+            background: rgba(201, 123, 99, 0.04);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: layout.$space-1;
+            align-items: flex-end;
+        }
+        &__reservation-filter-field {
+            display: grid;
+            gap: 0.35rem;
+        }
+        &__reservation-filter-label {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            color: colors.$color-text;
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-transform: capitalize;
+            svg {
+                width: 1rem;
+                height: 1rem;
+                opacity: 0.75;
+            }
+        }
+        &__reservation-filter-input {
+            min-height: 2.4rem;
+            border-radius: layout.$radius-sm;
+            border: 1px solid colors.$color-border;
+            background: #fff;
+            color: colors.$color-text;
+            padding: 0 0.7rem;
+            font-size: 0.88rem;
+            font-weight: 500;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            &::placeholder {
+                color: rgba(93, 64, 48, 0.5);
+            }
+            &:focus {
+                outline: none;
+                border-color: rgba(201, 123, 99, 0.6);
+                box-shadow: 0 0 0 2px rgba(201, 123, 99, 0.15);
+            }
+        }
+        &__reservation-filter-clear {
+            min-height: 2.4rem;
+            border-radius: layout.$radius-sm;
+            border: 1px solid rgba(184, 92, 92, 0.4);
+            background: rgba(184, 92, 92, 0.08);
+            color: colors.$color-error;
+            padding: 0 0.8rem;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease;
+            &:hover {
+                background: rgba(184, 92, 92, 0.14);
+                border-color: rgba(184, 92, 92, 0.55);
+            }
+        }
+        &__reservation-filter-count {
+            margin: 0;
+            color: colors.$color-text-soft;
+            font-size: 0.82rem;
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+        &__block-form {
+            margin-top: layout.$space-2;
+            border: 1px solid colors.$color-border;
+            border-radius: layout.$radius-md;
+            padding: layout.$space-2;
+            background: rgba(201, 123, 99, 0.04);
+            display: grid;
+            gap: 0.75rem;
+        }
+        &__calendar-card {
+            margin-top: layout.$space-2;
+            border: 1px solid colors.$color-border;
+            border-radius: layout.$radius-md;
+            padding: layout.$space-2;
+            background: rgba(201, 123, 99, 0.04);
+        }
+        &__calendar-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: layout.$space-1;
+            flex-wrap: wrap;
+        }
+        &__calendar-title {
+            margin: 0;
+            color: colors.$color-primary-dark;
+            font-size: 1rem;
+        }
+        &__calendar-subtitle {
+            margin: 0.35rem 0 0;
+            color: colors.$color-text-soft;
+            font-size: 0.84rem;
+            font-weight: 600;
+        }
+        &__month-nav {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 0.5rem;
+            border: 1px solid colors.$color-border;
+            border-radius: 999px;
+            background: #fff;
+            padding: 0.25rem;
+            width: min(100%, 24rem);
+        }
+        &__month-nav-button {
+            width: 2rem;
+            height: 2rem;
+            border: 1px solid colors.$color-border;
+            border-radius: 999px;
+            background: #fff;
+            color: colors.$color-primary-dark;
+            display: inline-grid;
+            place-items: center;
+            padding: 0;
+            line-height: 0;
+            cursor: pointer;
+            &:hover {
+                background: rgba(201, 123, 99, 0.08);
+                border-color: rgba(201, 123, 99, 0.45);
+            }
+        }
+        &__month-nav-icon {
+            width: 1rem;
+            height: 1rem;
+            display: block;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2.2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        &__month-nav-label {
+            min-width: 0;
+            text-align: center;
+            font-size: 0.86rem;
+            font-weight: 800;
+            color: colors.$color-primary-dark;
+            text-transform: capitalize;
+            padding: 0 0.25rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        &__month-input {
+            min-height: 2.2rem;
+            border-radius: layout.$radius-sm;
+            border: 1px solid colors.$color-border;
+            background: #fff;
+            color: colors.$color-text;
+            padding: 0 0.6rem;
+            font-size: 0.86rem;
+        }
+        &__calendar-weekdays {
+            margin-top: 0.8rem;
+            display: grid;
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+            gap: 0.35rem;
+            span {
+                text-align: center;
+                color: colors.$color-text-soft;
+                font-size: 0.72rem;
+                font-weight: 800;
+            }
+        }
+        &__calendar-grid {
+            margin-top: 0.35rem;
+            display: grid;
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+            gap: 0.35rem;
+        }
+        &__calendar-day {
+            min-height: 4.1rem;
+            border-radius: 0.95rem;
+            border: 1px solid colors.$color-border;
+            background: #fff;
+            color: colors.$color-text;
+            cursor: pointer;
+            padding: 0.4rem 0.45rem 0.38rem;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: flex-start;
+            gap: 0.35rem;
+            aspect-ratio: 1 / 1;
+            overflow: hidden;
+            transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+            &:hover:not(:disabled) {
+                transform: translateY(-1px);
+                box-shadow: 0 6px 16px rgba(84, 55, 39, 0.08);
+            }
+            &:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+            &--outside {
+                opacity: 0.32;
+            }
+            &--today {
+                border-color: rgba(201, 123, 99, 0.8);
+            }
+            &--selected {
+                border-color: colors.$color-secondary;
+                box-shadow: 0 0 0 2px rgba(217, 164, 65, 0.2);
+            }
+            &--full {
+                background: rgba(184, 92, 92, 0.14);
+                border-color: rgba(184, 92, 92, 0.4);
+            }
+            &--partial {
+                background: rgba(217, 164, 65, 0.15);
+                border-color: rgba(217, 164, 65, 0.45);
+            }
+            &--closed {
+                background: rgba(184, 92, 92, 0.14);
+                border-color: rgba(184, 92, 92, 0.38);
+            }
+        }
+        &__calendar-day-number {
+            font-size: 0.98rem;
+            font-weight: 900;
+            line-height: 1;
+        }
+        &__agenda-day-number-wrap {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.4rem;
+        }
+        &__agenda-day-count {
+            min-width: 1.35rem;
+            height: 1.35rem;
+            border-radius: 999px;
+            background: colors.$color-primary;
+            color: #fff;
+            font-size: 0.68rem;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 0.22rem;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+        &__agenda-closed-badge {
+            width: 100%;
+            margin-top: auto;
+            justify-self: center;
+            text-align: center;
+        }
+        &__calendar-day-meta {
+            font-size: 0.62rem;
+            font-weight: 700;
+            color: colors.$color-text-soft;
+            line-height: 1.05;
+            text-align: center;
+        }
+        &__label {
+            display: grid;
+            gap: 0.3rem;
+            color: colors.$color-text;
+            font-size: 0.86rem;
+            font-weight: 700;
+        }
+        &__selected-date {
+            min-height: 2.8rem;
+            border-radius: layout.$radius-sm;
+            border: 1px solid colors.$color-border;
+            background: #fff;
+            padding: 0.55rem 0.75rem;
+            display: grid;
+            gap: 0.15rem;
+            strong {
+                color: colors.$color-primary-dark;
+                font-size: 0.95rem;
+            }
+            span {
+                color: colors.$color-text-soft;
+                font-size: 0.78rem;
+                letter-spacing: 0.03em;
+            }
+        }
+        &__block-mode {
+            display: grid;
+            gap: 0.5rem;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        }
+        &__block-mode-option {
+            min-height: 2.45rem;
+            border-radius: 999px;
+            border: 1px solid colors.$color-border;
+            background: #fff;
+            color: colors.$color-primary-dark;
+            font-size: 0.84rem;
+            font-weight: 700;
+            padding: 0 0.85rem;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+            &:hover {
+                border-color: rgba(201, 123, 99, 0.55);
+                background: rgba(201, 123, 99, 0.09);
+            }
+            &--active {
+                border-color: rgba(201, 123, 99, 0.7);
+                background: linear-gradient( 90deg, rgba(201, 123, 99, 0.16) 0%, rgba(217, 164, 65, 0.18) 100%);
+                box-shadow: 0 0 0 2px rgba(217, 164, 65, 0.18);
+            }
+        }
+        &__checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            color: colors.$color-text-soft;
+            font-size: 0.86rem;
+            font-weight: 600;
+        }
+        &__input {
+            min-height: 2.5rem;
+            border-radius: layout.$radius-sm;
+            border: 1px solid colors.$color-border;
+            background: #fff;
+            color: colors.$color-text;
+            padding: 0 0.75rem;
+            font-size: 0.9rem;
+            &:focus {
+                outline: none;
+                border-color: rgba(201, 123, 99, 0.62);
+                box-shadow: 0 0 0 2px rgba(201, 123, 99, 0.16);
+            }
+        }
+        &__time-select-wrap {
+            position: relative;
+            &::after {
+                content: '';
+                position: absolute;
+                right: 0.8rem;
+                top: 50%;
+                width: 0.5rem;
+                height: 0.5rem;
+                border-right: 2px solid rgba(183, 107, 84, 0.85);
+                border-bottom: 2px solid rgba(183, 107, 84, 0.85);
+                transform: translateY(-60%) rotate(45deg);
+                pointer-events: none;
+            }
+        }
+        &__time-select {
+            width: 100%;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            padding-right: 2rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            color: colors.$color-primary-dark;
+            background: linear-gradient(180deg, #fff 0%, rgba(252, 243, 234, 0.75) 100%);
+            &:focus {
+                outline: none;
+                border-color: rgba(201, 123, 99, 0.6);
+                box-shadow: 0 0 0 2px rgba(201, 123, 99, 0.18);
+            }
+        }
+        &__time-range {
+            display: grid;
+            gap: 0.75rem;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        }
+        &__modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(39, 24, 16, 0.4);
+            backdrop-filter: blur(2px);
+            display: grid;
+            place-items: center;
+            z-index: 40;
+            padding: 1rem;
+            &--centered {
+                align-items: center;
+                justify-items: center;
+            }
+        }
+        &__modal {
+            width: min(32rem, 100%);
+            max-height: 80vh;
+            overflow: auto;
+            border: 1px solid colors.$color-border;
+            border-radius: layout.$radius-md;
+            background: #fff;
+            box-shadow: 0 16px 36px rgba(57, 39, 28, 0.2);
+            padding: 1rem;
+            display: grid;
+            gap: 0.85rem;
+            position: relative;
+            top: 40px;
+            &--compact {
+                width: min(36rem, 100%);
+            }
+            &--client {
+                width: min(64rem, 96vw);
+                max-height: 88vh;
+            }
+            &--tracking-calendar,
+            &--role-confirm {
+                width: min(34rem, 100%);
+            }
+            &--agenda-calendar {
+                width: min(54rem, 100%);
+            }
+            &--agenda-day {
+                width: min(66rem, 100%);
+            }
+            &--agenda-week {
+                width: min(98vw, 1440px);
+                max-height: 92vh;
+            }
+            &--agenda-week-schedule {
+                width: min(95vw, 1200px);
+                max-height: 80vh;
+                position: relative;
+                top: 40px;
+            }
+            &--quick-reserve {
+                width: min(32rem, 100%);
+            }
+            &--client-type-picker {
+                width: min(36rem, 100%);
+            }
+        }
+        &__modal-subtitle {
+            margin: 0;
+            font-size: 0.85rem;
+            color: colors.$color-text-soft;
+            padding: 0 0 0.5rem;
+        }
+        &__payment-method-options {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            width: 100%;
+        }
+        &__payment-option {
+            min-height: 2.4rem;
+            border: 1px solid rgba(150, 121, 106, 0.6);
+            border-radius: 0.5rem;
+            background: rgba(255, 255, 255, 0.8);
+            color: colors.$color-primary-dark;
+            font-size: 0.76rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+            &:hover:not(.admin-panel--container__payment-option--selected) {
+                border-color: rgba(201, 123, 99, 0.7);
+                background: rgba(201, 123, 99, 0.06);
+            }
+            &--selected {
+                border-color: rgba(104, 170, 120, 0.9);
+                background: rgba(124, 186, 133, 0.12);
+                box-shadow: inset 0 0 0 1px rgba(104, 170, 120, 0.35);
+            }
+            &--neutral {
+                border-style: dashed;
+            }
+        }
+        &__client-type-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+        &__client-type-btn {
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            gap: 0.3rem;
+            padding: 1.1rem;
+            border: 2px solid colors.$color-border;
+            border-radius: layout.$radius-md;
+            background: #fff;
+            cursor: pointer;
+            text-align: left;
+            transition: border-color 0.15s ease, background 0.15s ease;
+            &:hover {
+                border-color: colors.$color-primary;
+                background: rgba(201, 123, 99, 0.05);
+            }
+            &--new {
+                border-color: rgba(201, 123, 99, 0.4);
+                background: rgba(201, 123, 99, 0.04);
+                &:hover {
+                    border-color: colors.$color-primary;
+                    background: rgba(201, 123, 99, 0.1);
+                }
+            }
+            &--selected {
+                border-color: rgba(104, 170, 120, 0.9);
+                background: rgba(124, 186, 133, 0.12);
+                box-shadow: inset 0 0 0 1px rgba(104, 170, 120, 0.3);
+            }
+        }
+        &__client-type-icon {
+            font-size: 1.6rem;
+            line-height: 1;
+        }
+        &__client-type-label {
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: colors.$color-primary-dark;
+        }
+        &__client-type-desc {
+            font-size: 0.78rem;
+            color: colors.$color-text-soft;
+            line-height: 1.4;
+        }
+        &__agenda-week-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 0.65rem;
+            overflow: auto;
+            padding-bottom: 0.35rem;
+        }
+        &__agenda-week-column {
+            border: 1px solid colors.$color-border;
+            border-radius: layout.$radius-sm;
+            background: #fff;
+            min-width: 160px;
+            display: grid;
+            grid-template-rows: auto 1fr;
+        }
+        &__agenda-week-column-head {
+            padding: 0.45rem 0.5rem;
+            border-bottom: 1px solid rgba(201, 123, 99, 0.24);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.4rem;
+            &--today {
+                background: rgba(201, 123, 99, 0.1);
+            }
+        }
+        &__agenda-week-day-head-copy {
+            display: grid;
+            gap: 0.2rem;
+        }
+        &__agenda-week-day-label {
+            margin: 0;
+            color: colors.$color-primary-dark;
+            font-size: 0.76rem;
+            font-weight: 800;
+            text-transform: capitalize;
+        }
+        &__agenda-alert-day-count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: fit-content;
+            padding: 0.12rem 0.45rem;
+            border-radius: 999px;
+            background: rgba(217, 164, 65, 0.16);
+            color: #8d6421;
+            font-size: 0.64rem;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+        }
+        &__agenda-closed-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: fit-content;
+            padding: 0.12rem 0.45rem;
+            border-radius: 999px;
+            background: rgba(184, 92, 92, 0.12);
+            color: colors.$color-error;
+            font-size: 0.64rem;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+        }
+        &__agenda-week-hour-list {
+            padding: 0.35rem;
+            display: grid;
+            gap: 0.35rem;
+            max-height: 66vh;
+            overflow: auto;
+        }
+        &__agenda-week-hour-row {
+            display: grid;
+            gap: 0.25rem;
+        }
+        &__agenda-week-hour-label {
+            color: colors.$color-text-soft;
+            font-size: 0.67rem;
+            font-weight: 700;
+        }
+        &__agenda-week-dropzone {
+            min-height: 2.2rem;
+            border: 1px dashed rgba(201, 123, 99, 0.35);
+            border-radius: 0.5rem;
+            background: rgba(201, 123, 99, 0.035);
+            padding: 0.28rem;
+            display: grid;
+            gap: 0.3rem;
+            overflow: visible;
+        }
+        &__agenda-slot-closed {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 1.9rem;
+            border-radius: 0.45rem;
+            border: 1px dashed rgba(184, 92, 92, 0.36);
+            background: rgba(184, 92, 92, 0.08);
+            color: colors.$color-error;
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-align: center;
+            padding: 0.2rem 0.35rem;
+        }
+        &__agenda-alert-list {
+            display: grid;
+            gap: 0.3rem;
+        }
+        &__agenda-alert-card {
+            border-radius: 0.55rem;
+            border: 1px solid rgba(217, 164, 65, 0.28);
+            background: rgba(255, 248, 236, 0.96);
+            padding: 0.32rem 0.36rem;
+            display: grid;
+            gap: 0.35rem;
+            &--approved {
+                border-color: rgba(126, 159, 125, 0.38);
+                background: rgba(236, 247, 236, 0.95);
+            }
+            &--rejected {
+                border-color: rgba(184, 106, 106, 0.32);
+                background: rgba(253, 238, 238, 0.96);
+            }
+        }
+        &__agenda-alert-card__content {
+            display: grid;
+            gap: 0.1rem;
+        }
+        &__agenda-alert-title {
+            margin: 0;
+            color: colors.$color-primary-dark;
+            font-size: 0.68rem;
+            font-weight: 800;
+            word-break: break-word;
+        }
+        &__agenda-alert-meta {
+            margin: 0;
+            color: colors.$color-text-soft;
+            font-size: 0.62rem;
+            font-weight: 600;
+            word-break: break-word;
+        }
+        &__agenda-alert-status {
+            display: inline-flex;
+            align-items: center;
+            width: fit-content;
+            padding: 0.1rem 0.38rem;
+            border-radius: 999px;
+            background: rgba(126, 159, 125, 0.14);
+            color: #547052;
+            font-size: 0.58rem;
+            font-weight: 800;
+        }
+        &__agenda-alert-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.24rem;
+        }
+        &__agenda-alert-btn {
+            border: 1px solid transparent;
+            border-radius: 999px;
+            padding: 0.16rem 0.42rem;
+            font-size: 0.58rem;
+            font-weight: 800;
+            cursor: pointer;
+            &:disabled {
+                opacity: 0.55;
+                cursor: wait;
+            }
+            &--approve {
+                background: rgba(126, 159, 125, 0.16);
+                color: #4d6a4d;
+                border-color: rgba(126, 159, 125, 0.28);
+            }
+            &--reject {
+                background: rgba(184, 106, 106, 0.12);
+                color: #9d5555;
+                border-color: rgba(184, 106, 106, 0.22);
+            }
+        }
+        &__agenda-hour-list {
+            display: grid;
+            gap: 0.55rem;
+        }
+        &__agenda-worker-section {
+            display: grid;
+            gap: 0.6rem;
+            border: 1px solid rgba(201, 123, 99, 0.2);
+            border-radius: 0.7rem;
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.78);
+        }
+        &__agenda-worker-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.6rem;
+            padding-bottom: 0.35rem;
+            border-bottom: 1px solid rgba(201, 123, 99, 0.18);
+        }
+        &__agenda-worker-title {
+            margin: 0;
+            color: colors.$color-primary-dark;
+            font-size: 0.84rem;
+            font-weight: 800;
+            letter-spacing: 0.01em;
+        }
+        &__agenda-hour-row {
+            display: grid;
+            grid-template-columns: minmax(3.7rem, auto) 1fr;
+            gap: 0.6rem;
+            align-items: start;
+        }
+        &__agenda-hour-label {
+            color: colors.$color-text-soft;
+            font-size: 0.78rem;
+            font-weight: 800;
+            padding-top: 0.45rem;
+        }
+        &__agenda-hour-dropzone {
+            min-height: 3rem;
+            border: 1px dashed rgba(201, 123, 99, 0.4);
+            border-radius: layout.$radius-sm;
+            background: rgba(201, 123, 99, 0.04);
+            padding: 0.4rem;
+            display: grid;
+            gap: 0.45rem;
+            overflow: visible;
+        }
+        &__agenda-hour-empty {
+            color: colors.$color-text-soft;
+            font-size: 0.75rem;
+            font-weight: 600;
+            align-self: center;
+            justify-self: start;
+        }
+        &__agenda-slot-occupied {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 1.9rem;
+            border-radius: 0.45rem;
+            border: 1px dashed rgba(201, 123, 99, 0.35);
+            background: rgba(201, 123, 99, 0.08);
+            color: colors.$color-text-soft;
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-align: center;
+            padding: 0.2rem 0.35rem;
+        }
+        &__agenda-manual-form {
+            display: grid;
+            gap: 0.85rem;
+        }
+        &__agenda-manual-section {
+            display: grid;
+            gap: 0.75rem;
+            padding: 0.85rem 0.9rem;
+            border: 1px solid rgba(201, 123, 99, 0.24);
+            border-radius: layout.$radius-md;
+            background: rgba(255, 255, 255, 0.72);
+        }
+        &__agenda-manual-section-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.6rem;
+            font-size: 0.86rem;
+            font-weight: 800;
+            color: colors.$color-primary-dark;
+        }
+        &__agenda-manual-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 1.75rem;
+            padding: 0.2rem 0.55rem;
+            border-radius: 999px;
+            background: rgba(201, 123, 99, 0.12);
+            border: 1px solid rgba(201, 123, 99, 0.24);
+            color: colors.$color-primary-dark;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+        &__agenda-manual-summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.7rem 0.8rem;
+            border-radius: layout.$radius-sm;
+            background: rgba(104, 170, 120, 0.08);
+            border: 1px solid rgba(104, 170, 120, 0.2);
+            color: colors.$color-primary-dark;
+            font-size: 0.82rem;
+            strong {
+                font-size: 0.9rem;
+            }
+        }
+        &__agenda-manual-selected-list {
+            display: grid;
+            gap: 0.5rem;
+        }
+        &__agenda-manual-selected-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.7rem 0.8rem;
+            border: 1px solid rgba(201, 123, 99, 0.2);
+            border-radius: layout.$radius-sm;
+            background: #fff;
+        }
+        &__agenda-manual-selected-copy {
+            display: grid;
+            gap: 0.15rem;
+            min-width: 0;
+            strong {
+                font-size: 0.82rem;
+                color: colors.$color-primary-dark;
+            }
+            span {
+                font-size: 0.72rem;
+                color: colors.$color-text-soft;
+            }
+        }
+        &__agenda-manual-stock-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.7fr);
+            gap: 0.75rem;
+        }
+        &__agenda-manual-client-mode {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.6rem;
+        }
+        &__agenda-manual-client-mode-btn {
+            min-height: 2.2rem;
+            border: 1px solid rgba(201, 123, 99, 0.34);
+            border-radius: 999px;
+            background: #fff;
+            color: colors.$color-primary-dark;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        &__agenda-manual-client-mode-btn--active {
+            background: rgba(201, 123, 99, 0.12);
+            border-color: rgba(201, 123, 99, 0.72);
+        }
+        &__agenda-manual-client-search {
+            display: grid;
+            gap: 0.55rem;
+        }
+        &__agenda-manual-client-list {
+            display: grid;
+            gap: 0.5rem;
+            max-height: 12rem;
+            overflow: auto;
+        }
+        &__agenda-manual-client-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            padding: 0.75rem 0.85rem;
+            border: 1px solid rgba(201, 123, 99, 0.28);
+            border-radius: layout.$radius-sm;
+            background: #fff;
+            color: colors.$color-primary-dark;
+            cursor: pointer;
+            &--selected {
+                border-color: rgba(104, 170, 120, 0.9);
+                background: rgba(124, 186, 133, 0.1);
+            }
+        }
+        &__checkbox-inline {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 600;
+            color: colors.$color-primary-dark;
+            input {
+                margin: 0;
+            }
+        }
+        &__agenda-reservation-card {
+            --appointment-color: #{colors.$color-primary};
+            border: 1px solid color-mix(in srgb, var(--appointment-color) 48%, white);
+            border-left-width: 0.38rem;
+            border-radius: layout.$radius-sm;
+            background: color-mix(in srgb, var(--appointment-color) 12%, white);
+            padding: 0.45rem 0.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.24rem;
+            min-height: 100%;
+            cursor: grab;
+            .admin-panel--container__action-button {
+                margin-top: auto !important;
+                width: 100% !important;
+                align-self: stretch !important;
+                justify-content: center;
+            }
+        }
+        &__agenda-reservation-actions-inline {
+            margin-top: auto;
+            display: flex;
+            gap: 0.35rem;
+            align-items: center;
+            .admin-panel--container__action-button {
+                margin-top: 0 !important;
+                width: auto !important;
+                flex: 1 1 0;
+                align-self: auto !important;
+            }
+        }
+        &__agenda-payment-info-line {
+            margin: 0.35rem 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.7rem;
+            color: colors.$color-primary-dark;
+            font-size: 0.86rem;
+        }
+        &__agenda-reservation-head {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+        &__agenda-treatment-dot {
+            width: 0.56rem;
+            height: 0.56rem;
+            border-radius: 999px;
+            background: var(--appointment-color);
+            flex-shrink: 0;
+        }
+        &__agenda-reservation-title {
+            margin: 0;
+            color: colors.$color-primary-dark;
+            font-size: 0.84rem;
+            font-weight: 800;
+        }
+        &__agenda-reservation-meta {
+            margin: 0;
+            color: colors.$color-text-soft;
+            font-size: 0.76rem;
+            font-weight: 600;
+        }
+        &__agenda-duration-controls {
+            margin-top: 0.2rem;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        &__agenda-duration-select {
+            min-height: 2.2rem;
+            font-size: 0.8rem;
+            padding: 0 0.55rem;
+        }
+        &__agenda-drop-toast {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            background: #2d1f0e;
+            color: #fff;
+            font-size: 0.88rem;
+            font-weight: 600;
+            padding: 0.75rem 1.25rem;
+            border-radius: layout.$radius-md;
+            box-shadow: 0 4px 18px rgb(0 0 0 / 28%);
+            pointer-events: none;
+            max-width: min(42rem, 90vw);
+            text-align: center;
+            animation: agenda-toast-in 0.22s ease;
+        }
+        @keyframes agenda-toast-in {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(0.6rem);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+        &__modal--agenda-detail {
+            width: min(46rem, 100%);
+            max-width: min(46rem, 100%);
+            display: grid;
+            gap: 1rem;
+        }
+        &__agenda-edit-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            border-bottom: 1px solid colors.$color-border;
+            padding-bottom: 0.6rem;
+        }
+        &__agenda-edit-tab {
+            border: 1px solid colors.$color-border;
+            border-radius: 999px;
+            background: #fff;
+            color: colors.$color-text-soft;
+            font-size: 0.84rem;
+            font-weight: 700;
+            padding: 0.4rem 0.85rem;
+            cursor: pointer;
+            &--active {
+                background: colors.$color-primary;
+                border-color: colors.$color-primary;
+                color: #fff;
+            }
+        }
+        &__calendar-card--compact {
+            margin-top: 0;
+            display: grid;
+            gap: 0.6rem;
+        }
+        &__modal--manual-reserve {
+            width: min(44rem, 100%);
+            max-width: min(44rem, 100%);
+            display: grid;
+            gap: 1rem;
+        }
+        &__agenda-detail-info {
+            display: flex;
+            gap: 0.75rem;
+            align-items: stretch;
+        }
+        &__agenda-detail-color-bar {
+            width: 0.35rem;
+            border-radius: 999px;
+            flex-shrink: 0;
+        }
+        &__agenda-detail-rows {
+            display: grid;
+            gap: 0.35rem;
+            flex: 1;
+        }
+        &__agenda-detail-row {
+            margin: 0;
+            display: flex;
+            gap: 0.5rem;
+            font-size: 0.88rem;
+            color: colors.$color-text;
+            line-height: 1.45;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            >span:last-child {
+                flex: 1;
+                min-width: 0;
+                word-break: break-word;
+            }
+        }
+        &__agenda-detail-label {
+            font-weight: 700;
+            color: colors.$color-primary-dark;
+            min-width: 6rem;
+            flex-shrink: 0;
+        }
+        &__agenda-detail-actions {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+        &__agenda-edit-form {
+            display: grid;
+            gap: 0.5rem;
+        }
+        &__modal-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.5rem;
+        }
+        &__modal-title {
+            margin: 0;
+            color: colors.$color-primary-dark;
+            font-size: 1rem;
+        }
+        &__modal-subtitle {
+            margin: 0.2rem 0 0;
+            color: colors.$color-text-soft;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+        &__modal-body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            padding: 1.5rem 0;
+            text-align: center;
+        }
+        &__quick-reserve-icon {
+            width: 3.5rem;
+            height: 3.5rem;
+            border-radius: 50%;
+            background: linear-gradient( 135deg, colors.$color-primary 0%, colors.$color-primary-dark 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            flex-shrink: 0;
+            svg {
+                width: 1.8rem;
+                height: 1.8rem;
+                stroke-width: 2.5;
+            }
+        }
+        &__quick-reserve-title {
+            margin: 0;
+            color: colors.$color-primary-dark;
+            font-size: 1.25rem;
+            font-weight: 700;
+            line-height: 1.4;
+        }
+        &__quick-reserve-text {
+            margin: 0;
+            color: colors.$color-text-soft;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+        &__modal-actions {
+            display: flex;
+            gap: 0.75rem;
+            width: 100%;
+            justify-content: flex-end;
+            padding-top: 0.5rem;
+            border-top: 1px solid rgba(201, 123, 99, 0.15);
+        }
+        &__client-modal-treatments {
+            display: grid;
+            gap: 0.5rem;
+            max-height: 45vh;
+            overflow: auto;
+            padding-right: 0.15rem;
+        }
+        &__payment-treatment-row {
+            width: 100%;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            border: 1px solid rgba(201, 123, 99, 0.3);
+            border-radius: layout.$radius-sm;
+            background: rgba(201, 123, 99, 0.05);
+            cursor: pointer;
+            &:hover {
+                background: rgba(201, 123, 99, 0.1);
+            }
+        }
+        &__payment-treatment-name {
+            font-weight: 700;
+            color: colors.$color-primary-dark;
+        }
+        &__payment-treatment-price {
+            color: colors.$color-text-soft;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-align: right;
+        }
+        &__payment-modal-price {
+            margin: 0.2rem 0 0.25rem;
+            color: colors.$color-text-soft;
+            font-size: 0.95rem;
+        }
+        &__payment-method-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.6rem;
+        }
+        &__payment-method-btn {
+            min-height: 2.7rem;
+            border-radius: layout.$radius-sm;
+            border: 1px solid colors.$color-border;
+            background: #fff;
+            color: colors.$color-primary-dark;
+            font-weight: 700;
+            cursor: pointer;
+            &--active {
+                border-color: colors.$color-primary;
+                background: colors.$color-primary;
+                color: #fff;
+            }
+        }
+        &__modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        &__modal-close {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 999px;
+            border: 1px solid colors.$color-border;
+            background: #fff;
+            color: colors.$color-primary-dark;
+            font-size: 1.25rem;
+            line-height: 1;
+            cursor: pointer;
+            padding-bottom: 5px;
+            &:hover {
+                background: rgba(201, 123, 99, 0.08);
+            }
+        }
+        &__modal-list {
+            display: grid;
+            gap: 0.65rem;
+        }
+        &__modal-item {
+            border: 1px solid colors.$color-border;
+            border-radius: layout.$radius-sm;
+            background: rgba(201, 123, 99, 0.05);
+            padding: 0.7rem 0.75rem;
+        }
+        &__modal-item-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.5rem;
+        }
+        &__modal-item-title {
+            margin: 0;
+            color: colors.$color-primary-dark;
+            font-size: 0.9rem;
+            font-weight: 800;
+            flex: 1;
+        }
+        &__modal-status {
+            flex-shrink: 0;
+            display: inline-block;
+            padding: 0.15rem 0.55rem;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            white-space: nowrap;
+            &--pending {
+                background: rgba(217, 164, 65, 0.18);
+                color: #a07a14;
+                border: 1px solid rgba(217, 164, 65, 0.45);
+            }
+            &--accepted {
+                background: rgba(60, 160, 90, 0.14);
+                color: #2a7a48;
+                border: 1px solid rgba(60, 160, 90, 0.4);
+            }
+            &--rejected {
+                background: rgba(200, 60, 60, 0.12);
+                color: #a02020;
+                border: 1px solid rgba(200, 60, 60, 0.35);
+            }
+        }
+        &__modal-item-text {
+            margin: 0.2rem 0 0;
+            color: colors.$color-text-soft;
+            font-size: 0.82rem;
+            font-weight: 600;
+            &--client-confirmation {
+                color: colors.$color-primary-dark;
+                font-weight: 800;
+            }
+        }
+        &__table-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            border: 1px solid colors.$color-border;
+            border-radius: layout.$radius-md;
+            background: #fff;
+        }
+        &__table {
+            width: 100%;
+            min-width: 42rem;
+            border-collapse: collapse;
+            th,
+            td {
+                padding: 0.65rem 0.75rem;
+                text-align: left;
+                border-bottom: 1px solid rgba(201, 123, 99, 0.14);
+                font-size: 0.84rem;
+                vertical-align: top;
+            }
+            th {
+                font-weight: 800;
+                color: colors.$color-primary-dark;
+                background: rgba(201, 123, 99, 0.08);
+                position: sticky;
+                top: 0;
+                z-index: 1;
+            }
+            tbody tr:last-child td {
+                border-bottom: 0;
+            }
+        }
+        &__badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            padding: 0.18rem 0.55rem;
+            font-size: 0.72rem;
+            font-weight: 800;
+            &--green {
+                color: #1f7a45;
+                background: rgba(60, 160, 90, 0.16);
+                border: 1px solid rgba(60, 160, 90, 0.42);
+            }
+            &--gray {
+                color: #5e5e5e;
+                background: rgba(120, 120, 120, 0.12);
+                border: 1px solid rgba(120, 120, 120, 0.3);
+            }
+        }
+        &__grid {
+            display: grid;
+            gap: layout.$space-2;
+            margin-top: layout.$space-2;
+        }
+        &__card {
+            border: 1px solid colors.$color-border;
+            border-radius: layout.$radius-md;
+            padding: layout.$space-2;
+            background: rgba(201, 123, 99, 0.05);
+            h2 {
+                margin: 0;
+                color: colors.$color-primary-dark;
+                font-size: 1.05rem;
+            }
+            p {
+                margin: layout.$space-1 0 0;
+                color: colors.$color-text-soft;
+                line-height: 1.45;
+            }
+        }
+        &__actions {
+            margin-top: layout.$space-3;
+            display: flex;
+            flex-wrap: wrap;
+            gap: layout.$space-1;
+            justify-content: flex-end;
+        }
+        &__button {
+            min-height: 2.6rem;
+            border-radius: 999px;
+            padding: 0 1rem;
+            font-size: 0.88rem;
+            font-weight: 700;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+            &:hover:not(:disabled) {
+                box-shadow: 0 4px 12px rgba(201, 123, 99, 0.25);
+            }
+            &:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+            &--primary {
+                background: colors.$color-primary;
+                color: #fff;
+            }
+            &--secondary {
+                border: 1px solid colors.$color-border;
+                background: colors.$color-surface;
+                color: colors.$color-primary-dark;
+                &:hover:not(:disabled) {
+                    border-color: rgba(201, 123, 99, 0.5);
+                    background: rgba(201, 123, 99, 0.08);
+                }
+            }
+        }
+        &__btn-wrapper {
+            display: flex;
+            justify-content: center;
+            margin-top: layout.$space-2;
+        }
+        &__form-row {
+            display: grid;
+            gap: layout.$space-1;
+        }
+        &__form-group {
+            display: grid;
+            gap: 0.35rem;
+            &--cierre-notes {
+                min-width: 0;
+            }
+        }
+        &__textarea {
+            min-height: 5.2rem;
+            resize: vertical;
+            border-radius: layout.$radius-sm;
+            border: 1px solid colors.$color-border;
+            background: #fff;
+            color: colors.$color-text;
+            padding: 0.7rem 0.75rem;
+            font-size: 0.9rem;
+            line-height: 1.4;
+            &:focus {
+                outline: none;
+                border-color: rgba(201, 123, 99, 0.62);
+                box-shadow: 0 0 0 2px rgba(201, 123, 99, 0.16);
+            }
+        }
+        &__btn {
+            min-height: 2.6rem;
+            border-radius: 999px;
+            padding: 0 1rem;
+            font-size: 0.88rem;
+            font-weight: 700;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+            width: min(233px, 100%);
+            &:hover:not(:disabled) {
+                box-shadow: 0 4px 12px rgba(201, 123, 99, 0.25);
+            }
+            &:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+            &--primary {
+                background: colors.$color-primary;
+                color: #fff;
+            }
+            &--secondary {
+                border: 1px solid colors.$color-border;
+                background: colors.$color-surface;
+                color: colors.$color-primary-dark;
+                &:hover:not(:disabled) {
+                    border-color: rgba(201, 123, 99, 0.5);
+                    background: rgba(201, 123, 99, 0.08);
+                }
+            }
+        }
+        &__section {
+            margin-top: layout.$space-2;
+            border: 1px solid colors.$color-border;
+            border-radius: layout.$radius-md;
+            padding: layout.$space-2;
+            background: #fff;
+            align-items: center;
+        }
+        &__cierre-card {
+            background: rgba(201, 123, 99, 0.04);
+            &--compact {
+                background: rgba(201, 123, 99, 0.08);
+            }
+            &--chart {
+                background: #fff;
+            }
+        }
+        &__cierre-layout {
+            margin-top: layout.$space-2;
+            display: grid;
+            grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.25fr);
+            gap: layout.$space-2;
+            align-items: start;
+        }
+        &__cierre-stack {
+            display: grid;
+            gap: layout.$space-1;
+        }
+        &__cierre-form {
+            display: grid;
+            gap: layout.$space-1;
+            align-content: start;
+            padding: layout.$space-2;
+            border-radius: layout.$radius-md;
+            border: 1px solid rgba(201, 123, 99, 0.2);
+            background: rgba(255, 255, 255, 0.82);
+        }
+        &__cierre-summary {
+            display: grid;
+            gap: 0.35rem;
+            padding: 0.9rem 1rem;
+            border-radius: layout.$radius-md;
+            border: 1px solid rgba(201, 123, 99, 0.18);
+            background: rgba(255, 255, 255, 0.82);
+            &--auto {
+                .admin-panel--container__action-button {
+                    margin-top: 0.45rem;
+                    justify-self: start;
+                }
+            }
+        }
+        &__cierre-summary-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.8rem;
+            padding: 0.18rem 0;
+            &--meta {
+                align-items: flex-start;
+                padding-bottom: 0.45rem;
+                margin-bottom: 0.2rem;
+                border-bottom: 1px solid rgba(201, 123, 99, 0.16);
+            }
+            &--total {
+                margin-top: 0.2rem;
+                padding-top: 0.55rem;
+                border-top: 1px solid rgba(201, 123, 99, 0.16);
+            }
+        }
+        &__cierre-summary-label {
+            color: colors.$color-text;
+            font-size: 0.84rem;
+            font-weight: 700;
+            line-height: 1.3;
+        }
+        &__cierre-summary-value {
+            color: colors.$color-primary-dark;
+            font-size: 0.84rem;
+            font-weight: 800;
+            text-align: right;
+            line-height: 1.3;
+            word-break: break-word;
+        }
+        &__cierre-row-actions {
+            display: flex;
+            gap: 0.35rem;
+            white-space: nowrap;
+        }
+        &__hint--compact {
+            font-size: 0.78rem;
+        }
+        &__permissions-editor {
+            margin-top: layout.$space-1;
+            border: 1px solid rgba(201, 123, 99, 0.25);
+            border-radius: layout.$radius-sm;
+            background: rgba(201, 123, 99, 0.04);
+            padding: 0.8rem 1rem;
+            display: grid;
+            gap: 0.65rem;
+        }
+        &__permissions-editor-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        &__permissions-editor-title {
+            color: colors.$color-primary-dark;
+            font-size: 0.85rem;
+            font-weight: 800;
+        }
+        &__permissions-read {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+        &__permissions-checklist {
+            display: grid;
+            gap: 0.4rem;
+        }
+        &__permission-row {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-size: 0.86rem;
+            font-weight: 500;
+            color: colors.$color-text;
+            cursor: pointer;
+            input[type='checkbox'] {
+                width: 1rem;
+                height: 1rem;
+                accent-color: colors.$color-primary;
+                flex-shrink: 0;
+                cursor: pointer;
+            }
+        }
+        &__reservation-actions--saved-view-row {
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            margin-top: 0;
+        }
+        &__saved-view-button {
+            border: 1px solid rgba(201, 123, 99, 0.35);
+            background: rgba(201, 123, 99, 0.08);
+            color: colors.$color-primary-dark;
+            cursor: pointer;
+            &--active {
+                background: colors.$color-primary;
+                border-color: colors.$color-primary;
+                color: #fff;
+            }
+        }
+        &__client-stats-toolbar,
+        &__client-stats-filters {
+            margin-top: layout.$space-2;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: layout.$space-1;
+            align-items: end;
+            padding-bottom: 1rem;
+        }
+        &__client-stats-filters {
+            grid-template-columns: minmax(170px, 0.9fr) minmax(260px, 1.2fr) minmax(220px, 1fr) auto;
+            >* {
+                min-width: 0;
+            }
+        }
+        &__client-stats-range {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: layout.$space-1;
+            &--stats {
+                min-width: 0;
+            }
+        }
+        &__client-stats-actions {
+            margin-top: 0;
+            justify-content: flex-end;
+            align-self: end;
+            .admin-panel--container__action-button {
+                white-space: nowrap;
+            }
+        }
+        &__label--stats-period,
+        &__label--stats-employee {
+            min-width: 0;
+        }
+        &__employee-stat-chip {
+            padding: 0.4rem 0.6rem;
+            border-radius: 999px;
+            font-size: 0.74rem;
+            font-weight: 800;
+            color: #6e5142;
+            background: rgba(201, 123, 99, 0.14);
+            margin: 3px;
+            &--multiline {
+                white-space: normal;
+                line-height: 1.25;
+            }
+        }
+        &__employee-clear-filter {
+            min-height: 2rem;
+            border-radius: 999px;
+            border: 1px solid rgba(201, 123, 99, 0.35);
+            background: rgba(201, 123, 99, 0.08);
+            color: colors.$color-primary-dark;
+            padding: 0 0.7rem;
+            font-size: 0.74rem;
+            font-weight: 800;
+            cursor: pointer;
+            &:hover {
+                background: rgba(201, 123, 99, 0.14);
+            }
+            &--saved-view-remove {
+                min-height: 1.85rem;
+            }
+        }
+        &__client-chart {
+            margin-top: layout.$space-2;
+            border: 1px solid colors.$color-border;
+            border-radius: layout.$radius-md;
+            background: #fff;
+            padding: layout.$space-2;
+            display: grid;
+            gap: 0.75rem;
+            min-width: 0;
+            overflow: hidden;
+            &--stats {
+                background: rgba(255, 255, 255, 0.96);
+            }
+        }
+        &__client-chart-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+        }
+        &__client-chart-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            flex-wrap: wrap;
+        }
+        &__client-pie-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+            gap: layout.$space-2;
+            align-items: center;
+        }
+        &__client-pie-chart {
+            width: min(220px, 90vw);
+            aspect-ratio: 1 / 1;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            margin: 0 auto;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+            &--stats {
+                width: min(240px, 90vw);
+            }
+        }
+        &__client-pie-hole {
+            width: 56%;
+            aspect-ratio: 1 / 1;
+            border-radius: 50%;
+            background: #fff;
+            border: 1px solid rgba(201, 123, 99, 0.25);
+            display: grid;
+            place-items: center;
+            text-align: center;
+            gap: 0.15rem;
+            span {
+                color: colors.$color-text-soft;
+                font-size: 0.72rem;
+                font-weight: 700;
+            }
+            strong {
+                color: colors.$color-primary-dark;
+                font-size: 1rem;
+            }
+        }
+        &__client-chart-list {
+            display: grid;
+            gap: 0.42rem;
+            align-content: start;
+        }
+        &__client-chart-row {
+            border: 1px solid rgba(201, 123, 99, 0.2);
+            border-radius: layout.$radius-sm;
+            padding: 0.45rem 0.55rem;
+            background: rgba(201, 123, 99, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            margin-left: 0;
+            min-width: 0;
+            &--filter {
+                cursor: pointer;
+            }
+            &--filter-active {
+                border-color: rgba(201, 123, 99, 0.58);
+                background: rgba(201, 123, 99, 0.14);
+            }
+        }
+        &__client-chart-legend {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.42rem;
+            min-width: 0;
+            flex-wrap: wrap;
+        }
+        &__client-chart-dot {
+            width: 0.62rem;
+            height: 0.62rem;
+            border-radius: 999px;
+            flex-shrink: 0;
+        }
+        &__client-chart-label {
+            color: colors.$color-text;
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+        &__client-chart-value {
+            color: colors.$color-text-soft;
+            font-size: 0.78rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        &__client-bar-scroll {
+            overflow-x: auto;
+            padding-bottom: 0.25rem;
+        }
+        &__client-bar-scroll-inner {
+            width: 100%;
+        }
+        &__client-bar-chart {
+            min-height: 14rem;
+            display: grid;
+            grid-template-columns: minmax(2.8rem, auto) minmax(0, 1fr);
+            gap: 0.6rem;
+        }
+        &__client-bar-axis {
+            display: grid;
+            align-content: space-between;
+            justify-items: end;
+            color: colors.$color-text-soft;
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 0.2rem 0;
+        }
+        &__client-bar-main {
+            display: grid;
+            gap: 0.45rem;
+            min-width: 0;
+        }
+        &__client-bar-plot {
+            min-height: 11rem;
+            border: 1px solid rgba(201, 123, 99, 0.2);
+            border-radius: layout.$radius-sm;
+            background: repeating-linear-gradient( to top, rgba(201, 123, 99, 0.08) 0, rgba(201, 123, 99, 0.08) 1px, transparent 1px, transparent 25%), #fff;
+            padding: 0.5rem 0.45rem 0.4rem;
+            display: grid;
+            align-items: end;
+        }
+        &__client-columns {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(2.4rem, 1fr));
+            gap: 0.5rem;
+            align-items: stretch;
+            min-height: 9.7rem;
+            height: 9.7rem;
+        }
+        &__client-column-item {
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            justify-items: center;
+            align-items: stretch;
+            gap: 0.3rem;
+            min-width: 0;
+            height: 100%;
+            &--filter {
+                border: none;
+                background: transparent;
+                padding: 0;
+                cursor: pointer;
+            }
+            &--filter-active .admin-panel--container__client-column-bar {
+                box-shadow: 0 0 0 2px rgba(201, 123, 99, 0.34);
+            }
+            &--tooltip {
+                position: relative;
+            }
+            &--tooltip:focus .admin-panel--container__client-column-tooltip,
+            &--tooltip:hover .admin-panel--container__client-column-tooltip {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        &__client-column-tooltip {
+            position: absolute;
+            bottom: calc(100% + 0.35rem);
+            left: 50%;
+            transform: translateX(-50%) translateY(0.25rem);
+            background: #2f2217;
+            color: #fff;
+            border-radius: 0.45rem;
+            padding: 0.28rem 0.45rem;
+            font-size: 0.68rem;
+            font-weight: 700;
+            white-space: nowrap;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            z-index: 2;
+        }
+        &__client-column-value {
+            color: colors.$color-primary-dark;
+            font-size: 0.74rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+        &__client-column-bar {
+            width: 100%;
+            max-width: 1.5rem;
+            min-height: 0.2rem;
+            align-self: end;
+            border-radius: 0.4rem 0.4rem 0.2rem 0.2rem;
+            box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+            transition: transform 0.2s ease, opacity 0.2s ease;
+        }
+        &__client-column-item:hover &__client-column-bar,
+        &__client-column-item:focus-within &__client-column-bar {
+            transform: translateY(-1px);
+            opacity: 0.95;
+        }
+        &__client-column-labels {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(2.4rem, 1fr));
+            gap: 0.5rem;
+            align-items: start;
+            &--dense {
+                .admin-panel--container__client-column-label {
+                    font-size: 0.62rem;
+                }
+            }
+        }
+        &__client-column-label {
+            text-align: center;
+            color: colors.$color-text-soft;
+            font-size: 0.69rem;
+            font-weight: 700;
+            line-height: 1.2;
+            word-break: break-word;
+            &--hidden {
+                opacity: 0.28;
+            }
+        }
+        &__employee-ranking-list {
+            display: grid;
+            gap: 0.52rem;
+        }
+        &__employee-ranking-row {
+            border: 1px solid rgba(201, 123, 99, 0.24);
+            border-radius: layout.$radius-sm;
+            background: rgba(201, 123, 99, 0.05);
+            padding: 0.55rem 0.7rem;
+            display: grid;
+            gap: 0.42rem;
+            text-align: left;
+            &--interactive {
+                cursor: pointer;
+            }
+            &--active {
+                border-color: rgba(201, 123, 99, 0.55);
+                background: rgba(201, 123, 99, 0.14);
+            }
+        }
+        &__employee-ranking-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.55rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        &__employee-ranking-name {
+            color: colors.$color-primary-dark;
+            font-size: 0.86rem;
+            font-weight: 800;
+        }
+        &__employee-ranking-value {
+            color: colors.$color-text;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+        &__employee-ranking-track {
+            height: 0.52rem;
+            border-radius: 999px;
+            background: rgba(201, 123, 99, 0.15);
+            overflow: hidden;
+        }
+        &__employee-ranking-fill {
+            height: 100%;
+            border-radius: inherit;
+        }
+        &__employee-specialty-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 0.65rem;
+        }
+        &__employee-specialty-card {
+            border: 1px solid rgba(201, 123, 99, 0.24);
+            border-radius: layout.$radius-sm;
+            background: rgba(201, 123, 99, 0.05);
+            padding: 0.65rem;
+            display: grid;
+            gap: 0.55rem;
+            text-align: left;
+            &--interactive {
+                cursor: pointer;
+            }
+            &--active {
+                border-color: rgba(201, 123, 99, 0.58);
+                background: rgba(201, 123, 99, 0.14);
+            }
+        }
+        &__employee-specialty-head {
+            display: flex;
+            align-items: start;
+            justify-content: space-between;
+            gap: 0.45rem;
+            flex-wrap: wrap;
+        }
+        &__employee-specialty-name {
+            margin: 0;
+            color: colors.$color-primary-dark;
+            font-size: 0.86rem;
+            font-weight: 800;
+        }
+        &__employee-specialty-meta {
+            margin: 0.2rem 0 0;
+            color: colors.$color-text-soft;
+            font-size: 0.74rem;
+            font-weight: 700;
+        }
+        &__employee-specialty-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+        }
+        &__employee-specialty-tag {
+            border-radius: 999px;
+            border: 1px solid rgba(201, 123, 99, 0.28);
+            background: rgba(201, 123, 99, 0.1);
+            color: colors.$color-primary-dark;
+            padding: 0.16rem 0.46rem;
+            font-size: 0.7rem;
+            font-weight: 800;
+        }
+        &__employee-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        &__employee-detail-tabs {
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 0.2rem;
+            padding: 0.2rem;
+            border-radius: layout.$radius-sm;
+            background: rgba(201, 123, 99, 0.08);
+            width: fit-content;
+        }
+        &__employee-detail-tab {
+            min-height: 2rem;
+            border: 1px solid rgba(201, 123, 99, 0.25);
+            border-radius: 0.45rem;
+            background: rgba(255, 255, 255, 0.9);
+            color: colors.$color-primary-dark;
+            padding: 0 0.9rem;
+            font-size: 0.82rem;
+            font-weight: 800;
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+            &:hover {
+                border-color: rgba(201, 123, 99, 0.45);
+                background: rgba(201, 123, 99, 0.12);
+            }
+            &--active {
+                background: #fff;
+                border-color: rgba(201, 123, 99, 0.55);
+                box-shadow: 0 6px 16px rgba(121, 92, 69, 0.08);
+            }
+        }
+        &__employee-tab-panel {
+            display: grid;
+            gap: 1rem;
+            &--actions {
+                padding-top: 0.2rem;
+            }
+        }
+        &__employee-action-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.8rem;
+            align-items: stretch;
+        }
+        &__employee-action-tile {
+            min-height: 3.35rem;
+            padding: 0.8rem 1rem;
+            border-radius: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 0.65rem;
+            text-align: left;
+            line-height: 1.25;
+            box-shadow: 0 8px 20px rgba(84, 55, 39, 0.06);
+            &:hover:not(:disabled) {
+                transform: translateY(-1px);
+            }
+            &:disabled {
+                box-shadow: none;
+            }
+        }
+        &__employee-action-icon {
+            width: 1.5rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 1rem;
+            line-height: 1;
+        }
+        &__employee-note-label {
+            gap: 0.45rem;
+        }
+        @media (max-width: 640px) {
+            padding: layout.$space-2;
+            &__module-card {
+                min-height: 10rem;
+            }
+            &__month-nav {
+                width: 100%;
+            }
+            &__month-nav-label {
+                min-width: 0;
+                width: auto;
+                order: 0;
+            }
+            &__calendar-weekdays,
+            &__calendar-grid {
+                gap: 0.2rem;
+            }
+            &__calendar-day {
+                min-height: 3.2rem;
+                aspect-ratio: 1 / 1;
+                padding: 0.22rem 0.22rem 0.2rem;
+                border-radius: 0.8rem;
+            }
+            &__calendar-day-number {
+                font-size: 0.84rem;
+            }
+            &__agenda-day-count {
+                min-width: 1.02rem;
+                height: 1.02rem;
+                font-size: 0.56rem;
+            }
+            &__calendar-day-number {
+                font-size: 0.8rem;
+            }
+            &__calendar-day-meta {
+                font-size: 0.58rem;
+            }
+            &__calendar-day--agenda {
+                position: relative;
+                justify-content: center;
+            }
+            &__agenda-day-number-wrap {
+                width: 100%;
+                justify-content: center;
+            }
+            &__agenda-day-count {
+                position: absolute;
+                top: 0.18rem;
+                right: 0.18rem;
+            }
+            &__agenda-closed-badge {
+                display: none;
+            }
+            &__calendar-day--closed {
+                background: rgba(184, 92, 92, 0.18);
+                border-color: rgba(184, 92, 92, 0.46);
+                .admin-panel--container__calendar-day-number {
+                    color: colors.$color-error;
+                }
+            }
+            &__button,
+            &__btn,
+            &__action-button {
+                width: 100%;
+            }
+            &__agenda-hour-row {
+                grid-template-columns: 1fr;
+                gap: 0.3rem;
+            }
+            &__agenda-hour-label {
+                padding-top: 0;
+            }
+            &__agenda-duration-controls {
+                grid-template-columns: 1fr;
+            }
+            &__agenda-week-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+            &__agenda-week-hour-list {
+                max-height: 50vh;
+            }
+            &__table {
+                min-width: 36rem;
+            }
+            &__client-pie-layout {
+                grid-template-columns: 1fr;
+            }
+            &__client-bar-chart {
+                grid-template-columns: 1fr;
+            }
+            &__client-bar-axis {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                align-content: initial;
+                justify-items: start;
+            }
+            &__client-stats-range {
+                grid-template-columns: 1fr;
+            }
+            &__client-stats-filters {
+                grid-template-columns: 1fr;
+            }
+            &__client-stats-actions {
+                margin-top: 0;
+            }
+            &__client-chart-row {
+                align-items: start;
+            }
+            &__client-chart-legend {
+                flex-wrap: wrap;
+            }
+            &__client-chart-value {
+                white-space: normal;
+            }
+            &__cierre-layout,
+            &__form-row--cierre {
+                grid-template-columns: 1fr;
+            }
+            &__cierre-summary {
+                padding: 0.8rem 0.85rem;
+                &--auto {
+                    .admin-panel--container__action-button {
+                        width: 100%;
+                        justify-self: stretch;
+                    }
+                }
+            }
+            &__cierre-summary-row {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 0.12rem;
+            }
+            &__cierre-summary-value {
+                text-align: left;
+            }
+            &__cierre-form {
+                padding: 0.85rem;
+            }
+            @media (max-width: 1120px) {
+                &__client-stats-filters {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+                &__label--stats-period,
+                &__label--stats-employee,
+                &__client-stats-actions {
+                    grid-column: span 1;
+                }
+                &__client-stats-range--stats {
+                    grid-column: 1 / -1;
+                }
+                &__client-stats-actions {
+                    justify-content: flex-start;
+                }
+            }
+            &__textarea {
+                min-height: 4.4rem;
+            }
+            &__employee-ranking-head,
+            &__employee-specialty-head {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            &__employee-action-grid {
+                grid-template-columns: 1fr;
+                gap: 0.7rem;
+            }
+            &__employee-detail-tabs {
+                width: 100%;
+            }
+        }
+        &__modal-close-money-data {
+            max-width: 800px;
+            width: 100%;
+            height: 100%;
+            max-height: 660px;
+            @media (max-width: 640px) {
+                max-height: 400px;
+                max-width: 375px;
+            }
+        }
     }
-  }
+    @media (min-width: layout.$breakpoint-tablet) {
+        padding: layout.$space-5 layout.$space-3;
+        &--container {
+            padding: layout.$space-4;
+            &__grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+    }
 }
 
 // Forced check-in modal
 .admin-panel--container__modal-backdrop--forced {
-  cursor: default;
+    cursor: default;
 }
 
 .admin-panel--container__modal--forced-checkin {
-  width: min(28rem, 92vw);
-  text-align: center;
-  padding: 2.5rem 2rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.85rem;
+    width: min(28rem, 92vw);
+    text-align: center;
+    padding: 2.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.85rem;
 }
 
 .admin-panel--container__forced-checkin-icon {
-  font-size: 3rem;
-  line-height: 1;
+    font-size: 3rem;
+    line-height: 1;
 }
 
 .admin-panel--container__button--checkin {
-  margin-top: 0.5rem;
-  width: 100%;
-  max-width: 16rem;
-  font-size: 1rem;
-  padding: 0.75rem 1.5rem;
+    margin-top: 0.5rem;
+    width: 100%;
+    max-width: 16rem;
+    font-size: 1rem;
+    padding: 0.75rem 1.5rem;
 }
 
 // Inactivity warning banner
 .admin-panel--inactivity-warning {
-  position: fixed;
-  bottom: 1.25rem;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 9999;
-  background: #2d2d2d;
-  color: #fff;
-  padding: 0.75rem 1.25rem;
-  border-radius: 0.6rem;
-  font-size: 0.9rem;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  white-space: nowrap;
-
-  &__dismiss {
-    background: #fff;
-    color: #2d2d2d;
-    border: none;
-    border-radius: 0.35rem;
-    padding: 0.3rem 0.75rem;
-    font-size: 0.82rem;
-    cursor: pointer;
-    font-weight: 600;
-    transition: background 0.15s;
-
-    &:hover {
-      background: #e8e8e8;
+    position: fixed;
+    bottom: 1.25rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    background: #2d2d2d;
+    color: #fff;
+    padding: 0.75rem 1.25rem;
+    border-radius: 0.6rem;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    white-space: nowrap;
+    &__dismiss {
+        background: #fff;
+        color: #2d2d2d;
+        border: none;
+        border-radius: 0.35rem;
+        padding: 0.3rem 0.75rem;
+        font-size: 0.82rem;
+        cursor: pointer;
+        font-weight: 600;
+        transition: background 0.15s;
+        &:hover {
+            background: #e8e8e8;
+        }
     }
-  }
 }
+
 // Contenedor principal de la fila del selector
 .admin-panel--container__stock-quantity-row {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid #c2b4a6; // Borde sutil del contenedor
-  border-radius: 4px;
-  background-color: #ffffff;
-  overflow: hidden;
-
-  // Estilo general para los botones (+ y -)
-  .admin-panel--container__stock-qty-btn {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    background: none;
-    border: none;
-    font-size: 14px;
-    color: #4a3e3d;
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-
-    &:hover {
-      background-color: #f5eae1; // Efecto hover sutil
+    border: 1px solid #c2b4a6; // Borde sutil del contenedor
+    border-radius: 4px;
+    background-color: #ffffff;
+    overflow: hidden;
+    // Estilo general para los botones (+ y -)
+    .admin-panel--container__stock-qty-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        background: none;
+        border: none;
+        font-size: 14px;
+        color: #4a3e3d;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+        &:hover {
+            background-color: #f5eae1; // Efecto hover sutil
+        }
+        &:active {
+            background-color: #ebdcd0;
+        }
     }
-
-    &:active {
-      background-color: #ebdcd0;
+    // Elemento central que muestra el valor numérico
+    .admin-panel--container_stock-qty-value {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        font-size: 13px;
+        font-weight: 500;
+        color: #333333;
+        border-left: 1px solid #ebdcd0; // Líneas divisorias internas
+        border-right: 1px solid #ebdcd0;
+        user-select: none;
     }
-  }
-
-  // Elemento central que muestra el valor numérico
-  .admin-panel--container_stock-qty-value {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    font-size: 13px;
-    font-weight: 500;
-    color: #333333;
-    border-left: 1px solid #ebdcd0; // Líneas divisorias internas
-    border-right: 1px solid #ebdcd0;
-    user-select: none;
-  }
 }
 
 .search-client {
-  width: 260px;
+    width: 260px;
 }
 
 .admin-panel--container__stock-sale-product-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.5rem;
-  margin-top: 0.75rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.5rem;
+    margin-top: 0.75rem;
 }
 
 .admin-panel--container__stock-sale-product-btn {
-  border: 1px solid rgba(201, 123, 99, 0.28);
-  border-radius: 0.7rem;
-  background: #fff;
-  color: #4a3e3d;
-  padding: 0.55rem 0.65rem;
-  cursor: pointer;
-  text-align: left;
-  display: grid;
-  gap: 0.2rem;
-  font-weight: 700;
-  transition:
-    border-color 0.2s ease,
-    background 0.2s ease;
-
-  &:hover {
-    border-color: rgba(201, 123, 99, 0.5);
-    background: rgba(201, 123, 99, 0.08);
-  }
-
-  &--active {
-    border-color: rgba(201, 123, 99, 0.62);
-    background: rgba(201, 123, 99, 0.14);
-  }
+    border: 1px solid rgba(201, 123, 99, 0.28);
+    border-radius: 0.7rem;
+    background: #fff;
+    color: #4a3e3d;
+    padding: 0.55rem 0.65rem;
+    cursor: pointer;
+    text-align: left;
+    display: grid;
+    gap: 0.2rem;
+    font-weight: 700;
+    transition: border-color 0.2s ease, background 0.2s ease;
+    &:hover {
+        border-color: rgba(201, 123, 99, 0.5);
+        background: rgba(201, 123, 99, 0.08);
+    }
+    &--active {
+        border-color: rgba(201, 123, 99, 0.62);
+        background: rgba(201, 123, 99, 0.14);
+    }
 }
 
 .admin-panel--container__stock-sale-product-meta {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 1.55rem;
-  padding: 0 0.55rem;
-  border-radius: 999px;
-  border: 1px solid rgba(201, 123, 99, 0.28);
-  background: rgba(201, 123, 99, 0.08);
-  font-size: 0.75rem;
-  color: #6c5a50;
-  font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.55rem;
+    padding: 0 0.55rem;
+    border-radius: 999px;
+    border: 1px solid rgba(201, 123, 99, 0.28);
+    background: rgba(201, 123, 99, 0.08);
+    font-size: 0.75rem;
+    color: #6c5a50;
+    font-weight: 700;
 }
 
 .admin-panel--container__stock-sale-detail {
-  margin-top: 0.85rem;
-  border: 1px solid rgba(201, 123, 99, 0.24);
-  border-radius: 0.8rem;
-  background: rgba(255, 255, 255, 0.92);
-  padding: 0.8rem;
-  display: grid;
-  gap: 0.45rem;
+    margin-top: 0.85rem;
+    border: 1px solid rgba(201, 123, 99, 0.24);
+    border-radius: 0.8rem;
+    background: rgba(255, 255, 255, 0.92);
+    padding: 0.8rem;
+    display: grid;
+    gap: 0.45rem;
 }
 
 .admin-panel--container__stock-sale-history {
-  margin-top: 0.85rem;
-  display: grid;
-  gap: 0.45rem;
+    margin-top: 0.85rem;
+    display: grid;
+    gap: 0.45rem;
 }
 
 .admin-panel--container__stock-sale-method-btn {
-  &--active {
-    border-color: rgba(201, 123, 99, 0.68);
-    background: rgba(201, 123, 99, 0.16);
-    color: #5b3f2f;
-  }
+    &--active {
+        border-color: rgba(201, 123, 99, 0.68);
+        background: rgba(201, 123, 99, 0.16);
+        color: #5b3f2f;
+    }
 }
+
 .send-tab-title {
-  margin-top: 1rem;
+    margin-top: 1rem;
 }

@@ -23,16 +23,23 @@ export class ReservaFormularioComponent {
   private readonly notificationService = inject(NotificationService);
 
   protected readonly reservaFormularioService = inject(ReservaFormularioService);
-  protected readonly title = this.reservaFormularioService.getTitle();
-  protected readonly description = this.reservaFormularioService.getDescription();
-  protected readonly submitLabel = this.reservaFormularioService.getSubmitButtonLabel();
+  protected readonly reservationSelection = this.reservaStateService.getSelection();
+  protected readonly isWaitlist = this.reservationSelection?.isWaitlist ?? false;
+  protected readonly title = this.isWaitlist
+    ? 'Apúntate a la lista de espera'
+    : this.reservaFormularioService.getTitle();
+  protected readonly description = this.isWaitlist
+    ? 'Ese día/hora está completo, pero te avisaremos por email en cuanto tengamos hueco.'
+    : this.reservaFormularioService.getDescription();
+  protected readonly submitLabel = this.isWaitlist
+    ? 'Apuntarme a la lista de espera'
+    : this.reservaFormularioService.getSubmitButtonLabel();
   protected readonly form = this.reservaFormularioService.buildForm(this.formBuilder);
   protected readonly successMessage = signal('');
   protected readonly errorMessage = signal('');
   protected readonly isSubmitting = signal(false);
   protected readonly isClientAuthenticated = signal(false);
 
-  protected readonly reservationSelection = this.reservaStateService.getSelection();
   protected readonly appointmentTypeName = this.getAppointmentTypeName();
   protected readonly appointmentTypeDuration = this.getSelectedDurationMinutes();
   protected readonly requiresReservationSignal = this.isReservationSignalRequired();
@@ -104,9 +111,17 @@ export class ReservaFormularioComponent {
     this.errorMessage.set('');
     this.isSubmitting.set(true);
 
-    this.reservaFormularioService.sendReservationConfirmationEmail(payload).subscribe({
+    const request$ = this.isWaitlist
+      ? this.reservaFormularioService.sendWaitlistRequest(payload)
+      : this.reservaFormularioService.sendReservationConfirmationEmail(payload);
+
+    request$.subscribe({
       next: () => {
-        this.successMessage.set(this.reservaFormularioService.getSuccessMessage(nombre));
+        this.successMessage.set(
+          this.isWaitlist
+            ? `Gracias ${nombre}, te hemos apuntado a la lista de espera. Te avisaremos por email si conseguimos hacerte hueco.`
+            : this.reservaFormularioService.getSuccessMessage(nombre),
+        );
         this.reservaStateService.clearSelection();
         void this.notificationService.requestRefresh();
         this.form.disable();

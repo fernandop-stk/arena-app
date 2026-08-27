@@ -54,6 +54,7 @@ import {
   deleteAlert,
   updateReservationByAdmin,
   updateReservationDetailsByAdmin,
+  createWaitlistReservation,
 } from './shared/reservas-db';
 import {
   getPackPriceByName,
@@ -185,6 +186,7 @@ const getDatabaseTargetLabel = (): string => {
 
 let adminOwnerEmail =
   process.env['ADMIN_OWNER_EMAIL']?.trim().toLowerCase() ?? 'ferperezsanchez@gmail.com';
+const ADMIN_NOTIFICATIONS_EMAIL = 'arena.hairstudio@gmail.com';
 const resendAllowedRecipient = process.env['RESEND_ALLOWED_TO']?.trim().toLowerCase() ?? '';
 const adminMagicSecret = process.env['ADMIN_MAGIC_SECRET'] ?? process.env['RESEND_API_KEY'] ?? '';
 const adminCookieName = 'arena_admin_session';
@@ -497,6 +499,148 @@ async function notifyAcceptedReservation(reservation: {
     }
   } catch (error) {
     console.error('Error enviando email de reserva confirmada:', error);
+  }
+}
+
+const buildAdminNewReservationEmailHtml = (data: {
+  customerName: string;
+  appointmentTypeName: string;
+  dateIso: string;
+  time: string;
+}): string => {
+  const customerName = escapeHtml(data.customerName);
+  const appointmentTypeName = escapeHtml(data.appointmentTypeName);
+  const dateIso = escapeHtml(data.dateIso);
+  const time = escapeHtml(data.time);
+
+  return `
+    <div style="background:#fcf3ea;padding:24px;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;color:#3b2f2a;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;margin:0 auto;background:#fff9f4;border-radius:16px;overflow:hidden;border:1px solid #e8d8c9;">
+        <tr>
+          <td style="background:linear-gradient(135deg,#c97b63 0%,#d9a441 100%);padding:24px;">
+            <p style="margin:0 0 6px;color:#fff6ee;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Arena Hair Studio</p>
+            <h1 style="margin:0;color:#ffffff;font-size:22px;line-height:1.25;">Nueva reserva online</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px;">
+            <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#5a4a42;">Una clienta ha reservado directamente en tu agenda:</p>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#fff;border:1px solid #ecd9ca;border-radius:12px;overflow:hidden;">
+              <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Clienta</strong><br><span style="color:#7a675d;">${customerName}</span></td></tr>
+              <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Tratamiento / pack</strong><br><span style="color:#7a675d;">${appointmentTypeName}</span></td></tr>
+              <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Fecha</strong><br><span style="color:#7a675d;">${dateIso}</span></td></tr>
+              <tr><td style="padding:14px 16px;font-size:14px;"><strong>Hora</strong><br><span style="color:#7a675d;">${time}</span></td></tr>
+            </table>
+            <p style="margin:16px 0 0;font-size:12px;line-height:1.55;color:#8f7b6f;">La cita ya está en tu agenda. Puedes traspasarla a otra trabajadora desde el panel si lo prefieres.</p>
+          </td>
+        </tr>
+      </table>
+    </div>
+  `;
+};
+
+const buildAdminWaitlistEmailHtml = (data: {
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+  appointmentTypeName: string;
+  dateIso: string;
+  time: string;
+}): string => {
+  const customerName = escapeHtml(data.customerName);
+  const customerPhone = escapeHtml(data.customerPhone);
+  const customerEmail = escapeHtml(data.customerEmail);
+  const appointmentTypeName = escapeHtml(data.appointmentTypeName);
+  const dateIso = escapeHtml(data.dateIso);
+  const time = escapeHtml(data.time);
+
+  return `
+    <div style="background:#fcf3ea;padding:24px;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;color:#3b2f2a;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;margin:0 auto;background:#fff9f4;border-radius:16px;overflow:hidden;border:1px solid #e8d8c9;">
+        <tr>
+          <td style="background:linear-gradient(135deg,#c97b63 0%,#d9a441 100%);padding:24px;">
+            <p style="margin:0 0 6px;color:#fff6ee;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Arena Hair Studio</p>
+            <h1 style="margin:0;color:#ffffff;font-size:22px;line-height:1.25;">Nueva lista de espera</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px;">
+            <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#5a4a42;">Una clienta quiere ese día/hora pero está completo. Se ha apuntado a la lista de espera:</p>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#fff;border:1px solid #ecd9ca;border-radius:12px;overflow:hidden;">
+              <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Clienta</strong><br><span style="color:#7a675d;">${customerName}</span></td></tr>
+              <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Teléfono</strong><br><span style="color:#7a675d;">${customerPhone}</span></td></tr>
+              <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Email</strong><br><span style="color:#7a675d;">${customerEmail}</span></td></tr>
+              <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Tratamiento / pack</strong><br><span style="color:#7a675d;">${appointmentTypeName}</span></td></tr>
+              <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Fecha deseada</strong><br><span style="color:#7a675d;">${dateIso}</span></td></tr>
+              <tr><td style="padding:14px 16px;font-size:14px;"><strong>Hora deseada</strong><br><span style="color:#7a675d;">${time}</span></td></tr>
+            </table>
+            <p style="margin:16px 0 0;font-size:12px;line-height:1.55;color:#8f7b6f;">La solicitud está en "Citas sin asignar". Al asignarla y confirmarla, la clienta recibirá el email de confirmación automáticamente.</p>
+          </td>
+        </tr>
+      </table>
+    </div>
+  `;
+};
+
+async function notifyAdminNewReservation(data: {
+  customerName: string;
+  appointmentTypeName: string;
+  dateIso: string;
+  time: string;
+}): Promise<void> {
+  try {
+    const apiKey = process.env['RESEND_API_KEY'];
+    const fromEmail = process.env['RESEND_FROM_EMAIL'] ?? 'onboarding@resend.dev';
+
+    if (!apiKey) {
+      return;
+    }
+
+    const resend = new Resend(apiKey);
+    const sendResult = await resend.emails.send({
+      from: fromEmail,
+      to: resolveEmailRecipient(ADMIN_NOTIFICATIONS_EMAIL),
+      subject: `Nueva reserva online - ${data.appointmentTypeName} (${data.dateIso} ${data.time})`,
+      html: buildAdminNewReservationEmailHtml(data),
+    });
+
+    if (sendResult.error) {
+      throw new Error(sendResult.error.message || 'Resend rechazó el aviso a admin.');
+    }
+  } catch (error) {
+    console.error('Error enviando aviso de nueva reserva a admin:', error);
+  }
+}
+
+async function notifyAdminWaitlistSignup(data: {
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+  appointmentTypeName: string;
+  dateIso: string;
+  time: string;
+}): Promise<void> {
+  try {
+    const apiKey = process.env['RESEND_API_KEY'];
+    const fromEmail = process.env['RESEND_FROM_EMAIL'] ?? 'onboarding@resend.dev';
+
+    if (!apiKey) {
+      return;
+    }
+
+    const resend = new Resend(apiKey);
+    const sendResult = await resend.emails.send({
+      from: fromEmail,
+      to: resolveEmailRecipient(ADMIN_NOTIFICATIONS_EMAIL),
+      subject: `Lista de espera - ${data.appointmentTypeName} (${data.dateIso} ${data.time})`,
+      html: buildAdminWaitlistEmailHtml(data),
+    });
+
+    if (sendResult.error) {
+      throw new Error(sendResult.error.message || 'Resend rechazó el aviso de lista de espera.');
+    }
+  } catch (error) {
+    console.error('Error enviando aviso de lista de espera a admin:', error);
   }
 }
 
@@ -5118,7 +5262,9 @@ app.get('/api/admin/empleados', (req, res) => {
   }
 
   if (session.role !== 'superadmin') {
-    const users = listUsersForSuperadmin().filter((user) => user.role === 'admin');
+    const users = listUsersForSuperadmin().filter(
+      (user) => user.role === 'admin' || user.role === 'superadmin',
+    );
     return res.status(200).json({ ok: true, users });
   }
 
@@ -6145,6 +6291,207 @@ app.patch('/api/admin/reservas/:id/stock-line', async (req, res) => {
   }
 });
 
+app.patch('/api/admin/reservas/:id/stock-line/:productId', async (req, res) => {
+  const session = getAuthSession(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const reservationId = `${req.params['id'] ?? ''}`.trim();
+  const productId = `${req.params['productId'] ?? ''}`.trim();
+  const nextQuantity = Math.max(1, Math.floor(Number(req.body?.quantity ?? NaN)));
+
+  if (!reservationId || !productId) {
+    return res.status(400).json({ ok: false, error: 'Datos inválidos.' });
+  }
+
+  if (!Number.isFinite(nextQuantity) || nextQuantity <= 0) {
+    return res.status(400).json({ ok: false, error: 'Cantidad inválida.' });
+  }
+
+  try {
+    const reservations = await listReservationsForAdmin();
+    const reservation = reservations.find((item) => item.id === reservationId);
+
+    if (!reservation) {
+      return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+    }
+
+    const parsed = parseReservationMetaFromComments(reservation.additionalComments);
+    const baseMeta = parsed.meta;
+
+    if (!baseMeta) {
+      return res.status(404).json({ ok: false, error: 'La reserva no tiene productos añadidos.' });
+    }
+
+    const stockIndex = baseMeta.stock.findIndex((item) => item.productId === productId);
+
+    if (stockIndex < 0) {
+      return res.status(404).json({ ok: false, error: 'Producto no encontrado en la reserva.' });
+    }
+
+    const currentLine = baseMeta.stock[stockIndex];
+    const deltaQuantity = nextQuantity - currentLine.quantity;
+    const product = stockProductsById.get(productId);
+
+    if (deltaQuantity > 0) {
+      if (!product) {
+        return res.status(404).json({ ok: false, error: 'Producto no encontrado en almacén.' });
+      }
+
+      if (product.quantity < deltaQuantity) {
+        return res.status(409).json({
+          ok: false,
+          error: `No hay stock suficiente de ${product.productName}. Disponible: ${product.quantity}.`,
+        });
+      }
+    }
+
+    if (product) {
+      const updatedProduct = normalizeStockProduct({
+        ...product,
+        quantity: product.quantity - deltaQuantity,
+      });
+
+      try {
+        await saveStockProductToDb(updatedProduct);
+      } catch (error) {
+        console.error('Error persistiendo stock tras modificar línea de reserva:', error);
+        return res.status(500).json({
+          ok: false,
+          error: 'No se pudo actualizar el stock del almacén. Intenta de nuevo.',
+        });
+      }
+
+      stockProductsById.set(updatedProduct.id, updatedProduct);
+      void persistStockProductsToDisk();
+    }
+
+    const nextStock = [...baseMeta.stock];
+    nextStock[stockIndex] = { ...currentLine, quantity: nextQuantity };
+
+    const updatedMeta: ReservationMetaPayload = {
+      ...baseMeta,
+      stock: nextStock,
+    };
+    const summary = getReservationMetaSummary(updatedMeta);
+    const additionalComments = composeReservationCommentsWithMeta(
+      parsed.plainComments,
+      updatedMeta,
+    );
+
+    const updated = await updateReservationDetailsByAdmin(reservationId, {
+      appointmentTypeName: summary.appointmentTypeName || reservation.appointmentTypeName,
+      customerName: reservation.customerName,
+      customerPhone: reservation.customerPhone,
+      customerEmail: reservation.customerEmail,
+      additionalComments,
+    });
+
+    if (!updated.ok) {
+      return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+    }
+
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Error modificando producto de stock en reserva:', error);
+    return res
+      .status(500)
+      .json({ ok: false, error: 'No se pudo modificar el producto de la reserva.' });
+  }
+});
+
+app.delete('/api/admin/reservas/:id/stock-line/:productId', async (req, res) => {
+  const session = getAuthSession(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const reservationId = `${req.params['id'] ?? ''}`.trim();
+  const productId = `${req.params['productId'] ?? ''}`.trim();
+
+  if (!reservationId || !productId) {
+    return res.status(400).json({ ok: false, error: 'Datos inválidos.' });
+  }
+
+  try {
+    const reservations = await listReservationsForAdmin();
+    const reservation = reservations.find((item) => item.id === reservationId);
+
+    if (!reservation) {
+      return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+    }
+
+    const parsed = parseReservationMetaFromComments(reservation.additionalComments);
+    const baseMeta = parsed.meta;
+
+    if (!baseMeta) {
+      return res.status(404).json({ ok: false, error: 'La reserva no tiene productos añadidos.' });
+    }
+
+    const stockIndex = baseMeta.stock.findIndex((item) => item.productId === productId);
+
+    if (stockIndex < 0) {
+      return res.status(404).json({ ok: false, error: 'Producto no encontrado en la reserva.' });
+    }
+
+    const removedLine = baseMeta.stock[stockIndex];
+    const product = stockProductsById.get(productId);
+
+    if (product) {
+      const updatedProduct = normalizeStockProduct({
+        ...product,
+        quantity: product.quantity + removedLine.quantity,
+      });
+
+      try {
+        await saveStockProductToDb(updatedProduct);
+      } catch (error) {
+        console.error('Error persistiendo stock tras eliminar línea de reserva:', error);
+        return res.status(500).json({
+          ok: false,
+          error: 'No se pudo actualizar el stock del almacén. Intenta de nuevo.',
+        });
+      }
+
+      stockProductsById.set(updatedProduct.id, updatedProduct);
+      void persistStockProductsToDisk();
+    }
+
+    const nextStock = baseMeta.stock.filter((item) => item.productId !== productId);
+    const updatedMeta: ReservationMetaPayload = {
+      ...baseMeta,
+      stock: nextStock,
+    };
+    const summary = getReservationMetaSummary(updatedMeta);
+    const additionalComments = composeReservationCommentsWithMeta(
+      parsed.plainComments,
+      updatedMeta,
+    );
+
+    const updated = await updateReservationDetailsByAdmin(reservationId, {
+      appointmentTypeName: summary.appointmentTypeName || reservation.appointmentTypeName,
+      customerName: reservation.customerName,
+      customerPhone: reservation.customerPhone,
+      customerEmail: reservation.customerEmail,
+      additionalComments,
+    });
+
+    if (!updated.ok) {
+      return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+    }
+
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Error eliminando producto de stock de reserva:', error);
+    return res
+      .status(500)
+      .json({ ok: false, error: 'No se pudo eliminar el producto de la reserva.' });
+  }
+});
+
 app.patch('/api/admin/reservas/:id', async (req, res) => {
   const session = isAdminRequest(req.headers.cookie);
   const superadminSession = isSuperadminRequest(req.headers.cookie);
@@ -6874,6 +7221,7 @@ app.post('/api/admin/logout', (_req, res) => {
 app.get('/api/reservas/disponibilidad', async (req, res) => {
   const dateIso = `${req.query['dateIso'] ?? ''}`;
   const durationMinutes = Number(req.query['durationMinutes']);
+  const soloAdmin = `${req.query['soloAdmin'] ?? ''}`.trim().toLowerCase() === 'true';
 
   if (!dateIso || Number.isNaN(durationMinutes)) {
     return res.status(400).json({
@@ -6886,7 +7234,8 @@ app.get('/api/reservas/disponibilidad', async (req, res) => {
     const slots = await getAvailableSlotsForDate(
       dateIso,
       durationMinutes,
-      getMaxConcurrentReservationsForSlot(),
+      soloAdmin ? 1 : getMaxConcurrentReservationsForSlot(),
+      soloAdmin ? adminOwnerEmail : undefined,
     );
 
     return res.status(200).json({
@@ -7111,9 +7460,10 @@ app.post('/api/reservas/email', async (req, res) => {
         customerPhone,
         appointmentTypeName,
         requiresReservationSignal: shouldRequireReservationSignal,
+        createdByEmail: adminOwnerEmail,
       },
       {
-        maxConcurrentReservations: getMaxConcurrentReservationsForSlot(),
+        maxConcurrentReservations: 1,
       },
     );
 
@@ -7142,6 +7492,14 @@ app.post('/api/reservas/email', async (req, res) => {
       console.error('Error creating notification:', notifError);
       // No lanzar error si falla la notificación
     }
+
+    void notifyAdminNewReservation({
+      customerName,
+      appointmentTypeName,
+      dateIso,
+      time,
+    });
+
 
     const subject = `Confirmación de cita - ${appointmentTypeName} (${dateIso} ${time})`;
     const html = buildReservationEmailHtml({
@@ -7213,6 +7571,95 @@ app.post('/api/reservas/email', async (req, res) => {
     return res.status(500).json({
       ok: false,
       error: errorMessage,
+    });
+  }
+});
+
+app.post('/api/reservas/lista-espera', async (req, res) => {
+  const {
+    customerEmail,
+    customerName,
+    customerPhone,
+    appointmentTypeName,
+    dateIso,
+    time,
+    durationMinutes,
+    observaciones,
+  } = req.body ?? {};
+
+  if (
+    !customerEmail ||
+    !customerName ||
+    !customerPhone ||
+    !appointmentTypeName ||
+    !dateIso ||
+    !time ||
+    !durationMinutes
+  ) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Faltan datos obligatorios para apuntarte a la lista de espera.',
+    });
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(`${dateIso}`)) {
+    return res.status(400).json({ ok: false, error: 'Fecha inválida.' });
+  }
+
+  if (!/^\d{2}:\d{2}$/.test(`${time}`)) {
+    return res.status(400).json({ ok: false, error: 'Hora inválida.' });
+  }
+
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(`${customerEmail}`)) {
+    return res.status(400).json({ ok: false, error: 'Email de cliente inválido.' });
+  }
+
+  try {
+    const created = await createWaitlistReservation({
+      dateIso: `${dateIso}`,
+      time: `${time}`,
+      durationMinutes: Number(durationMinutes),
+      customerEmail: `${customerEmail}`.trim().toLowerCase(),
+      customerName: `${customerName}`.trim(),
+      customerPhone: `${customerPhone}`.trim(),
+      appointmentTypeName: `${appointmentTypeName}`.trim(),
+      additionalComments: typeof observaciones === 'string' ? observaciones : undefined,
+    });
+
+    if (!created.ok) {
+      return res.status(400).json({
+        ok: false,
+        error: 'No se pudo registrar la solicitud de lista de espera.',
+      });
+    }
+
+    try {
+      await createNotificationAndBroadcast({
+        type: 'otra',
+        title: `Lista de espera: ${appointmentTypeName}`,
+        message: `${customerName} (${customerPhone}) quiere ${appointmentTypeName} el ${dateIso} a las ${time}`,
+        relatedId: created.reservationId,
+        actionUrl: `/admin/reservas?id=${created.reservationId}`,
+      });
+    } catch (notifError) {
+      console.error('Error creando notificación de lista de espera:', notifError);
+    }
+
+    void notifyAdminWaitlistSignup({
+      customerName: `${customerName}`.trim(),
+      customerPhone: `${customerPhone}`.trim(),
+      customerEmail: `${customerEmail}`.trim().toLowerCase(),
+      appointmentTypeName: `${appointmentTypeName}`.trim(),
+      dateIso: `${dateIso}`,
+      time: `${time}`,
+    });
+
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Error creando reserva en lista de espera:', error);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo registrar la solicitud de lista de espera.',
     });
   }
 });

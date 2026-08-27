@@ -97,4 +97,8 @@ export class ReservaFormularioService {
   sendReservationConfirmationEmail(payload: ReservationEmailPayload): Observable<{ ok: boolean }> {
     return this.http.post<{ ok: boolean }>('/api/reservas/email', payload);
   }
+
+  sendWaitlistRequest(payload: ReservationEmailPayload): Observable<{ ok: boolean }> {
+    return this.http.post<{ ok: boolean }>('/api/reservas/lista-espera', payload);
+  }
 }

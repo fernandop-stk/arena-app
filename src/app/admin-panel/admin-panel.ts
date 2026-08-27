@@ -173,6 +173,16 @@ interface AdminCalendarDay {
   reservationCount: number;
 }
 
+interface AgendaEditCalendarDay {
+  dateIso: string;
+  dayNumber: number;
+  isCurrentMonth: boolean;
+  isToday: boolean;
+  isSelected: boolean;
+  isDisabled: boolean;
+  tooltip: string;
+}
+
 interface AgendaMonthCalendarDay {
   dateIso: string;
   dayNumber: number;
@@ -586,6 +596,13 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly agendaDetailReservation = signal<AdminReservationItem | null>(null);
   protected readonly agendaDetailMode = signal<'view' | 'edit'>('view');
   protected readonly agendaEditTarget = signal<'duration' | 'services'>('duration');
+  protected readonly agendaEditSection = signal<
+    'fecha' | 'horario' | 'duracion' | 'trabajador' | 'comentarios'
+  >('fecha');
+  protected readonly agendaEditDraftDateIso = signal('');
+  protected readonly agendaEditDraftStartTime = signal('');
+  protected readonly agendaEditDraftWorkerEmail = signal('');
+  protected readonly agendaEditCalendarMonthIso = signal('');
   protected readonly agendaEditDraftName = signal('');
   protected readonly agendaEditDraftDuration = signal(0);
   protected readonly agendaEditDraftAdditionalComments = signal('');
@@ -822,9 +839,11 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly paymentSplitCustomAmount = signal('');
   protected readonly selectedReservationPaymentLineIds = signal<string[]>([]);
   protected readonly cobroReservationStockProductId = signal('');
+  protected readonly cobroReservationStockSearch = signal('');
   protected readonly cobroReservationStockUnits = signal('1');
   protected readonly cobroReservationStockLoading = signal(false);
   protected readonly cobroReservationStockError = signal('');
+  protected readonly cobroSelectedDateIso = signal('');
   protected readonly paymentMethodReservation = computed<AdminReservationItem | null>(() => {
     const reservationId = this.paymentMethodReservationId();
 
@@ -870,15 +889,13 @@ export class AdminPanelComponent implements OnDestroy {
     return Math.max(0, Number((total - splitTotal).toFixed(2)));
   });
   protected readonly cobroDayGroups = computed<CobroDayGroup[]>(() => {
+    const selectedDateIso = this.cobroSelectedDateIso() || this.getTodayIso();
     const visibleReservations = this.reservations()
-      .filter((reservation) => reservation.adminStatus !== 'rejected')
-      .sort((a, b) => {
-        if (a.dateIso !== b.dateIso) {
-          return a.dateIso.localeCompare(b.dateIso);
-        }
-
-        return a.startTime.localeCompare(b.startTime);
-      });
+      .filter(
+        (reservation) =>
+          reservation.adminStatus !== 'rejected' && reservation.dateIso === selectedDateIso,
+      )
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
     const grouped = new Map<string, AdminReservationItem[]>();
 
@@ -996,6 +1013,7 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly clientReservationError = signal('');
   protected readonly clientReservationStockTargetReservationId = signal('');
   protected readonly clientReservationStockProductId = signal('');
+  protected readonly clientReservationStockSearch = signal('');
   protected readonly clientReservationStockUnits = signal('1');
   protected readonly clientReservationStockLoading = signal(false);
   protected readonly clientReservationStockError = signal('');
@@ -1100,6 +1118,7 @@ export class AdminPanelComponent implements OnDestroy {
             this.calendarMonthIso.set(`${year}-${month}`);
             this.agendaCalendarMonthIso.set(`${year}-${month}`);
             this.agendaSelectedDateIso.set(`${year}-${month}-${day}`);
+            this.cobroSelectedDateIso.set(`${year}-${month}-${day}`);
 
             // Start inactivity watcher for all admin users
             this.startInactivityWatcher();
@@ -1349,6 +1368,10 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected getAgendaUnassignedReservationsCount(): number {
     return this.getAgendaUnassignedReservations().length;
+  }
+
+  protected isWaitlistReservation(reservation: AdminReservationItem): boolean {
+    return reservation.additionalComments?.trim().startsWith('[LISTA_DE_ESPERA]') ?? false;
   }
 
   protected openAgendaUnassignedReservationsModal(): void {
@@ -3096,7 +3119,8 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected selectClientReservationStockTarget(reservationId: string): void {
     this.clientReservationStockTargetReservationId.set(reservationId);
-    this.clientReservationStockProductId.set(this.getAvailableSellableStockProducts()[0]?.id ?? '');
+    this.clientReservationStockProductId.set('');
+    this.clientReservationStockSearch.set('');
     this.clientReservationStockUnits.set('1');
     this.clientReservationStockError.set('');
     this.showClientReservationStockModal.set(true);
@@ -3115,12 +3139,8 @@ export class AdminPanelComponent implements OnDestroy {
       }
     }
 
-    if (!this.clientReservationStockProductId()) {
-      this.clientReservationStockProductId.set(
-        this.getAvailableSellableStockProducts()[0]?.id ?? '',
-      );
-    }
-
+    this.clientReservationStockProductId.set('');
+    this.clientReservationStockSearch.set('');
     this.clientReservationStockUnits.set('1');
     this.clientReservationStockError.set('');
     this.showClientReservationStockModal.set(true);
@@ -3157,7 +3177,8 @@ export class AdminPanelComponent implements OnDestroy {
     }
 
     this.showClientReservationStockModal.set(false);
-    this.clientReservationStockProductId.set(this.getAvailableSellableStockProducts()[0]?.id ?? '');
+    this.clientReservationStockProductId.set('');
+    this.clientReservationStockSearch.set('');
     this.clientReservationStockUnits.set('1');
     this.clientReservationStockError.set('');
   }
@@ -5099,6 +5120,16 @@ export class AdminPanelComponent implements OnDestroy {
     return this.getSelectedClientReservationHistory();
   }
 
+  protected getSelectedClientReservationForStockModal(): AdminReservationItem | null {
+    const reservationId = this.clientReservationStockTargetReservationId();
+
+    if (!reservationId) {
+      return null;
+    }
+
+    return this.reservations().find((item) => item.id === reservationId) ?? null;
+  }
+
   protected getClientStockAttachReservationLabel(reservation: AdminReservationItem): string {
     return `${this.formatDate(reservation.dateIso)} ${reservation.startTime} · ${reservation.appointmentTypeName}`;
   }
@@ -5112,6 +5143,32 @@ export class AdminPanelComponent implements OnDestroy {
   protected onClientReservationStockProductChange(event: Event): void {
     const target = event.target as HTMLSelectElement;
     this.clientReservationStockProductId.set(target.value);
+    this.clientReservationStockError.set('');
+  }
+
+  protected onClientReservationStockSearchInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.clientReservationStockSearch.set(target.value);
+    this.clientReservationStockProductId.set('');
+    this.clientReservationStockError.set('');
+  }
+
+  protected getClientReservationStockSearchResults(): StockProductItem[] {
+    const query = this.clientReservationStockSearch().trim().toLowerCase();
+    const availableProducts = this.getAvailableSellableStockProducts();
+
+    if (!query) {
+      return availableProducts.slice(0, 8);
+    }
+
+    return availableProducts
+      .filter((product) => `${product.productName} ${product.brand}`.toLowerCase().includes(query))
+      .slice(0, 8);
+  }
+
+  protected selectClientReservationStockProduct(product: StockProductItem): void {
+    this.clientReservationStockProductId.set(product.id);
+    this.clientReservationStockSearch.set(product.productName);
     this.clientReservationStockError.set('');
   }
 
@@ -5209,6 +5266,8 @@ export class AdminPanelComponent implements OnDestroy {
             Number((product.price * units).toFixed(2)),
           );
           this.clientReservationStockUnits.set('1');
+          this.clientReservationStockProductId.set('');
+          this.clientReservationStockSearch.set('');
           this.showClientReservationStockModal.set(false);
           this.showClientReservationStockSuccessModal.set(true);
           this.loadReservations();
@@ -6389,9 +6448,8 @@ export class AdminPanelComponent implements OnDestroy {
     if (reservation) {
       const defaultLineIds = this.getDefaultReservationPaymentLineIds(reservation);
       this.selectedReservationPaymentLineIds.set(defaultLineIds);
-      this.cobroReservationStockProductId.set(
-        this.getAvailableSellableStockProducts()[0]?.id ?? '',
-      );
+      this.cobroReservationStockProductId.set('');
+      this.cobroReservationStockSearch.set('');
       this.cobroReservationStockUnits.set('1');
 
       const hasPreviousPaymentHistory =
@@ -6414,6 +6472,7 @@ export class AdminPanelComponent implements OnDestroy {
     } else {
       this.selectedReservationPaymentLineIds.set([]);
       this.cobroReservationStockProductId.set('');
+      this.cobroReservationStockSearch.set('');
       this.cobroReservationStockUnits.set('1');
       this.paymentSplitEntries.set([]);
       this.paymentSplitCustomAmount.set('');
@@ -6503,12 +6562,6 @@ export class AdminPanelComponent implements OnDestroy {
     }
 
     this.selectedReservationPaymentLineIds.set([...current, lineId]);
-  }
-
-  protected onCobroReservationStockProductChange(event: Event): void {
-    const target = event.target as HTMLSelectElement;
-    this.cobroReservationStockProductId.set(target.value);
-    this.cobroReservationStockError.set('');
   }
 
   protected onCobroReservationStockUnitsInput(event: Event): void {
@@ -6606,9 +6659,8 @@ export class AdminPanelComponent implements OnDestroy {
 
           this.loadStockProducts();
           this.loadReservations();
-          this.cobroReservationStockProductId.set(
-            this.getAvailableSellableStockProducts()[0]?.id ?? '',
-          );
+          this.cobroReservationStockProductId.set('');
+          this.cobroReservationStockSearch.set('');
           this.cobroReservationStockUnits.set('1');
           this.loadCierreAutoDiario();
         },
@@ -6624,6 +6676,193 @@ export class AdminPanelComponent implements OnDestroy {
           this.cobroReservationStockLoading.set(false);
         },
       });
+  }
+
+  protected onCobroReservationStockSearchInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.cobroReservationStockSearch.set(target.value);
+    this.cobroReservationStockProductId.set('');
+    this.cobroReservationStockError.set('');
+  }
+
+  protected getCobroReservationStockSearchResults(): StockProductItem[] {
+    const query = this.cobroReservationStockSearch().trim().toLowerCase();
+    const availableProducts = this.getAvailableSellableStockProducts();
+
+    if (!query) {
+      return availableProducts.slice(0, 8);
+    }
+
+    return availableProducts
+      .filter((product) => `${product.productName} ${product.brand}`.toLowerCase().includes(query))
+      .slice(0, 8);
+  }
+
+  protected selectCobroReservationStockProduct(product: StockProductItem): void {
+    this.cobroReservationStockProductId.set(product.id);
+    this.cobroReservationStockSearch.set(product.productName);
+    this.cobroReservationStockError.set('');
+  }
+
+  protected removeReservationStockLine(reservationId: string, productId: string): void {
+    if (typeof window !== 'undefined' && !window.confirm('¿Eliminar este producto de la cita?')) {
+      return;
+    }
+
+    this.cobroReservationStockError.set('');
+    this.cobroReservationStockLoading.set(true);
+
+    this.http
+      .delete<{ ok: boolean; error?: string }>(
+        `/api/admin/reservas/${reservationId}/stock-line/${encodeURIComponent(productId)}`,
+      )
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.cobroReservationStockError.set(
+              response.error ?? 'No se pudo eliminar el producto.',
+            );
+            return;
+          }
+
+          this.reservations.update((items) =>
+            items.map((item) => {
+              if (item.id !== reservationId) {
+                return item;
+              }
+
+              return {
+                ...item,
+                reservationStockItems: (item.reservationStockItems ?? []).filter(
+                  (line) => line.productId !== productId,
+                ),
+              };
+            }),
+          );
+
+          this.refreshPaymentSelectionAfterStockChange(reservationId);
+          this.loadStockProducts();
+          this.loadReservations();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.cobroReservationStockError.set(
+            typeof apiError === 'string' && apiError
+              ? apiError
+              : 'No se pudo eliminar el producto.',
+          );
+        },
+        complete: () => {
+          this.cobroReservationStockLoading.set(false);
+        },
+      });
+  }
+
+  protected updateReservationStockLineQuantity(
+    reservationId: string,
+    productId: string,
+    nextQuantity: number,
+  ): void {
+    if (!Number.isFinite(nextQuantity) || nextQuantity <= 0) {
+      return;
+    }
+
+    this.cobroReservationStockError.set('');
+    this.cobroReservationStockLoading.set(true);
+
+    this.http
+      .patch<{ ok: boolean; error?: string }>(
+        `/api/admin/reservas/${reservationId}/stock-line/${encodeURIComponent(productId)}`,
+        { quantity: nextQuantity },
+      )
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.cobroReservationStockError.set(
+              response.error ?? 'No se pudo modificar el producto.',
+            );
+            return;
+          }
+
+          this.reservations.update((items) =>
+            items.map((item) => {
+              if (item.id !== reservationId) {
+                return item;
+              }
+
+              return {
+                ...item,
+                reservationStockItems: (item.reservationStockItems ?? []).map((line) =>
+                  line.productId === productId ? { ...line, quantity: nextQuantity } : line,
+                ),
+              };
+            }),
+          );
+
+          this.refreshPaymentSelectionAfterStockChange(reservationId);
+          this.loadStockProducts();
+          this.loadReservations();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.cobroReservationStockError.set(
+            typeof apiError === 'string' && apiError
+              ? apiError
+              : 'No se pudo modificar el producto.',
+          );
+        },
+        complete: () => {
+          this.cobroReservationStockLoading.set(false);
+        },
+      });
+  }
+
+  private refreshPaymentSelectionAfterStockChange(reservationId: string): void {
+    const refreshed = this.reservations().find((item) => item.id === reservationId);
+
+    if (!refreshed) {
+      return;
+    }
+
+    this.selectedReservationPaymentLineIds.set(
+      this.getDefaultReservationPaymentLineIds(refreshed),
+    );
+    this.paymentSplitEntries.set([]);
+    const pendingAmount = this.paymentMethodReservationPriceEuro();
+    this.paymentSplitCustomAmount.set(pendingAmount > 0 ? pendingAmount.toFixed(2) : '');
+  }
+
+  protected goToPreviousCobroDay(): void {
+    this.shiftCobroDay(-1);
+  }
+
+  protected goToNextCobroDay(): void {
+    this.shiftCobroDay(1);
+  }
+
+  protected goToTodayCobro(): void {
+    this.cobroSelectedDateIso.set(this.getTodayIso());
+  }
+
+  protected onCobroDateInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.cobroSelectedDateIso.set(target.value);
+  }
+
+  private shiftCobroDay(offsetDays: number): void {
+    const currentIso = this.cobroSelectedDateIso() || this.getTodayIso();
+    const date = new Date(`${currentIso}T00:00:00`);
+    date.setDate(date.getDate() + offsetDays);
+    this.cobroSelectedDateIso.set(this.toDateIso(date));
+  }
+
+  protected getCobroSelectedDateLabel(): string {
+    const dateIso = this.cobroSelectedDateIso() || this.getTodayIso();
+    return this.formatDate(dateIso);
+  }
+
+  protected isCobroSelectedDateToday(): boolean {
+    return (this.cobroSelectedDateIso() || this.getTodayIso()) === this.getTodayIso();
   }
 
   protected getReservationPaymentMethodLabel(method: 'efectivo' | 'tarjeta' | 'bizum'): string {
@@ -7239,20 +7478,6 @@ export class AdminPanelComponent implements OnDestroy {
               (product) => product.isSellable && product.quantity > 0,
             );
             this.clientReservationStockProductId.set(firstClientSellable?.id ?? '');
-          }
-
-          const cobroSelectedStockId = this.cobroReservationStockProductId();
-          if (
-            !cobroSelectedStockId ||
-            !products.some(
-              (product) =>
-                product.id === cobroSelectedStockId && product.isSellable && product.quantity > 0,
-            )
-          ) {
-            const firstCobroSellable = products.find(
-              (product) => product.isSellable && product.quantity > 0,
-            );
-            this.cobroReservationStockProductId.set(firstCobroSellable?.id ?? '');
           }
         },
         error: (error) => {
@@ -9272,6 +9497,11 @@ export class AdminPanelComponent implements OnDestroy {
     this.agendaDetailReservation.set(null);
     this.agendaDetailMode.set('view');
     this.agendaEditTarget.set('duration');
+    this.agendaEditSection.set('fecha');
+    this.agendaEditDraftDateIso.set('');
+    this.agendaEditDraftStartTime.set('');
+    this.agendaEditDraftWorkerEmail.set('');
+    this.agendaEditCalendarMonthIso.set('');
     this.agendaEditDraftAdditionalComments.set('');
     this.agendaEditDraftStockLines.set([]);
     this.agendaEditDraftStockProductId.set('');
@@ -9303,6 +9533,11 @@ export class AdminPanelComponent implements OnDestroy {
       (serviceLineDuration > 0 ? serviceLineDuration : r.durationMinutes);
 
     this.agendaEditTarget.set('duration');
+    this.agendaEditSection.set('fecha');
+    this.agendaEditDraftDateIso.set(r.dateIso);
+    this.agendaEditDraftStartTime.set(r.startTime);
+    this.agendaEditDraftWorkerEmail.set(`${r.createdByEmail ?? ''}`.trim().toLowerCase());
+    this.agendaEditCalendarMonthIso.set(r.dateIso.slice(0, 7));
     this.agendaEditDraftName.set(selectedService?.nombre ?? initialServiceName);
     this.agendaEditDraftDuration.set(initialDuration);
     this.agendaEditDraftAdditionalComments.set(r.additionalComments ?? '');
@@ -9317,6 +9552,262 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected onAgendaEditTargetChange(target: 'duration' | 'services'): void {
     this.agendaEditTarget.set(target);
+    this.agendaDetailError.set('');
+  }
+
+  protected setAgendaEditSection(
+    section: 'fecha' | 'horario' | 'duracion' | 'trabajador' | 'comentarios',
+  ): void {
+    this.agendaEditSection.set(section);
+    this.agendaDetailError.set('');
+  }
+
+  protected getAgendaEditCalendarMonthLabel(): string {
+    const monthIso = this.agendaEditCalendarMonthIso();
+
+    if (!monthIso) {
+      return '';
+    }
+
+    const [yearRaw, monthRaw] = monthIso.split('-');
+    const date = new Date(Number(yearRaw), Number(monthRaw) - 1, 1);
+
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+
+    const label = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }
+
+  protected goToAgendaEditPreviousMonth(): void {
+    this.shiftAgendaEditCalendarMonth(-1);
+  }
+
+  protected goToAgendaEditNextMonth(): void {
+    this.shiftAgendaEditCalendarMonth(1);
+  }
+
+  private shiftAgendaEditCalendarMonth(offset: number): void {
+    const monthIso = this.agendaEditCalendarMonthIso();
+
+    if (!monthIso) {
+      return;
+    }
+
+    const [yearRaw, monthRaw] = monthIso.split('-');
+    const year = Number(yearRaw);
+    const month = Number(monthRaw);
+
+    if (Number.isNaN(year) || Number.isNaN(month)) {
+      return;
+    }
+
+    const targetDate = new Date(year, month - 1 + offset, 1);
+    const targetYear = targetDate.getFullYear();
+    const targetMonth = `${targetDate.getMonth() + 1}`.padStart(2, '0');
+    this.agendaEditCalendarMonthIso.set(`${targetYear}-${targetMonth}`);
+  }
+
+  private isAgendaEditSlotAvailableForWorker(
+    dateIso: string,
+    startTime: string,
+    durationMinutes: number,
+    workerEmail: string,
+  ): boolean {
+    const original = this.agendaDetailReservation();
+
+    if (!original) {
+      return true;
+    }
+
+    const candidateStart = this.parseTimeToMinutes(startTime);
+    const candidateEnd = candidateStart + durationMinutes;
+    const workerKey = this.getReservationWorkerKey(workerEmail);
+
+    return this.reservations().every((item) => {
+      if (item.id === original.id || item.adminStatus === 'rejected') {
+        return true;
+      }
+
+      if (item.dateIso !== dateIso) {
+        return true;
+      }
+
+      if (this.getReservationWorkerKey(item.createdByEmail) !== workerKey) {
+        return true;
+      }
+
+      const existingStart = this.parseTimeToMinutes(item.startTime);
+      const existingEnd = this.parseTimeToMinutes(item.endTime);
+      return candidateEnd <= existingStart || candidateStart >= existingEnd;
+    });
+  }
+
+  private isAgendaEditSlotAvailableForAnyWorker(
+    dateIso: string,
+    startTime: string,
+    durationMinutes: number,
+  ): boolean {
+    const workerOptions = this.getAgendaAssignableWorkerOptions();
+    const workerEmails =
+      workerOptions.length > 0 ? workerOptions.map((worker) => worker.email) : ['__sin_asignar__'];
+
+    return workerEmails.some((email) =>
+      this.isAgendaEditSlotAvailableForWorker(dateIso, startTime, durationMinutes, email),
+    );
+  }
+
+  protected getAgendaEditCalendarDays(): AgendaEditCalendarDay[] {
+    const monthIso = this.agendaEditCalendarMonthIso();
+    const original = this.agendaDetailReservation();
+
+    if (!monthIso || !original) {
+      return [];
+    }
+
+    const [yearRaw, monthRaw] = monthIso.split('-');
+    const year = Number(yearRaw);
+    const month = Number(monthRaw);
+
+    if (Number.isNaN(year) || Number.isNaN(month) || month < 1 || month > 12) {
+      return [];
+    }
+
+    const monthStart = new Date(year, month - 1, 1);
+    const monthEnd = new Date(year, month, 0);
+    const firstWeekday = (monthStart.getDay() + 6) % 7;
+    const gridStart = new Date(year, month - 1, 1 - firstWeekday);
+    const todayIso = this.getTodayIso();
+    const originalStartTime = original.startTime;
+    const durationMinutes = Math.max(
+      30,
+      Number(this.agendaEditDraftDuration()) || original.durationMinutes,
+    );
+    const selectedDateIso = this.agendaEditDraftDateIso();
+    const days: AgendaEditCalendarDay[] = [];
+
+    for (let index = 0; index < 42; index += 1) {
+      const dayDate = new Date(gridStart);
+      dayDate.setDate(gridStart.getDate() + index);
+      const yearValue = dayDate.getFullYear();
+      const monthValue = `${dayDate.getMonth() + 1}`.padStart(2, '0');
+      const dayValue = `${dayDate.getDate()}`.padStart(2, '0');
+      const dateIso = `${yearValue}-${monthValue}-${dayValue}`;
+      const isPast = dateIso < todayIso;
+      const isClosed = this.isAgendaRecurringClosedDay(dateIso);
+      const isSameAsOriginal = dateIso === original.dateIso;
+      const isSlotAvailable =
+        isSameAsOriginal ||
+        this.isAgendaEditSlotAvailableForAnyWorker(dateIso, originalStartTime, durationMinutes);
+      const isDisabled = isPast || isClosed || !isSlotAvailable;
+      let tooltip = '';
+
+      if (isPast) {
+        tooltip = 'Fecha pasada';
+      } else if (isClosed) {
+        tooltip = 'Día cerrado';
+      } else if (!isSlotAvailable) {
+        tooltip = `Sin huecos a las ${originalStartTime} para ninguna trabajadora`;
+      }
+
+      days.push({
+        dateIso,
+        dayNumber: dayDate.getDate(),
+        isCurrentMonth: dayDate >= monthStart && dayDate <= monthEnd,
+        isToday: dateIso === todayIso,
+        isSelected: dateIso === selectedDateIso,
+        isDisabled,
+        tooltip,
+      });
+    }
+
+    return days;
+  }
+
+  protected selectAgendaEditCalendarDay(day: AgendaEditCalendarDay): void {
+    if (day.isDisabled || !day.isCurrentMonth) {
+      return;
+    }
+
+    this.agendaEditDraftDateIso.set(day.dateIso);
+    this.agendaDetailError.set('');
+
+    const availableTimes = this.getAgendaEditTimeOptions();
+
+    if (!availableTimes.includes(this.agendaEditDraftStartTime())) {
+      this.agendaEditDraftStartTime.set(availableTimes[0] ?? this.agendaEditDraftStartTime());
+    }
+  }
+
+  protected getAgendaEditTimeOptions(): string[] {
+    const dateIso = this.agendaEditDraftDateIso();
+    const original = this.agendaDetailReservation();
+
+    if (!dateIso || !original) {
+      return [];
+    }
+
+    const durationMinutes = Math.max(
+      30,
+      Number(this.agendaEditDraftDuration()) || original.durationMinutes,
+    );
+    const workerEmail = this.agendaEditDraftWorkerEmail();
+    const isSameWorker =
+      this.getReservationWorkerKey(workerEmail) ===
+      this.getReservationWorkerKey(original.createdByEmail);
+
+    return this.agendaTimeSlotOptions.filter((time) => {
+      if (this.isAgendaRecurringClosedSlot(dateIso, time)) {
+        return false;
+      }
+
+      if (dateIso === original.dateIso && time === original.startTime && isSameWorker) {
+        return true;
+      }
+
+      return this.isAgendaEditSlotAvailableForWorker(dateIso, time, durationMinutes, workerEmail);
+    });
+  }
+
+  protected onAgendaEditDraftStartTimeChange(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    this.agendaEditDraftStartTime.set(target.value);
+    this.agendaDetailError.set('');
+  }
+
+  protected getAgendaEditWorkerOptions(): Array<{
+    email: string;
+    label: string;
+    disabled: boolean;
+  }> {
+    const dateIso = this.agendaEditDraftDateIso();
+    const startTime = this.agendaEditDraftStartTime();
+    const original = this.agendaDetailReservation();
+    const durationMinutes = Math.max(
+      30,
+      Number(this.agendaEditDraftDuration()) || (original?.durationMinutes ?? 30),
+    );
+
+    return this.getAgendaAssignableWorkerOptions().map((worker) => {
+      const isOriginalSlot =
+        !!original &&
+        dateIso === original.dateIso &&
+        startTime === original.startTime &&
+        this.getReservationWorkerKey(worker.email) ===
+          this.getReservationWorkerKey(original.createdByEmail);
+
+      const available =
+        isOriginalSlot ||
+        this.isAgendaEditSlotAvailableForWorker(dateIso, startTime, durationMinutes, worker.email);
+
+      return { ...worker, disabled: !available };
+    });
+  }
+
+  protected onAgendaEditDraftWorkerChange(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    this.agendaEditDraftWorkerEmail.set(target.value);
     this.agendaDetailError.set('');
   }
 
@@ -9451,19 +9942,28 @@ export class AdminPanelComponent implements OnDestroy {
             : item,
         );
     const nextStockItems = this.agendaEditDraftStockLines();
+    const nextDateIso = this.agendaEditDraftDateIso() || r.dateIso;
+    const nextStartTime = this.agendaEditDraftStartTime() || r.startTime;
+    const nextWorkerEmail =
+      this.agendaEditDraftWorkerEmail().trim().toLowerCase() ||
+      `${r.createdByEmail ?? ''}`.trim().toLowerCase();
+    const isWorkerChanged =
+      this.getReservationWorkerKey(nextWorkerEmail) !== this.getReservationWorkerKey(r.createdByEmail);
+    const isScheduleChanged =
+      nextDateIso !== r.dateIso || nextStartTime !== r.startTime || nextDurationMinutes !== r.durationMinutes;
 
     if (
       !this.isSuperadmin() &&
-      nextDurationMinutes !== r.durationMinutes &&
+      isScheduleChanged &&
       this.hasReservationConflict(
-        r.dateIso,
-        r.startTime,
+        nextDateIso,
+        nextStartTime,
         nextDurationMinutes,
         r.id,
         r.createdByEmail,
       )
     ) {
-      this.agendaDetailError.set('La nueva duración solapa con otra cita existente.');
+      this.agendaDetailError.set('El nuevo día/hora/duración solapa con otra cita existente.');
       return;
     }
 
@@ -9479,8 +9979,8 @@ export class AdminPanelComponent implements OnDestroy {
 
     this.http
       .patch<{ ok: boolean; error?: string }>(`/api/admin/reservas/${r.id}`, {
-        dateIso: r.dateIso,
-        startTime: r.startTime,
+        dateIso: nextDateIso,
+        startTime: nextStartTime,
         durationMinutes: nextDurationMinutes,
         appointmentTypeName: nextAppointmentTypeName,
         customerName: r.customerName,
@@ -9498,34 +9998,72 @@ export class AdminPanelComponent implements OnDestroy {
           }
 
           const nextEndTime = this.formatMinutesToTime(
-            this.parseTimeToMinutes(r.startTime) + nextDurationMinutes,
+            this.parseTimeToMinutes(nextStartTime) + nextDurationMinutes,
           );
 
-          const updated: AdminReservationItem = {
-            ...r,
-            appointmentTypeName: nextAppointmentTypeName,
-            durationMinutes: nextDurationMinutes,
-            additionalComments: nextAdditionalComments,
-            endTime: nextEndTime,
-            reservationServiceItems: nextServiceItems,
-            reservationStockItems: nextStockItems,
+          const applyLocalUpdate = (workerEmail?: string | null): void => {
+            const updated: AdminReservationItem = {
+              ...r,
+              dateIso: nextDateIso,
+              startTime: nextStartTime,
+              appointmentTypeName: nextAppointmentTypeName,
+              durationMinutes: nextDurationMinutes,
+              additionalComments: nextAdditionalComments,
+              endTime: nextEndTime,
+              createdByEmail: workerEmail ?? r.createdByEmail,
+              reservationServiceItems: nextServiceItems,
+              reservationStockItems: nextStockItems,
+            };
+
+            this.reservations.update((items) =>
+              items.map((item) => (item.id === r.id ? updated : item)),
+            );
+            this.agendaDetailReservation.set(updated);
+            this.agendaDetailMode.set('view');
+            this.loadReservations();
           };
 
-          this.reservations.update((items) =>
-            items.map((item) => (item.id === r.id ? updated : item)),
-          );
-          this.agendaDetailReservation.set(updated);
-          this.agendaDetailMode.set('view');
-          this.loadReservations();
+          if (!isWorkerChanged) {
+            applyLocalUpdate();
+            this.agendaDetailSaving.set(false);
+            return;
+          }
+
+          this.http
+            .patch<{ ok: boolean; error?: string }>(`/api/admin/reservas/${r.id}/assign`, {
+              assigneeEmail: nextWorkerEmail,
+            })
+            .subscribe({
+              next: (assignResponse) => {
+                if (!assignResponse.ok) {
+                  this.agendaDetailError.set(
+                    assignResponse.error ?? 'No se pudo reasignar la cita a la trabajadora.',
+                  );
+                  this.loadReservations();
+                  this.agendaDetailSaving.set(false);
+                  return;
+                }
+
+                applyLocalUpdate(nextWorkerEmail);
+                this.agendaDetailSaving.set(false);
+              },
+              error: (error) => {
+                const apiError = error?.error?.error;
+                this.agendaDetailError.set(
+                  typeof apiError === 'string' && apiError
+                    ? apiError
+                    : 'No se pudo reasignar la cita a la trabajadora.',
+                );
+                this.loadReservations();
+                this.agendaDetailSaving.set(false);
+              },
+            });
         },
         error: (error) => {
           const apiError = error?.error?.error;
           this.agendaDetailError.set(
             typeof apiError === 'string' && apiError ? apiError : 'No se pudo guardar los cambios.',
           );
-          this.agendaDetailSaving.set(false);
-        },
-        complete: () => {
           this.agendaDetailSaving.set(false);
         },
       });
@@ -10122,7 +10660,7 @@ export class AdminPanelComponent implements OnDestroy {
     const currentOwnerEmail = this.ownerEmail().trim().toLowerCase();
 
     this.employeeUsers().forEach((user) => {
-      if (user.role !== 'admin') {
+      if (user.role !== 'admin' && user.role !== 'superadmin') {
         return;
       }
 
@@ -10145,17 +10683,36 @@ export class AdminPanelComponent implements OnDestroy {
       });
     }
 
-    return Array.from(options.values()).sort((a, b) => {
-      if (a.email === currentOwnerEmail) {
-        return -1;
-      }
+    const workerNamePriority = ['sofi', 'paco'];
 
-      if (b.email === currentOwnerEmail) {
-        return 1;
+    return Array.from(options.values()).sort((a, b) => {
+      const rankA = this.getAgendaWorkerSortRank(a, workerNamePriority);
+      const rankB = this.getAgendaWorkerSortRank(b, workerNamePriority);
+
+      if (rankA !== rankB) {
+        return rankA - rankB;
       }
 
       return a.label.localeCompare(b.label);
     });
+  }
+
+  private getAgendaWorkerSortRank(
+    worker: { email: string; label: string },
+    namePriority: string[],
+  ): number {
+    const employee = this.employeeUsers().find(
+      (user) => user.email.trim().toLowerCase() === worker.email,
+    );
+
+    if (employee?.role === 'superadmin') {
+      return 0;
+    }
+
+    const normalizedLabel = worker.label.trim().toLowerCase();
+    const index = namePriority.indexOf(normalizedLabel);
+
+    return index === -1 ? namePriority.length + 1 : index + 1;
   }
 
   protected getAgendaAvailableWorkerOptionsForReservation(

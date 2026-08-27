@@ -5,6 +5,7 @@ export interface ReservationSelection {
   dateIso: string;
   time: string;
   durationMinutes: number;
+  isWaitlist?: boolean;
 }
 
 @Injectable({

@@ -95,7 +95,8 @@ export class ReservaCalendarioService {
   getAvailableTimeSlotsFromApi(dateIso: string, durationMinutes: number): Observable<string[]> {
     const params = new HttpParams()
       .set('dateIso', dateIso)
-      .set('durationMinutes', durationMinutes.toString());
+      .set('durationMinutes', durationMinutes.toString())
+      .set('soloAdmin', 'true');
 
     return this.http
       .get<{ ok: boolean; slots: string[] }>('/api/reservas/disponibilidad', { params })

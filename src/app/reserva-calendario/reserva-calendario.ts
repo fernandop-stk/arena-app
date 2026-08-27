@@ -219,7 +219,7 @@ export class ReservaCalendarioComponent {
   }
 
   protected onSelectDay(dateIso: string): void {
-    if (this.isDayUnavailable(dateIso)) {
+    if (this.isPastDay(dateIso)) {
       return;
     }
 
@@ -275,6 +275,18 @@ export class ReservaCalendarioComponent {
     });
 
     return this.router.navigate(['/reservas/datos']);
+  }
+
+  protected joinWaitlist(time: string): void {
+    this.reservaStateService.setSelection({
+      appointmentTypeId: this.selectedTypeId(),
+      dateIso: this.selectedDateIso(),
+      time,
+      durationMinutes: this.selectedDurationMinutes(),
+      isWaitlist: true,
+    });
+
+    void this.router.navigate(['/reservas/datos']);
   }
 
   protected getSelectedTypeName(): string {
