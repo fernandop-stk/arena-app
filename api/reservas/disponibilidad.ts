@@ -1,4 +1,4 @@
-import { getAvailableSlotsForDate } from '../../src/shared/reservas-db';
+import { getAvailableSlotsForDate, getManuallyBlockedSlotsForDate } from '../../src/shared/reservas-db';
 
 export default async function handler(req: any, res: any): Promise<void> {
   if (req.method !== 'GET') {
@@ -16,7 +16,8 @@ export default async function handler(req: any, res: any): Promise<void> {
 
   try {
     const slots = await getAvailableSlotsForDate(dateIso, durationMinutes);
-    res.status(200).json({ ok: true, slots });
+    const blockedSlots = await getManuallyBlockedSlotsForDate(dateIso);
+    res.status(200).json({ ok: true, slots, blockedSlots });
   } catch (error) {
     console.error('Error consultando disponibilidad (Vercel):', error);
     res.status(500).json({ ok: false, error: 'No se pudo consultar la disponibilidad.' });

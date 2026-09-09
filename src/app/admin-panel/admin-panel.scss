@@ -1115,6 +1115,10 @@
             display: grid;
             gap: 0.3rem;
             overflow: visible;
+            &--blocked {
+                border-color: rgba(184, 92, 92, 0.5);
+                background: rgba(184, 92, 92, 0.14);
+            }
         }
         &__agenda-slot-closed {
             display: inline-flex;
@@ -1129,6 +1133,11 @@
             font-weight: 700;
             text-align: center;
             padding: 0.2rem 0.35rem;
+            &--blocked {
+                border-style: solid;
+                border-color: rgba(184, 92, 92, 0.55);
+                background: rgba(184, 92, 92, 0.16);
+            }
         }
         &__agenda-alert-list {
             display: grid;

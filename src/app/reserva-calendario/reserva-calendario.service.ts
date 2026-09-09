@@ -92,15 +92,26 @@ export class ReservaCalendarioService {
     return slots;
   }
 
-  getAvailableTimeSlotsFromApi(dateIso: string, durationMinutes: number): Observable<string[]> {
+  getAvailableTimeSlotsFromApi(
+    dateIso: string,
+    durationMinutes: number,
+  ): Observable<{ slots: string[]; blockedSlots: string[] }> {
     const params = new HttpParams()
       .set('dateIso', dateIso)
       .set('durationMinutes', durationMinutes.toString())
       .set('soloAdmin', 'true');
 
     return this.http
-      .get<{ ok: boolean; slots: string[] }>('/api/reservas/disponibilidad', { params })
-      .pipe(map((response) => response.slots ?? []));
+      .get<{ ok: boolean; slots: string[]; blockedSlots?: string[] }>(
+        '/api/reservas/disponibilidad',
+        { params },
+      )
+      .pipe(
+        map((response) => ({
+          slots: response.slots ?? [],
+          blockedSlots: response.blockedSlots ?? [],
+        })),
+      );
   }
 
   hasCompleteSelection(selectedDateIso: string, selectedTime: string): boolean {

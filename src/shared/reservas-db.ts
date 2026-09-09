@@ -53,6 +53,7 @@ export interface AdminBlockedPeriodItem {
   endTime: string;
   reason: string;
   createdAtIso: string;
+  workerEmail?: string | null;
 }
 
 export const OPEN_MINUTES = 9 * 60;
@@ -139,12 +140,14 @@ interface MemoryBlockedPeriod {
   reason: string;
   createdAtIso: string;
   slots: string[];
+  workerEmail?: string;
 }
 
 const memoryReservations = new Map<string, MemoryReservation>();
 const memorySlotsByDate = new Map<string, Set<string>>();
 const memoryBlockedPeriods = new Map<string, MemoryBlockedPeriod>();
-const memoryBlockedSlotsByDate = new Map<string, Set<string>>();
+// dateIso -> workerKey ('' = todas las trabajadoras) -> slots bloqueados
+const memoryBlockedSlotsByDate = new Map<string, Map<string, Set<string>>>();
 
 const getReservationExpiresAtIso = (payload: {
   appointmentTypeName: string;
@@ -176,7 +179,7 @@ const isExpiredProvisionalReservation = (reservation: {
     return false;
   }
 
-  return new Date(reservation.expiresAtIso).getTime() <= Date.now();
+  return false;
 };
 
 const removeReservationFromMemory = (reservationId: string): void => {
@@ -191,34 +194,16 @@ const removeReservationFromMemory = (reservationId: string): void => {
 };
 
 const purgeExpiredProvisionalReservationsInMemory = (): boolean => {
-  const expiredIds = Array.from(memoryReservations.values())
-    .filter((reservation) => isExpiredProvisionalReservation(reservation))
-    .map((reservation) => reservation.id);
-
-  if (expiredIds.length === 0) {
-    return false;
-  }
-
-  expiredIds.forEach((reservationId) => removeReservationFromMemory(reservationId));
-  saveMemoryToFile();
-  return true;
+  return false;
 };
 
 const cleanupExpiredProvisionalReservations = async (): Promise<void> => {
   if (!shouldUseDatabase()) {
-    purgeExpiredProvisionalReservationsInMemory();
     return;
   }
 
   await ensureSchema();
-  const db = getPool();
-
-  await db.query(`
-    DELETE FROM reservations
-    WHERE admin_status = 'pending'
-      AND expires_at IS NOT NULL
-      AND expires_at <= NOW()
-  `);
+  return;
 };
 
 const DEV_CACHE_FILE = path.join(process.cwd(), '.dev-reservas-cache.json');
@@ -577,12 +562,57 @@ const ensureSchema = async (): Promise<void> => {
     `);
 
     await db.query(`
+      ALTER TABLE admin_block_periods
+      ADD COLUMN IF NOT EXISTS worker_email TEXT NULL;
+    `);
+
+    await db.query(`
       CREATE TABLE IF NOT EXISTS admin_blocked_slots (
         date_iso TEXT NOT NULL,
         slot_time TEXT NOT NULL,
         block_id TEXT NOT NULL REFERENCES admin_block_periods(id) ON DELETE CASCADE,
         PRIMARY KEY (date_iso, slot_time)
       );
+    `);
+
+    await db.query(`
+      ALTER TABLE admin_blocked_slots
+      ADD COLUMN IF NOT EXISTS worker_email TEXT NULL;
+    `);
+
+    await db.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conrelid = 'admin_blocked_slots'::regclass
+            AND contype = 'p'
+            AND pg_get_constraintdef(oid) <> 'PRIMARY KEY (date_iso, slot_time, block_id)'
+        ) THEN
+          EXECUTE 'ALTER TABLE admin_blocked_slots DROP CONSTRAINT ' || quote_ident((
+            SELECT conname
+            FROM pg_constraint
+            WHERE conrelid = 'admin_blocked_slots'::regclass
+              AND contype = 'p'
+            LIMIT 1
+          ));
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conrelid = 'admin_blocked_slots'::regclass
+            AND contype = 'p'
+            AND pg_get_constraintdef(oid) = 'PRIMARY KEY (date_iso, slot_time, block_id)'
+        ) THEN
+          ALTER TABLE admin_blocked_slots
+          ADD CONSTRAINT admin_blocked_slots_pkey PRIMARY KEY (date_iso, slot_time, block_id);
+        END IF;
+      EXCEPTION
+        WHEN duplicate_object OR invalid_table_definition THEN
+          NULL;
+      END $$;
     `);
 
     schemaReady = true;
@@ -773,11 +803,46 @@ const hasCapacityConflictInMemory = (
   });
 };
 
-const getBlockedSlotsFromMemory = (dateIso: string): Set<string> =>
-  new Set(memoryBlockedSlotsByDate.get(dateIso) ?? new Set<string>());
+const getBlockedSlotsFromMemory = (dateIso: string, workerEmail?: string): Set<string> => {
+  const perWorkerMap = memoryBlockedSlotsByDate.get(dateIso);
+  const result = new Set<string>();
 
-const getEffectiveBlockedSlotsFromMemory = (dateIso: string): Set<string> => {
-  const blockedSlots = getBlockedSlotsFromMemory(dateIso);
+  if (!perWorkerMap) {
+    return result;
+  }
+
+  const globalSlots = perWorkerMap.get('');
+  globalSlots?.forEach((slot) => result.add(slot));
+
+  if (workerEmail) {
+    const specificSlots = perWorkerMap.get(normalizeWorkerEmail(workerEmail));
+    specificSlots?.forEach((slot) => result.add(slot));
+  }
+
+  return result;
+};
+
+const getWorkerBlockCountsFromMemory = (dateIso: string): Map<string, number> => {
+  const perWorkerMap = memoryBlockedSlotsByDate.get(dateIso);
+  const counts = new Map<string, number>();
+
+  if (!perWorkerMap) {
+    return counts;
+  }
+
+  perWorkerMap.forEach((slots, workerKey) => {
+    if (!workerKey) {
+      return;
+    }
+
+    slots.forEach((slot) => counts.set(slot, (counts.get(slot) ?? 0) + 1));
+  });
+
+  return counts;
+};
+
+const getEffectiveBlockedSlotsFromMemory = (dateIso: string, workerEmail?: string): Set<string> => {
+  const blockedSlots = getBlockedSlotsFromMemory(dateIso, workerEmail);
 
   getRecurringClosedSlotsForDate(dateIso).forEach((slot) => blockedSlots.add(slot));
   return blockedSlots;
@@ -807,10 +872,17 @@ const createReservationWithSlotsInMemory = (
   const slotTimes = buildSlotTimes(startMinutes, payload.durationMinutes);
   const maxConcurrent = Math.max(1, Math.floor(options?.maxConcurrentReservations ?? 1));
   const slotUsage = getSlotUsageCountsFromMemory(payload.dateIso);
-  const blockedSlots = options?.allowClosedSchedule
-    ? getBlockedSlotsFromMemory(payload.dateIso)
-    : getEffectiveBlockedSlotsFromMemory(payload.dateIso);
   const assigneeWorker = normalizeWorkerEmail(payload.createdByEmail);
+  const blockedSlots = options?.allowClosedSchedule
+    ? getBlockedSlotsFromMemory(payload.dateIso, assigneeWorker || undefined)
+    : getEffectiveBlockedSlotsFromMemory(payload.dateIso, assigneeWorker || undefined);
+
+  if (!assigneeWorker) {
+    const workerBlockCounts = getWorkerBlockCountsFromMemory(payload.dateIso);
+    workerBlockCounts.forEach((count, slot) => {
+      slotUsage.set(slot, (slotUsage.get(slot) ?? 0) + count);
+    });
+  }
 
   const hasCapacityConflict =
     !assigneeWorker && slotTimes.some((slot) => (slotUsage.get(slot) ?? 0) >= maxConcurrent);
@@ -1069,23 +1141,44 @@ export const getAvailableSlotsForDate = async (
         acc.set(row.slot_time, Number(row.usage_count) || 0);
         return acc;
       }, new Map<string, number>());
-      const blocked = await db.query<{ slot_time: string }>(
-        'SELECT slot_time FROM admin_blocked_slots WHERE date_iso = $1',
+      const blocked = await db.query<{ slot_time: string; worker_email: string | null }>(
+        'SELECT slot_time, worker_email FROM admin_blocked_slots WHERE date_iso = $1',
         [dateIso],
       );
 
-      blockedSet = new Set(blocked.rows.map((row) => row.slot_time));
+      blockedSet = new Set<string>();
+      blocked.rows.forEach((row) => {
+        if (!row.worker_email) {
+          blockedSet.add(row.slot_time);
+        } else if (normalizedWorkerEmail && row.worker_email === normalizedWorkerEmail) {
+          blockedSet.add(row.slot_time);
+        } else if (!normalizedWorkerEmail) {
+          bookedCountBySlot.set(row.slot_time, (bookedCountBySlot.get(row.slot_time) ?? 0) + 1);
+        }
+      });
     } catch (error) {
       if (!enableRuntimeMemoryMode(error)) {
         throw error;
       }
 
       bookedCountBySlot = getSlotUsageCountsFromMemory(dateIso, normalizedWorkerEmail);
-      blockedSet = getEffectiveBlockedSlotsFromMemory(dateIso);
+      blockedSet = getEffectiveBlockedSlotsFromMemory(dateIso, normalizedWorkerEmail || undefined);
+
+      if (!normalizedWorkerEmail) {
+        getWorkerBlockCountsFromMemory(dateIso).forEach((count, slot) => {
+          bookedCountBySlot.set(slot, (bookedCountBySlot.get(slot) ?? 0) + count);
+        });
+      }
     }
   } else {
     bookedCountBySlot = getSlotUsageCountsFromMemory(dateIso, normalizedWorkerEmail);
-    blockedSet = getEffectiveBlockedSlotsFromMemory(dateIso);
+    blockedSet = getEffectiveBlockedSlotsFromMemory(dateIso, normalizedWorkerEmail || undefined);
+
+    if (!normalizedWorkerEmail) {
+      getWorkerBlockCountsFromMemory(dateIso).forEach((count, slot) => {
+        bookedCountBySlot.set(slot, (bookedCountBySlot.get(slot) ?? 0) + count);
+      });
+    }
   }
 
   getRecurringClosedSlotsForDate(dateIso).forEach((slot) => blockedSet.add(slot));
@@ -1105,6 +1198,29 @@ export const getAvailableSlotsForDate = async (
   }
 
   return availableSlots;
+};
+
+export const getManuallyBlockedSlotsForDate = async (dateIso: string): Promise<string[]> => {
+  if (shouldUseDatabase()) {
+    try {
+      await ensureSchema();
+      const db = getPool();
+      const blocked = await db.query<{ slot_time: string }>(
+        'SELECT slot_time FROM admin_blocked_slots WHERE date_iso = $1',
+        [dateIso],
+      );
+
+      return blocked.rows.map((row) => row.slot_time);
+    } catch (error) {
+      if (!enableRuntimeMemoryMode(error)) {
+        throw error;
+      }
+
+      return Array.from(getBlockedSlotsFromMemory(dateIso));
+    }
+  }
+
+  return Array.from(getBlockedSlotsFromMemory(dateIso));
 };
 
 export const createReservationWithSlots = async (
@@ -1166,17 +1282,20 @@ export const createReservationWithSlots = async (
       requiresReservationSignal: payload.requiresReservationSignal,
     });
 
-    const blockedConflict = await client.query<{ slot_time: string }>(
+    const blockedConflict = await client.query<{ slot_time: string; worker_email: string | null }>(
       `
-      SELECT slot_time
+      SELECT slot_time, worker_email
       FROM admin_blocked_slots
       WHERE date_iso = $1 AND slot_time = ANY($2::text[])
-      LIMIT 1
       `,
       [payload.dateIso, slotTimes],
     );
 
-    if (blockedConflict.rowCount && blockedConflict.rowCount > 0) {
+    const hasBlockedConflict = blockedConflict.rows.some(
+      (row) => !row.worker_email || (normalizedWorkerEmail && row.worker_email === normalizedWorkerEmail),
+    );
+
+    if (hasBlockedConflict) {
       await client.query('ROLLBACK');
       return { ok: false, conflict: true };
     }
@@ -2398,9 +2517,10 @@ export const updateReservationByAdmin = async (
       return { ok: false, reason: 'not-found' };
     }
 
+    const assignedWorker = normalizeWorkerEmail(reservation.createdByEmail);
     const blockedSlots = effectiveAllowClosedSchedule
-      ? getBlockedSlotsFromMemory(payload.dateIso)
-      : getEffectiveBlockedSlotsFromMemory(payload.dateIso);
+      ? getBlockedSlotsFromMemory(payload.dateIso, assignedWorker || undefined)
+      : getEffectiveBlockedSlotsFromMemory(payload.dateIso, assignedWorker || undefined);
 
     if (nextSlots.some((slot) => blockedSlots.has(slot))) {
       return { ok: false, reason: 'blocked-conflict' };
@@ -2413,7 +2533,6 @@ export const updateReservationByAdmin = async (
       maxConcurrent,
     );
 
-    const assignedWorker = normalizeWorkerEmail(reservation.createdByEmail);
     const hasWorkerConflict = hasWorkerConflictInMemory(
       reservationId,
       payload.dateIso,
@@ -2457,24 +2576,34 @@ export const updateReservationByAdmin = async (
     const current = await client.query<{
       id: string;
       admin_status: string;
-    }>('SELECT id, admin_status FROM reservations WHERE id = $1 FOR UPDATE', [reservationId]);
+      created_by_email: string | null;
+    }>('SELECT id, admin_status, created_by_email FROM reservations WHERE id = $1 FOR UPDATE', [
+      reservationId,
+    ]);
 
     if (current.rowCount === 0) {
       await client.query('ROLLBACK');
       return { ok: false, reason: 'not-found' };
     }
 
-    const blockedConflict = await client.query<{ slot_time: string }>(
+    const assignedWorkerForBlockCheck = normalizeWorkerEmail(current.rows[0]?.created_by_email);
+
+    const blockedConflict = await client.query<{ slot_time: string; worker_email: string | null }>(
       `
-      SELECT slot_time
+      SELECT slot_time, worker_email
       FROM admin_blocked_slots
       WHERE date_iso = $1 AND slot_time = ANY($2::text[])
-      LIMIT 1
       `,
       [payload.dateIso, nextSlots],
     );
 
-    if (blockedConflict.rowCount && blockedConflict.rowCount > 0) {
+    const hasBlockedConflict = blockedConflict.rows.some(
+      (row) =>
+        !row.worker_email ||
+        (assignedWorkerForBlockCheck && row.worker_email === assignedWorkerForBlockCheck),
+    );
+
+    if (hasBlockedConflict) {
       await client.query('ROLLBACK');
       return { ok: false, reason: 'blocked-conflict' };
     }
@@ -2593,9 +2722,10 @@ export const updateReservationByAdmin = async (
         return { ok: false, reason: 'not-found' };
       }
 
+      const assignedWorker = normalizeWorkerEmail(reservation.createdByEmail);
       const blockedSlots = effectiveAllowClosedSchedule
-        ? getBlockedSlotsFromMemory(payload.dateIso)
-        : getEffectiveBlockedSlotsFromMemory(payload.dateIso);
+        ? getBlockedSlotsFromMemory(payload.dateIso, assignedWorker || undefined)
+        : getEffectiveBlockedSlotsFromMemory(payload.dateIso, assignedWorker || undefined);
 
       if (nextSlots.some((slot) => blockedSlots.has(slot))) {
         return { ok: false, reason: 'blocked-conflict' };
@@ -2608,7 +2738,6 @@ export const updateReservationByAdmin = async (
         maxConcurrent,
       );
 
-      const assignedWorker = normalizeWorkerEmail(reservation.createdByEmail);
       const hasWorkerConflict = hasWorkerConflictInMemory(
         reservationId,
         payload.dateIso,
@@ -2669,13 +2798,54 @@ const mapMemoryBlockedPeriodToAdminItem = (
   endTime: blockedPeriod.endTime,
   reason: blockedPeriod.reason,
   createdAtIso: blockedPeriod.createdAtIso,
+  workerEmail: blockedPeriod.workerEmail ?? null,
 });
+
+export const findBlockedPeriodForSlot = (
+  blockedPeriods: AdminBlockedPeriodItem[],
+  dateIso: string,
+  slotTime: string,
+  workerEmail?: string,
+): AdminBlockedPeriodItem | null => {
+  const slotMinutes = toMinutes(slotTime);
+  const normalizedWorker = workerEmail ? normalizeWorkerEmail(workerEmail) : '';
+
+  if (!Number.isFinite(slotMinutes) || slotMinutes < 0) {
+    return null;
+  }
+
+  return (
+    blockedPeriods.find((blockedPeriod) => {
+      if (blockedPeriod.dateIso !== dateIso) {
+        return false;
+      }
+
+      const blockWorker = blockedPeriod.workerEmail
+        ? normalizeWorkerEmail(blockedPeriod.workerEmail)
+        : '';
+
+      if (blockWorker && blockWorker !== normalizedWorker) {
+        return false;
+      }
+
+      const blockStartMinutes = toMinutes(blockedPeriod.startTime);
+      const blockEndMinutes = toMinutes(blockedPeriod.endTime);
+
+      if (!Number.isFinite(blockStartMinutes) || !Number.isFinite(blockEndMinutes)) {
+        return false;
+      }
+
+      return blockStartMinutes <= slotMinutes && slotMinutes < blockEndMinutes;
+    }) ?? null
+  );
+};
 
 const createBlockedPeriodInMemory = (payload: {
   dateIso: string;
   startTime: string;
   endTime: string;
   reason: string;
+  workerEmail?: string;
 }):
   | { ok: true; blockId: string }
   | { ok: false; reason: 'invalid-time' | 'reservation-conflict' | 'block-conflict' } => {
@@ -2709,7 +2879,9 @@ const createBlockedPeriodInMemory = (payload: {
     return { ok: false, reason: 'reservation-conflict' };
   }
 
-  const blockedSlots = memoryBlockedSlotsByDate.get(payload.dateIso) ?? new Set<string>();
+  const workerKey = payload.workerEmail ? normalizeWorkerEmail(payload.workerEmail) : '';
+  const perWorkerMap = memoryBlockedSlotsByDate.get(payload.dateIso) ?? new Map<string, Set<string>>();
+  const blockedSlots = perWorkerMap.get(workerKey) ?? new Set<string>();
 
   if (slotTimes.some((slot) => blockedSlots.has(slot))) {
     return { ok: false, reason: 'block-conflict' };
@@ -2717,7 +2889,8 @@ const createBlockedPeriodInMemory = (payload: {
 
   const blockId = `${payload.dateIso}-${startMinutes}-${Date.now()}-blk`;
   slotTimes.forEach((slot) => blockedSlots.add(slot));
-  memoryBlockedSlotsByDate.set(payload.dateIso, blockedSlots);
+  perWorkerMap.set(workerKey, blockedSlots);
+  memoryBlockedSlotsByDate.set(payload.dateIso, perWorkerMap);
 
   memoryBlockedPeriods.set(blockId, {
     id: blockId,
@@ -2727,6 +2900,7 @@ const createBlockedPeriodInMemory = (payload: {
     reason: normalizeBlockReason(payload.reason),
     createdAtIso: new Date().toISOString(),
     slots: slotTimes,
+    workerEmail: workerKey || undefined,
   });
 
   return { ok: true, blockId };
@@ -2739,15 +2913,26 @@ const deleteBlockedPeriodInMemory = (blockId: string): boolean => {
     return false;
   }
 
-  const blockedSlots = memoryBlockedSlotsByDate.get(blockedPeriod.dateIso);
+  const workerKey = blockedPeriod.workerEmail ? normalizeWorkerEmail(blockedPeriod.workerEmail) : '';
+  const perWorkerMap = memoryBlockedSlotsByDate.get(blockedPeriod.dateIso);
 
-  if (blockedSlots) {
-    blockedPeriod.slots.forEach((slot) => blockedSlots.delete(slot));
+  if (perWorkerMap) {
+    const blockedSlots = perWorkerMap.get(workerKey);
 
-    if (blockedSlots.size === 0) {
+    if (blockedSlots) {
+      blockedPeriod.slots.forEach((slot) => blockedSlots.delete(slot));
+
+      if (blockedSlots.size === 0) {
+        perWorkerMap.delete(workerKey);
+      } else {
+        perWorkerMap.set(workerKey, blockedSlots);
+      }
+    }
+
+    if (perWorkerMap.size === 0) {
       memoryBlockedSlotsByDate.delete(blockedPeriod.dateIso);
     } else {
-      memoryBlockedSlotsByDate.set(blockedPeriod.dateIso, blockedSlots);
+      memoryBlockedSlotsByDate.set(blockedPeriod.dateIso, perWorkerMap);
     }
   }
 
@@ -2774,6 +2959,7 @@ export const listBlockedPeriodsForAdmin = async (): Promise<AdminBlockedPeriodIt
       end_time: string;
       reason: string;
       created_at: string;
+      worker_email: string | null;
     }>(`
       SELECT
         id,
@@ -2781,7 +2967,8 @@ export const listBlockedPeriodsForAdmin = async (): Promise<AdminBlockedPeriodIt
         start_time,
         end_time,
         reason,
-        created_at
+        created_at,
+        worker_email
       FROM admin_block_periods
       ORDER BY date_iso ASC, start_time ASC, created_at DESC
     `);
@@ -2793,6 +2980,7 @@ export const listBlockedPeriodsForAdmin = async (): Promise<AdminBlockedPeriodIt
       endTime: row.end_time,
       reason: row.reason,
       createdAtIso: new Date(row.created_at).toISOString(),
+      workerEmail: row.worker_email,
     }));
   } catch (error) {
     if (enableRuntimeMemoryMode(error)) {
@@ -2812,6 +3000,7 @@ export const createBlockedPeriodForAdmin = async (payload: {
   startTime: string;
   endTime: string;
   reason: string;
+  workerEmail?: string;
 }): Promise<
   | { ok: true; blockId: string }
   | { ok: false; reason: 'invalid-time' | 'reservation-conflict' | 'block-conflict' }
@@ -2844,6 +3033,7 @@ export const createBlockedPeriodForAdmin = async (payload: {
     return { ok: false, reason: 'invalid-time' };
   }
 
+  const workerEmail = payload.workerEmail ? normalizeWorkerEmail(payload.workerEmail) : null;
   let client: PoolClient | null = null;
   const blockId = `${payload.dateIso}-${startMinutes}-${Date.now()}-blk`;
 
@@ -2875,6 +3065,24 @@ export const createBlockedPeriodForAdmin = async (payload: {
       return { ok: false, reason: 'reservation-conflict' };
     }
 
+    const existingBlockConflict = await client.query<{ slot_time: string; worker_email: string | null }>(
+      `
+      SELECT slot_time, worker_email
+      FROM admin_blocked_slots
+      WHERE date_iso = $1 AND slot_time = ANY($2::text[])
+      `,
+      [payload.dateIso, slotTimes],
+    );
+
+    const hasExistingBlockConflict = existingBlockConflict.rows.some(
+      (row) => !row.worker_email || !workerEmail || row.worker_email === workerEmail,
+    );
+
+    if (hasExistingBlockConflict) {
+      await client.query('ROLLBACK');
+      return { ok: false, reason: 'block-conflict' };
+    }
+
     await client.query(
       `
       INSERT INTO admin_block_periods (
@@ -2882,9 +3090,10 @@ export const createBlockedPeriodForAdmin = async (payload: {
         date_iso,
         start_time,
         end_time,
-        reason
+        reason,
+        worker_email
       )
-      VALUES ($1, $2, $3, $4, $5)
+      VALUES ($1, $2, $3, $4, $5, $6)
       `,
       [
         blockId,
@@ -2892,16 +3101,17 @@ export const createBlockedPeriodForAdmin = async (payload: {
         payload.startTime,
         payload.endTime,
         normalizeBlockReason(payload.reason),
+        workerEmail,
       ],
     );
 
     const inserted = await client.query(
       `
-      INSERT INTO admin_blocked_slots (date_iso, slot_time, block_id)
-      SELECT $1, unnest($2::text[]), $3
+      INSERT INTO admin_blocked_slots (date_iso, slot_time, block_id, worker_email)
+      SELECT $1, unnest($2::text[]), $3, $4
       ON CONFLICT DO NOTHING
       `,
-      [payload.dateIso, slotTimes, blockId],
+      [payload.dateIso, slotTimes, blockId, workerEmail],
     );
 
     if (inserted.rowCount !== slotTimes.length) {

@@ -10,7 +10,7 @@ interface TimeSlotItem {
   time: string;
   disabled: boolean;
   past: boolean;
-  reason: 'available' | 'past' | 'occupied' | 'closed';
+  reason: 'available' | 'past' | 'occupied' | 'closed' | 'blocked';
   statusLabel: string;
 }
 
@@ -387,7 +387,7 @@ export class ReservaCalendarioComponent {
     forkJoin(
       daysToCheck.map((day) =>
         this.reservaCalendarioService.getAvailableTimeSlotsFromApi(day.iso, duration).pipe(
-          map((slots) => ({
+          map(({ slots }) => ({
             iso: day.iso,
             available: slots.length > 0,
           })),
@@ -444,7 +444,7 @@ export class ReservaCalendarioComponent {
     this.reservaCalendarioService
       .getAvailableTimeSlotsFromApi(this.selectedDateIso(), duration)
       .subscribe({
-        next: (availableSlots) => {
+        next: ({ slots: availableSlots, blockedSlots }) => {
           const selectedIso = this.selectedDateIso();
           const hasAvailability = availableSlots.length > 0;
 
@@ -456,6 +456,7 @@ export class ReservaCalendarioComponent {
           }
 
           const availableSet = new Set(availableSlots);
+          const blockedSet = new Set(blockedSlots);
           const mappedSlots = allSlots.map((time) => {
             const isPast = this.isSlotInPast(time, selectedIso);
             const isClosed = this.reservaCalendarioService.isRecurringClosedSlot(
@@ -470,6 +471,8 @@ export class ReservaCalendarioComponent {
               reason = 'closed';
             } else if (isPast) {
               reason = 'past';
+            } else if (blockedSet.has(time)) {
+              reason = 'blocked';
             } else if (!availableSet.has(time)) {
               reason = 'occupied';
             }
@@ -480,7 +483,7 @@ export class ReservaCalendarioComponent {
               past: isPast,
               reason,
               statusLabel:
-                reason === 'closed'
+                reason === 'closed' || reason === 'blocked'
                   ? 'Cerrado'
                   : reason === 'past'
                     ? 'No disponible'

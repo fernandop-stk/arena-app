@@ -25,6 +25,7 @@ import {
   deleteUserFromDb,
   getDatabasePoolForIntegrations,
   getAvailableSlotsForDate,
+  getManuallyBlockedSlotsForDate,
   listBlockedPeriodsForAdmin,
   loadAllCierresFromDb,
   listReservationsForAdmin,
@@ -687,10 +688,9 @@ const buildReservationReminderEmailHtml = (data: {
 
             <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;">
               <a href="${safeConfirmUrl}" style="display:inline-block;background:#3d8c54;color:#fff;text-decoration:none;padding:11px 18px;border-radius:999px;font-weight:700;font-size:14px;">Confirmar cita</a>
-              <a href="${safeRejectUrl}" style="display:inline-block;background:#b74b4b;color:#fff;text-decoration:none;padding:11px 18px;border-radius:999px;font-weight:700;font-size:14px;">Rechazar cita</a>
             </div>
 
-            <p style="margin:16px 0 0;font-size:12px;line-height:1.55;color:#8f7b6f;">Si rechazas la cita, se eliminará automáticamente de la agenda.</p>
+            <p style="margin:16px 0 0;font-size:12px;line-height:1.55;color:#8f7b6f;">Si necesitas modificar o cancelar la cita, contacta con el salón. La cita no se elimina automáticamente.</p>
           </td>
         </tr>
       </table>
@@ -1065,6 +1065,7 @@ type EmployeePermission =
   | 'bloqueos_gestionar'
   | 'reservas_ver'
   | 'reservas_gestionar'
+  | 'reservas_borrar'
   | 'cierre_registrar'
   | 'estadisticas_ver'
   | 'clientes_gestionar'
@@ -1078,6 +1079,7 @@ const ALL_EMPLOYEE_PERMISSIONS: EmployeePermission[] = [
   'bloqueos_gestionar',
   'reservas_ver',
   'reservas_gestionar',
+  'reservas_borrar',
   'cierre_registrar',
   'estadisticas_ver',
   'clientes_gestionar',
@@ -5677,13 +5679,20 @@ app.post('/api/admin/bloqueos', async (req, res) => {
   const startTime = `${req.body?.startTime ?? ''}`;
   const endTime = `${req.body?.endTime ?? ''}`;
   const reason = `${req.body?.reason ?? ''}`;
+  const workerEmail = `${req.body?.workerEmail ?? ''}`.trim().toLowerCase();
 
   if (!dateIso || !startTime || !endTime) {
     return res.status(400).json({ ok: false, error: 'Fecha y rango horario son obligatorios.' });
   }
 
   try {
-    const created = await createBlockedPeriodForAdmin({ dateIso, startTime, endTime, reason });
+    const created = await createBlockedPeriodForAdmin({
+      dateIso,
+      startTime,
+      endTime,
+      reason,
+      workerEmail: workerEmail || undefined,
+    });
 
     if (!created.ok) {
       if (created.reason === 'invalid-time') {
@@ -7176,10 +7185,19 @@ app.patch('/api/admin/reservas/:id/status', async (req, res) => {
 });
 
 app.delete('/api/admin/reservas/:id', async (req, res) => {
-  const session = isAdminRequest(req.headers.cookie);
+  const session = getAuthSession(req.headers.cookie);
 
   if (!session.isAdmin) {
     return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const currentUser = session.email ? usersByEmail.get(session.email) : null;
+  const canDeleteReservations =
+    session.role === 'superadmin' ||
+    Boolean(currentUser?.permissions?.includes('reservas_borrar'));
+
+  if (!canDeleteReservations) {
+    return res.status(403).json({ ok: false, error: 'No tienes permisos para borrar reservas.' });
   }
 
   const reservationId = `${req.params['id'] ?? ''}`;
@@ -7237,10 +7255,12 @@ app.get('/api/reservas/disponibilidad', async (req, res) => {
       soloAdmin ? 1 : getMaxConcurrentReservationsForSlot(),
       soloAdmin ? adminOwnerEmail : undefined,
     );
+    const blockedSlots = await getManuallyBlockedSlotsForDate(dateIso);
 
     return res.status(200).json({
       ok: true,
       slots,
+      blockedSlots,
     });
   } catch (error) {
     console.error('Error consultando disponibilidad:', error);
@@ -7332,35 +7352,13 @@ app.get('/api/reservas/confirmacion', async (req, res) => {
         );
     }
 
-    const deletedReservation = {
-      dateIso: reservation.dateIso,
-      startTime: reservation.startTime,
-      endTime: reservation.endTime,
-      appointmentTypeName: reservation.appointmentTypeName,
-    };
-
-    await deleteReservationById(reservation.id);
-    await notifyFreedSlotAlerts(deletedReservation);
-
-    try {
-      await createNotificationAndBroadcast({
-        type: 'cancelacion_reserva',
-        title: `Cita rechazada por clienta: ${reservation.appointmentTypeName}`,
-        message: `${reservation.customerName} rechazó su cita del ${reservation.dateIso} a las ${reservation.startTime}.`,
-        relatedId: reservation.id,
-        actionUrl: `/admin/reservas?id=${reservation.id}`,
-      });
-    } catch (notifError) {
-      console.error('Error creando notificación tras rechazo de clienta:', notifError);
-    }
-
     return res
       .status(200)
       .send(
         buildReservationDecisionResultHtml(
-          'Cita rechazada',
-          'Tu cita se ha eliminado de la agenda. Si quieres, puedes volver a reservar desde la web.',
-          'danger',
+          'Solicitud recibida',
+          'La cancelación debe gestionarla el equipo del salón. Tu cita no se ha eliminado de la agenda.',
+          'neutral',
         ),
       );
   } catch (error) {

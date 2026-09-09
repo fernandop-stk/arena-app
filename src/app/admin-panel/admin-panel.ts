@@ -160,6 +160,7 @@ interface AdminBlockedPeriodItem {
   endTime: string;
   reason: string;
   createdAtIso: string;
+  workerEmail?: string | null;
 }
 
 interface AdminCalendarDay {
@@ -636,6 +637,7 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly showAgendaManualReserveModal = signal(false);
   protected readonly agendaManualReserveLoading = signal(false);
   protected readonly agendaManualReserveError = signal('');
+  protected readonly agendaManualReserveBlockLoading = signal(false);
   protected readonly agendaManualReserveDateIso = signal('');
   protected readonly agendaManualReserveTime = signal('');
   protected readonly agendaManualReserveWorkerEmail = signal('');
@@ -7267,6 +7269,7 @@ export class AdminPanelComponent implements OnDestroy {
           this.blockError.set(
             typeof apiError === 'string' && apiError ? apiError : 'No se pudo crear el bloqueo.',
           );
+          this.blockActionLoading.set(false);
         },
         complete: () => {
           this.blockActionLoading.set(false);
@@ -7294,6 +7297,7 @@ export class AdminPanelComponent implements OnDestroy {
         this.blockError.set(
           typeof apiError === 'string' && apiError ? apiError : 'No se pudo eliminar el bloqueo.',
         );
+        this.blockActionLoading.set(false);
       },
       complete: () => {
         this.blockActionLoading.set(false);
@@ -9216,6 +9220,10 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected openAgendaDeleteReservationModal(reservation: AdminReservationItem): void {
+    if (!this.requirePermission('reservas_borrar', 'Borrar reserva')) {
+      return;
+    }
+
     this.agendaDeleteReservationTarget.set(reservation);
     this.agendaDeleteReservationError.set('');
   }
@@ -9227,6 +9235,10 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected deleteAgendaUnassignedReservation(): void {
+    if (!this.requirePermission('reservas_borrar', 'Borrar reserva')) {
+      return;
+    }
+
     const reservation = this.agendaDeleteReservationTarget();
 
     if (!reservation) {
@@ -10497,9 +10509,63 @@ export class AdminPanelComponent implements OnDestroy {
           this.agendaManualReserveError.set(
             typeof apiError === 'string' && apiError ? apiError : 'No se pudo crear la reserva.',
           );
+          this.agendaManualReserveLoading.set(false);
         },
         complete: () => {
           this.agendaManualReserveLoading.set(false);
+        },
+      });
+  }
+
+  protected blockAgendaManualReserveSlot(): void {
+    if (!this.requirePermission('bloqueos_gestionar', 'Bloquear horas y días')) return;
+
+    const dateIso = this.agendaManualReserveDateIso().trim();
+    const startTime = this.normalizeAgendaTimeValue(this.agendaManualReserveTime().trim());
+
+    if (!dateIso || !startTime) {
+      this.agendaManualReserveError.set('Selecciona fecha y hora para bloquear.');
+      return;
+    }
+
+    if (this.isAgendaDateInPast(dateIso)) {
+      this.agendaManualReserveError.set('No se pueden bloquear días pasados.');
+      return;
+    }
+
+    const endTime = this.formatMinutesToTime(this.parseTimeToMinutes(startTime) + 30);
+    const workerEmail = this.agendaManualReserveWorkerEmail().trim().toLowerCase();
+
+    this.agendaManualReserveError.set('');
+    this.agendaManualReserveBlockLoading.set(true);
+
+    this.http
+      .post<{ ok: boolean; error?: string }>('/api/admin/bloqueos', {
+        dateIso,
+        startTime,
+        endTime,
+        reason: 'Hora bloqueada desde agenda',
+        workerEmail,
+      })
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.agendaManualReserveError.set(response.error ?? 'No se pudo bloquear la hora.');
+            return;
+          }
+
+          this.loadBlockedPeriods();
+          this.closeAgendaManualReserveModal();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.agendaManualReserveError.set(
+            typeof apiError === 'string' && apiError ? apiError : 'No se pudo bloquear la hora.',
+          );
+          this.agendaManualReserveBlockLoading.set(false);
+        },
+        complete: () => {
+          this.agendaManualReserveBlockLoading.set(false);
         },
       });
   }
@@ -10519,6 +10585,52 @@ export class AdminPanelComponent implements OnDestroy {
     }
 
     this.openQuickReserveModal();
+  }
+
+  protected getAgendaManualBlockedPeriodForSlot(
+    dateIso: string,
+    slot: string,
+    workerKey = '',
+  ): AdminBlockedPeriodItem | null {
+    const slotMinutes = this.parseTimeToMinutes(slot);
+    const normalizedWorkerKey = workerKey.trim().toLowerCase();
+
+    if (!Number.isFinite(slotMinutes) || slotMinutes < 0) {
+      return null;
+    }
+
+    return (
+      this.blockedPeriods().find((blockedPeriod) => {
+        if (blockedPeriod.dateIso !== dateIso) {
+          return false;
+        }
+
+        const blockWorkerKey = (blockedPeriod.workerEmail ?? '').trim().toLowerCase();
+
+        if (blockWorkerKey && blockWorkerKey !== normalizedWorkerKey) {
+          return false;
+        }
+
+        const blockStartMinutes = this.parseTimeToMinutes(blockedPeriod.startTime);
+        const blockEndMinutes = this.parseTimeToMinutes(blockedPeriod.endTime);
+
+        if (!Number.isFinite(blockStartMinutes) || !Number.isFinite(blockEndMinutes)) {
+          return false;
+        }
+
+        return blockStartMinutes <= slotMinutes && slotMinutes < blockEndMinutes;
+      }) ?? null
+    );
+  }
+
+  protected handleAgendaManualBlockedSlotClick(dateIso: string, slot: string, workerKey = ''): void {
+    const blockedPeriod = this.getAgendaManualBlockedPeriodForSlot(dateIso, slot, workerKey);
+
+    if (!blockedPeriod) {
+      return;
+    }
+
+    this.deleteBlockedPeriod(blockedPeriod.id);
   }
 
   protected isAgendaRecurringClosedDay(dateIso: string): boolean {
@@ -10555,7 +10667,7 @@ export class AdminPanelComponent implements OnDestroy {
     return totalMinutes >= 14 * 60 && totalMinutes < 15 * 60;
   }
 
-  protected getAgendaClosedSlotLabel(dateIso: string, time: string): string {
+  protected getAgendaClosedSlotLabel(dateIso: string, time: string, workerKey = ''): string {
     if (this.isAgendaDateInPast(dateIso)) {
       return 'Día pasado';
     }
@@ -10568,7 +10680,17 @@ export class AdminPanelComponent implements OnDestroy {
       return 'Cerrado · 14:00 a 15:00';
     }
 
+    const blockedPeriod = this.getAgendaManualBlockedPeriodForSlot(dateIso, time, workerKey);
+
+    if (blockedPeriod) {
+      return blockedPeriod.reason ? `Bloqueada · ${blockedPeriod.reason}` : 'Bloqueada';
+    }
+
     return 'Sin citas';
+  }
+
+  protected isAgendaManuallyBlockedSlot(dateIso: string, time: string, workerKey = ''): boolean {
+    return Boolean(this.getAgendaManualBlockedPeriodForSlot(dateIso, time, workerKey));
   }
 
   protected isAgendaDateInPast(dateIso: string): boolean {

@@ -1,87 +1,59 @@
 <section class="citas">
-  <div class="citas--container">
-    <header class="citas--container__hero">
-      <p class="citas--container__eyebrow">{{ salonName }}</p>
-      <h1 class="citas--container__title">{{ headline }}</h1>
-      <p class="citas--container__description">{{ description }}</p>
-      <p class="citas--container__schedule-note">
-        Horario de citas: M-V 10:00 a 18:00 · Sábados 09:00 a 13:00.
-      </p>
-    </header>
+    <div class="citas--container">
+        <header class="citas--container__hero">
+            <p class="citas--container__eyebrow">{{ salonName }}</p>
+            <h1 class="citas--container__title">{{ headline }}</h1>
+            <p class="citas--container__description">{{ description }}</p>
+            <p class="citas--container__schedule-note">
+                Horario de citas: M-V 10:00 a 18:00 · Sábados 09:00 a 13:00.
+            </p>
+        </header>
 
-    <ul class="citas--container__list">
-      @for (appointment of preInvitadaAppointmentTypes; track appointment.id) {
-        <li
-          class="citas--container__card"
-          [class.citas--container__card--selected]="selectedAppointmentTypeId() === appointment.id"
-          (click)="selectAppointment(appointment.id)"
-        >
-          <h2 class="citas--container__card-title">{{ appointment.nombre }}</h2>
-          <p class="citas--container__card-description">{{ appointment.descripcion }}</p>
-        </li>
-      }
+        <ul class="citas--container__list">
+            @for (appointment of preInvitadaAppointmentTypes; track appointment.id) {
+            <li class="citas--container__card" [class.citas--container__card--selected]="selectedAppointmentTypeId() === appointment.id" (click)="selectAppointment(appointment.id)">
+                <h2 class="citas--container__card-title">{{ appointment.nombre }}</h2>
+                <p class="citas--container__card-description">{{ appointment.descripcion }}</p>
+            </li>
+            }
 
-      <li
-        class="citas--container__card"
-        [class.citas--container__card--selected]="isInvitadaSelected()"
-      >
-        <button
-          type="button"
-          class="citas--container__invited-trigger"
-          [class.citas--container__invited-trigger--active]="isInvitadaExpanded()"
-          (click)="toggleInvitadaOptions()"
-        >
+            <li class="citas--container__card" [class.citas--container__card--selected]="isInvitadaSelected()">
+                <button type="button" class="citas--container__invited-trigger" [class.citas--container__invited-trigger--active]="isInvitadaExpanded()" (click)="toggleInvitadaOptions()">
           <span class="citas--container__invited-title">Pack Invitada</span>
           <span class="citas--container__invited-icon" aria-hidden="true">
             {{ isInvitadaExpanded() ? '−' : '+' }}
           </span>
-        </button>
-
-        @if (isInvitadaExpanded()) {
-          <div class="citas--container__invited-options">
-            @for (option of invitadaOptions; track option.id) {
-              <button
-                type="button"
-                class="citas--container__invited-option"
-                [class.citas--container__invited-option--selected]="
+        </button> @if (isInvitadaExpanded()) {
+                <div class="citas--container__invited-options">
+                    @for (option of invitadaOptions; track option.id) {
+                    <button type="button" class="citas--container__invited-option" [class.citas--container__invited-option--selected]="
                   selectedAppointmentTypeId() === option.id
-                "
-                (click)="selectAppointment(option.id)"
-              >
+                " (click)="selectAppointment(option.id)">
                 <strong>{{ option.nombre }}</strong>
                 <span>{{ option.descripcion }}</span>
-              </button>
+              </button> }
+                </div>
+                }
+            </li>
+
+            @for (appointment of postInvitadaAppointmentTypes; track appointment.id) {
+            <li class="citas--container__card" [class.citas--container__card--selected]="selectedAppointmentTypeId() === appointment.id" (click)="selectAppointment(appointment.id)">
+                <h2 class="citas--container__card-title">{{ appointment.nombre }}</h2>
+                <p class="citas--container__card-description">{{ appointment.descripcion }}</p>
+            </li>
             }
-          </div>
-        }
-      </li>
+        </ul>
 
-      @for (appointment of postInvitadaAppointmentTypes; track appointment.id) {
-        <li
-          class="citas--container__card"
-          [class.citas--container__card--selected]="selectedAppointmentTypeId() === appointment.id"
-          (click)="selectAppointment(appointment.id)"
-        >
-          <h2 class="citas--container__card-title">{{ appointment.nombre }}</h2>
-          <p class="citas--container__card-description">{{ appointment.descripcion }}</p>
-        </li>
-      }
-    </ul>
-
-    <div id="citas-reserva-actions" class="citas--container__actions">
-      <button
-        type="button"
-        class="citas--container__button citas--container__button--primary"
-        (click)="citasService.goToReservationCalendar(selectedAppointmentTypeId())"
-      >
+        <div id="citas-reserva-actions" class="citas--container__actions">
+            <button type="button" class="citas--container__button citas--container__button--primary" (click)="citasService.goToReservationCalendar(selectedAppointmentTypeId())">
         {{ buttonLabel }}
       </button>
 
-      <a class="citas--container__button citas--container__button--secondary" routerLink="/"
-        >Volver al inicio</a
+            <a class="citas--container__button citas--container__button--secondary" routerLink="/">Volver al inicio</a
       >
     </div>
 
+    @if (!isAdminSession()) {
     <section class="citas--container__client-cta" aria-label="Accesos de cliente">
       <div>
         <p class="citas--container__client-cta-kicker">Área cliente</p>
@@ -98,16 +70,14 @@
         >
           Ver mi historial
         </a>
-        <a
-          class="citas--container__button citas--container__button--secondary"
-          routerLink="/cliente/registro"
-        >
+            <a class="citas--container__button citas--container__button--secondary" routerLink="/cliente/registro">
           Crear cuenta
         </a>
-        <a class="citas--container__client-cta-link" routerLink="/cliente/recuperar">
+            <a class="citas--container__client-cta-link" routerLink="/cliente/recuperar">
           He olvidado mi contraseña
         </a>
-      </div>
-    </section>
-  </div>
+        </div>
+</section>
+}
+</div>
 </section>

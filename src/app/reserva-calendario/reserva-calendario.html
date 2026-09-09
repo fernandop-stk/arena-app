@@ -242,7 +242,9 @@
                 <div class="reserva-calendario--container__time-item">
                     <button type="button" class="reserva-calendario--container__time" [class.reserva-calendario--container__time--selected]="
                     selectedTime() === slot.time
-                  " [class.reserva-calendario--container__time--disabled]="slot.disabled" [disabled]="slot.disabled" (click)="onSelectTime(slot.time, slot.disabled)">
+                  " [class.reserva-calendario--container__time--disabled]="slot.disabled" [class.reserva-calendario--container__time--closed]="
+                    slot.reason === 'closed' || slot.reason === 'blocked'
+                  " [disabled]="slot.disabled" (click)="onSelectTime(slot.time, slot.disabled)">
                   {{ slot.time }}
                 </button> @if (slot.disabled) {
                     <p class="reserva-calendario--container__time-status">

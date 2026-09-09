@@ -398,11 +398,15 @@
                               slot
                             }}</span>
                                 <div class="admin-panel--container__agenda-hour-dropzone" [style.background]="
-                                isAgendaRecurringClosedSlot(agendaDayScheduleDateIso(), slot)
+                                isAgendaManuallyBlockedSlot(agendaDayScheduleDateIso(), slot, workerSection.workerKey)
+                                  ? 'rgba(184, 92, 92, 0.14)'
+                                  : isAgendaRecurringClosedSlot(agendaDayScheduleDateIso(), slot)
                                   ? 'rgba(77, 99, 133, 0.14)'
                                   : 'rgba(201, 123, 99, 0.04)'
                               " [style.border-color]="
-                                isAgendaRecurringClosedSlot(agendaDayScheduleDateIso(), slot)
+                                isAgendaManuallyBlockedSlot(agendaDayScheduleDateIso(), slot, workerSection.workerKey)
+                                  ? 'rgba(184, 92, 92, 0.5)'
+                                  : isAgendaRecurringClosedSlot(agendaDayScheduleDateIso(), slot)
                                   ? 'rgba(77, 99, 133, 0.45)'
                                   : 'rgba(201, 123, 99, 0.4)'
                               " (dragover)="allowAgendaReservationDrop($event)" (drop)="onAgendaReservationDrop($event, slot)" (click)="
@@ -410,11 +414,17 @@
                                   workerSection.workerKey,
                                   slot
                                 ).length === 0 &&
-                                  handleAgendaEmptySlotClick(
-                                    agendaDayScheduleDateIso(),
-                                    slot,
-                                    workerSection.workerKey
-                                  )
+                                  (getAgendaManualBlockedPeriodForSlot(agendaDayScheduleDateIso(), slot, workerSection.workerKey)
+                                    ? handleAgendaManualBlockedSlotClick(
+                                        agendaDayScheduleDateIso(),
+                                        slot,
+                                        workerSection.workerKey
+                                      )
+                                    : handleAgendaEmptySlotClick(
+                                        agendaDayScheduleDateIso(),
+                                        slot,
+                                        workerSection.workerKey
+                                      ))
                               ">
                                     @if ( getAgendaReservationsByWorkerAndStartTime( workerSection.workerKey, slot ).length === 0 ) {
                                     <span class="admin-panel--container__agenda-hour-empty" [style.cursor]="
@@ -422,19 +432,26 @@
                                       ? 'default'
                                       : 'pointer'
                                   " [style.color]="
-                                    isAgendaRecurringClosedSlot(agendaDayScheduleDateIso(), slot)
+                                    isAgendaManuallyBlockedSlot(agendaDayScheduleDateIso(), slot, workerSection.workerKey)
+                                      ? '#8a3f3f'
+                                      : isAgendaRecurringClosedSlot(agendaDayScheduleDateIso(), slot)
                                       ? '#44556f'
                                       : null
                                   " [style.font-weight]="
+                                    isAgendaManuallyBlockedSlot(agendaDayScheduleDateIso(), slot, workerSection.workerKey) ||
                                     isAgendaRecurringClosedSlot(agendaDayScheduleDateIso(), slot)
                                       ? '700'
                                       : null
                                   ">
-                                  {{ getAgendaClosedSlotLabel(agendaDayScheduleDateIso(), slot) }}
+                                  {{ getAgendaClosedSlotLabel(agendaDayScheduleDateIso(), slot, workerSection.workerKey) }}
                                   @if (
-                                    !isAgendaRecurringClosedSlot(agendaDayScheduleDateIso(), slot)
+                                    !isAgendaRecurringClosedSlot(agendaDayScheduleDateIso(), slot) &&
+                                    !isAgendaManuallyBlockedSlot(agendaDayScheduleDateIso(), slot, workerSection.workerKey)
                                   ) {
                                     · Haz clic para reservar
+                                  }
+                                  @if (isAgendaManuallyBlockedSlot(agendaDayScheduleDateIso(), slot, workerSection.workerKey)) {
+                                    · Clic para desbloquear
                                   }
                                 </span> } @else { @for ( reservation of getAgendaReservationsByWorkerAndStartTime( workerSection.workerKey, slot ); track reservation.id ) {
                                     <article class="admin-panel--container__agenda-reservation-card" draggable="true" (dragstart)="
@@ -572,7 +589,9 @@
                                 <span class="admin-panel--container__agenda-week-hour-label">{{
                               slot
                             }}</span>
-                                <div class="admin-panel--container__agenda-week-dropzone" (dragover)="allowAgendaReservationDrop($event)" (drop)="onAgendaReservationDropToDateTime($event, day.dateIso, slot)" (click)="
+                                <div class="admin-panel--container__agenda-week-dropzone" [class.admin-panel--container__agenda-week-dropzone--blocked]="
+                                isAgendaManuallyBlockedSlot(day.dateIso, slot)
+                              " (dragover)="allowAgendaReservationDrop($event)" (drop)="onAgendaReservationDropToDateTime($event, day.dateIso, slot)" (click)="
                                 getAgendaReservationsByDateAndStartTime(day.dateIso, slot)
                                   .length === 0 &&
                                   !day.isPast &&
@@ -678,8 +697,10 @@
                                         </div>
                                         }
                                     </article>
-                                    } @if ( getAgendaReservationsByDateAndStartTime(day.dateIso, slot) .length === 0 && isAgendaRecurringClosedSlot(day.dateIso, slot) ) {
-                                    <span class="admin-panel--container__agenda-slot-closed">
+                                    } @if ( getAgendaReservationsByDateAndStartTime(day.dateIso, slot) .length === 0 && (isAgendaRecurringClosedSlot(day.dateIso, slot) || isAgendaManuallyBlockedSlot(day.dateIso, slot)) ) {
+                                    <span class="admin-panel--container__agenda-slot-closed" [class.admin-panel--container__agenda-slot-closed--blocked]="
+                                    isAgendaManuallyBlockedSlot(day.dateIso, slot)
+                                  ">
                                   {{ getAgendaClosedSlotLabel(day.dateIso, slot) }}
                                 </span> }
                                 </div>
@@ -941,7 +962,14 @@
                     <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--soft" [disabled]="agendaManualReserveLoading()" (click)="closeAgendaManualReserveModal()">
                   Cancelar
                 </button>
-                    <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--accept" [disabled]="agendaManualReserveLoading()" (click)="submitAgendaManualReserve()">
+                    <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--reject" [disabled]="agendaManualReserveLoading() || agendaManualReserveBlockLoading()" (click)="blockAgendaManualReserveSlot()">
+                  @if (agendaManualReserveBlockLoading()) {
+                    Bloqueando...
+                  } @else {
+                    Bloquear hora
+                  }
+                </button>
+                    <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--accept" [disabled]="agendaManualReserveLoading() || agendaManualReserveBlockLoading()" (click)="submitAgendaManualReserve()">
                   @if (agendaManualReserveLoading()) {
                     Guardando...
                   } @else {

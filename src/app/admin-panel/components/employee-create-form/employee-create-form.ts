@@ -9,6 +9,7 @@ export type EmployeePermission =
   | 'bloqueos_gestionar'
   | 'reservas_ver'
   | 'reservas_gestionar'
+  | 'reservas_borrar'
   | 'cierre_registrar'
   | 'estadisticas_ver'
   | 'clientes_gestionar'
@@ -22,6 +23,7 @@ export const PERMISSION_LABELS: Record<EmployeePermission, string> = {
   bloqueos_gestionar: 'Bloquear horas y días',
   reservas_ver: 'Ver listado de reservas',
   reservas_gestionar: 'Aceptar / rechazar reservas',
+  reservas_borrar: 'Borrar reservas manualmente',
   cierre_registrar: 'Registrar cierre de caja',
   estadisticas_ver: 'Ver estadísticas',
   clientes_gestionar: 'Gestionar fichas de clientes',

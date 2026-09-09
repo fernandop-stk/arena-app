@@ -1,4 +1,5 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, afterNextRender, computed, inject, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
 import { RouterLink } from '@angular/router';
 import { CitasService } from './citas.service';
@@ -12,7 +13,9 @@ import { CitasService } from './citas.service';
 export class CitasComponent {
   protected readonly citasService = inject(CitasService);
   private readonly route = inject(ActivatedRoute);
+  private readonly http = inject(HttpClient);
   private readonly reserveActionsAnchorId = 'citas-reserva-actions';
+  protected readonly isAdminSession = signal(false);
 
   protected readonly salonName = this.citasService.getSalonName();
   protected readonly headline = this.citasService.getHeadline();
@@ -38,6 +41,21 @@ export class CitasComponent {
   protected readonly isInvitadaSelected = computed(() =>
     this.invitadaOptions.some((option) => option.id === this.selectedAppointmentTypeId()),
   );
+
+  constructor() {
+    afterNextRender(() => {
+      this.http
+        .get<{ ok: boolean; isAuthenticated: boolean; isAdmin: boolean }>('/api/auth/session')
+        .subscribe({
+          next: (response) => {
+            this.isAdminSession.set(Boolean(response?.isAuthenticated && response?.isAdmin));
+          },
+          error: () => {
+            this.isAdminSession.set(false);
+          },
+        });
+    });
+  }
 
   protected selectAppointment(id: number): void {
     this.selectedAppointmentTypeId.set(id);
