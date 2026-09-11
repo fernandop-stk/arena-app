@@ -155,6 +155,24 @@
             flex-wrap: wrap;
             gap: 0.75rem;
         }
+        &__client-warning-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 0.45rem;
+            color: #d71920;
+            font-size: 1.35em;
+            line-height: 1;
+            vertical-align: 0.04em;
+        }
+        &__client-warning-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            color: colors.$color-text;
+            font-size: 0.88rem;
+            font-weight: 600;
+        }
         &__employee-subtab {
             min-height: 2.2rem;
             border-radius: 999px;

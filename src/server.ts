@@ -35,6 +35,7 @@ import {
   loadAllStockProductsFromDb,
   loadAllUsersFromDb,
   markReservationClientReminderSentAt,
+  markReservationSignalPaymentReminderSentAt,
   saveCierreCajaToDb,
   saveClientCardToDb,
   saveDailyPaymentToDb,
@@ -103,6 +104,44 @@ const createNotificationAndBroadcast = async (
   const notification = await createNotification(payload);
   broadcastNotificationsRefresh();
   return notification;
+};
+
+const startBirthdayNotificationScheduler = (): void => {
+  const run = async (): Promise<void> => {
+    try {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const monthDay = `${tomorrow.getMonth() + 1}`.padStart(2, '0') + '-' + `${tomorrow.getDate()}`.padStart(2, '0');
+      const notificationYear = tomorrow.getFullYear();
+      const existingNotifications = await getAllNotifications();
+
+      for (const card of clientCardsById.values()) {
+        const birthDate = `${card.birthDateIso ?? ''}`.trim();
+
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || birthDate.slice(5) !== monthDay) {
+          continue;
+        }
+
+        const relatedId = `cumpleanos-${card.id}-${notificationYear}`;
+        if (existingNotifications.some((notification) => notification.relatedId === relatedId)) {
+          continue;
+        }
+
+        await createNotificationAndBroadcast({
+          type: 'cumpleanos_cliente',
+          title: `Cumpleaños mañana: ${card.fullName}`,
+          message: `${card.fullName} cumple años mañana (${monthDay.split('-').reverse().join('/')}).`,
+          relatedId,
+          actionUrl: `/admin-panel?tab=clientes&clientId=${encodeURIComponent(card.id)}`,
+        });
+      }
+    } catch (error) {
+      console.error('Error ejecutando scheduler de cumpleaños:', error);
+    }
+  };
+
+  void run();
+  setInterval(() => void run(), 15 * 60 * 1000);
 };
 
 const triggerLowStockNotificationIfNeeded = async (
@@ -1032,6 +1071,74 @@ const dispatch48hReservationReminders = async (
   }
 };
 
+const reservationRequiresSignal = (appointmentTypeName: string): boolean =>
+  appointmentTypeName
+    .split(' + ')
+    .some((serviceName) => requiresReservationSignalByName(serviceName.trim()));
+
+const shouldSend48hSignalPaymentReminder = (reservation: {
+  id: string;
+  createdAtIso: string;
+  appointmentTypeName: string;
+  signalReceivedAtIso?: string | null;
+  signalPaymentReminderSentAtIso?: string | null;
+  adminStatus: AdminReservationStatus;
+}): boolean => {
+  if (
+    !reservationRequiresSignal(reservation.appointmentTypeName) ||
+    reservation.adminStatus === 'rejected' ||
+    reservation.signalReceivedAtIso ||
+    reservation.signalPaymentReminderSentAtIso
+  ) {
+    return false;
+  }
+
+  const createdAtMs = new Date(reservation.createdAtIso).getTime();
+
+  return (
+    Number.isFinite(createdAtMs) &&
+    Date.now() - createdAtMs >= 48 * 60 * 60 * 1000
+  );
+};
+
+const dispatch48hSignalPaymentReminders = async (
+  reservations: Array<{
+    id: string;
+    createdAtIso: string;
+    customerName: string;
+    customerPhone: string;
+    customerEmail: string;
+    appointmentTypeName: string;
+    dateIso: string;
+    startTime: string;
+    signalReceivedAtIso?: string | null;
+    signalPaymentReminderSentAtIso?: string | null;
+    adminStatus: AdminReservationStatus;
+  }>,
+): Promise<void> => {
+  const candidates = reservations.filter((reservation) =>
+    shouldSend48hSignalPaymentReminder(reservation),
+  );
+
+  for (const reservation of candidates) {
+    try {
+      await createNotificationAndBroadcast({
+        type: 'senal_pago_pendiente',
+        title: 'Señal pendiente de pago',
+        message: `La clienta ${reservation.customerName} (${reservation.customerPhone}) no ha abonado la señal de ${reservation.appointmentTypeName}. Cita: ${reservation.dateIso} a las ${reservation.startTime}.`,
+        relatedId: reservation.id,
+        actionUrl: `/admin-panel?tab=agenda&reservationId=${encodeURIComponent(reservation.id)}`,
+      });
+      await markReservationSignalPaymentReminderSentAt(
+        reservation.id,
+        new Date().toISOString(),
+      );
+    } catch (error) {
+      console.error('Error creando alerta de señal pendiente:', error);
+    }
+  }
+};
+
 type AppUserRole = 'superadmin' | 'admin' | 'client';
 type EmployeeWorkStatus = 'idle' | 'working' | 'vacation' | 'sick_leave' | 'recovering_hours';
 type EmployeeTrackingAction =
@@ -1157,6 +1264,7 @@ interface ClientCardItem {
   createdByEmail: string;
   treatments: ClientTreatmentItem[];
   passwordHash?: string;
+  hasAviso?: boolean;
 }
 
 interface StockProductItem {
@@ -1287,7 +1395,7 @@ const buildReservationEmailHtml = (data: {
   const provisionalHoldHours = data.provisionalHoldHours ?? 0;
   const provisionalNotice =
     provisionalHoldHours > 0
-      ? `<tr><td style="padding:14px 16px;font-size:14px;"><strong>Señal y reserva provisional</strong><br><span style="color:#7a675d;">Este servicio requiere señal. La franja queda marcada como ocupada de forma provisional durante ${provisionalHoldHours} horas si no se confirma.</span></td></tr>`
+      ? `<tr><td style="padding:14px 16px;font-size:14px;"><strong>Señal obligatoria</strong><br><span style="color:#7a675d;">Es obligatorio abonar una señal para este servicio. La franja queda marcada como ocupada de forma provisional durante ${provisionalHoldHours} horas hasta que se confirme la señal.</span></td></tr>`
       : '';
   const observaciones = data.observaciones ? escapeHtml(data.observaciones) : '';
   const observacionesRow = observaciones
@@ -1623,6 +1731,7 @@ const isFutureBirthDateIso = (value: unknown): boolean => {
 const normalizeClientCard = (card: ClientCardItem): ClientCardItem => ({
   ...card,
   birthDateIso: normalizeBirthDateIso(card.birthDateIso),
+  hasAviso: Boolean(card.hasAviso),
   treatments: (card.treatments ?? [])
     .slice()
     .sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso)),
@@ -3326,10 +3435,10 @@ app.post('/api/cliente/registro', async (req, res) => {
     });
   }
 
-  if (!nombre || !apellidos || !fechaNacimiento || !telefono || !email || !password) {
+  if (!nombre || !apellidos || !telefono || !email || !password) {
     return res.status(400).json({
       ok: false,
-      error: 'Todos los campos son obligatorios.',
+      error: 'Nombre, apellidos, teléfono, email y contraseña son obligatorios.',
     });
   }
 
@@ -4900,6 +5009,7 @@ app.post('/api/admin/clientes', async (req, res) => {
   const birthDateRaw = `${req.body?.birthDateIso ?? ''}`.trim();
   const birthDateIso = normalizeBirthDateIso(req.body?.birthDateIso);
   const notes = `${req.body?.notes ?? ''}`.trim().slice(0, 500);
+  const hasAviso = Boolean(req.body?.hasAviso);
 
   if (isFutureBirthDateIso(birthDateRaw)) {
     return res.status(400).json({
@@ -4908,10 +5018,10 @@ app.post('/api/admin/clientes', async (req, res) => {
     });
   }
 
-  if (!fullName || !email || !phone || !birthDateIso) {
+  if (!fullName || !email || !phone) {
     return res.status(400).json({
       ok: false,
-      error: 'Nombre, email, teléfono y fecha de nacimiento son obligatorios.',
+      error: 'Nombre, email y teléfono son obligatorios.',
     });
   }
 
@@ -4936,6 +5046,7 @@ app.post('/api/admin/clientes', async (req, res) => {
     phone,
     birthDateIso,
     notes,
+    hasAviso,
     createdAtIso: new Date().toISOString(),
     createdByEmail: session.email,
     treatments: [],
@@ -4975,6 +5086,7 @@ app.patch('/api/admin/clientes/:id', async (req, res) => {
   const birthDateRaw = `${req.body?.birthDateIso ?? ''}`.trim();
   const birthDateIso = normalizeBirthDateIso(req.body?.birthDateIso);
   const notes = `${req.body?.notes ?? ''}`.trim().slice(0, 500);
+  const hasAviso = Boolean(req.body?.hasAviso);
 
   if (isFutureBirthDateIso(birthDateRaw)) {
     return res.status(400).json({
@@ -4983,10 +5095,10 @@ app.patch('/api/admin/clientes/:id', async (req, res) => {
     });
   }
 
-  if (!id || !fullName || !email || !phone || !birthDateIso) {
+  if (!id || !fullName || !email || !phone) {
     return res.status(400).json({
       ok: false,
-      error: 'Nombre, email, teléfono y fecha de nacimiento son obligatorios.',
+      error: 'Nombre, email y teléfono son obligatorios.',
     });
   }
 
@@ -5017,6 +5129,7 @@ app.patch('/api/admin/clientes/:id', async (req, res) => {
     phone,
     birthDateIso,
     notes,
+    hasAviso,
   });
 
   try {
@@ -5608,6 +5721,7 @@ app.get('/api/admin/reservas', async (req, res) => {
   try {
     const reservations = await listReservationsForAdmin();
     await dispatch48hReservationReminders(reservations);
+    await dispatch48hSignalPaymentReminders(reservations);
     return res.status(200).json({ ok: true, reservations });
   } catch (error) {
     console.error('Error listando reservas admin:', error);
@@ -8125,6 +8239,7 @@ const startReservationReminderScheduler = (): void => {
     try {
       const reservations = await listReservationsForAdmin();
       await dispatch48hReservationReminders(reservations);
+      await dispatch48hSignalPaymentReminders(reservations);
     } catch (error) {
       console.error('Error ejecutando scheduler de recordatorios 48h:', error);
     }
@@ -8160,6 +8275,7 @@ if (isMainModule(import.meta.url) || process.env['pm_id']) {
   const startServer = (): void => {
     seedAuthUsers();
     startReservationReminderScheduler();
+    startBirthdayNotificationScheduler();
     app.listen(port, (error) => {
       if (error) {
         throw error;

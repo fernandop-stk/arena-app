@@ -29,7 +29,7 @@ export class ClienteRegistroComponent {
     {
       nombre: ['', [Validators.required, Validators.minLength(2)]],
       apellidos: ['', [Validators.required, Validators.minLength(2)]],
-      fechaNacimiento: ['', [Validators.required, this.noFutureBirthDateValidator()]],
+      fechaNacimiento: ['', [this.noFutureBirthDateValidator()]],
       telefono: ['', [Validators.required, Validators.pattern(/^\d{9,}$/)]],
       email: ['', [Validators.required, Validators.email]],
       password: [

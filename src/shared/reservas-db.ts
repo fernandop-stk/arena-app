@@ -41,6 +41,7 @@ export interface AdminReservationItem {
   adminStatus: AdminReservationStatus;
   clientConfirmationStatus: ClientConfirmationStatus;
   clientConfirmationReminderSentAtIso?: string | null;
+  signalPaymentReminderSentAtIso?: string | null;
   createdByEmail?: string | null;
   createdAtIso: string;
   expiresAtIso?: string | null;
@@ -126,6 +127,7 @@ interface MemoryReservation {
   adminStatus: AdminReservationStatus;
   clientConfirmationStatus: ClientConfirmationStatus;
   clientConfirmationReminderSentAtIso?: string | null;
+  signalPaymentReminderSentAtIso?: string | null;
   createdByEmail?: string | null;
   createdAtIso: string;
   expiresAtIso?: string | null;
@@ -427,6 +429,7 @@ const ensureSchema = async (): Promise<void> => {
         admin_status TEXT NOT NULL DEFAULT 'pending',
         client_confirmation_status TEXT NOT NULL DEFAULT 'pending',
         client_confirmation_reminder_sent_at TIMESTAMPTZ NULL,
+        signal_payment_reminder_sent_at TIMESTAMPTZ NULL,
         expires_at TIMESTAMPTZ NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
@@ -460,6 +463,11 @@ const ensureSchema = async (): Promise<void> => {
     await db.query(`
       ALTER TABLE reservations
       ADD COLUMN IF NOT EXISTS client_confirmation_reminder_sent_at TIMESTAMPTZ NULL;
+    `);
+
+    await db.query(`
+      ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS signal_payment_reminder_sent_at TIMESTAMPTZ NULL;
     `);
 
     await db.query(`
@@ -1580,6 +1588,7 @@ const mapMemoryReservationToAdminItem = (reservation: MemoryReservation): AdminR
   adminStatus: reservation.adminStatus,
   clientConfirmationStatus: reservation.clientConfirmationStatus ?? 'pending',
   clientConfirmationReminderSentAtIso: reservation.clientConfirmationReminderSentAtIso ?? null,
+  signalPaymentReminderSentAtIso: reservation.signalPaymentReminderSentAtIso ?? null,
   createdByEmail: reservation.createdByEmail ?? null,
   createdAtIso: reservation.createdAtIso,
 });
@@ -1620,6 +1629,7 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
       admin_status: string;
       client_confirmation_status: string;
       client_confirmation_reminder_sent_at: string | null;
+      signal_payment_reminder_sent_at: string | null;
       created_by_email: string | null;
       expires_at: string | null;
       created_at: string;
@@ -1645,6 +1655,7 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
         admin_status,
         client_confirmation_status,
         client_confirmation_reminder_sent_at,
+        signal_payment_reminder_sent_at,
         created_by_email,
         expires_at,
         created_at
@@ -1683,6 +1694,7 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
       adminStatus: row.admin_status as AdminReservationStatus,
       clientConfirmationStatus: row.client_confirmation_status as ClientConfirmationStatus,
       clientConfirmationReminderSentAtIso: row.client_confirmation_reminder_sent_at,
+      signalPaymentReminderSentAtIso: row.signal_payment_reminder_sent_at,
       createdByEmail: row.created_by_email,
       expiresAtIso: row.expires_at,
       createdAtIso: new Date(row.created_at).toISOString(),
@@ -1750,6 +1762,58 @@ export const markReservationClientReminderSentAt = async (
       }
 
       reservation.clientConfirmationReminderSentAtIso = sentAtIso;
+      memoryReservations.set(reservationId, reservation);
+      saveMemoryToFile();
+      return { ok: true };
+    }
+
+    throw error;
+  }
+};
+
+export const markReservationSignalPaymentReminderSentAt = async (
+  reservationId: string,
+  sentAtIso: string,
+): Promise<{ ok: true } | { ok: false; reason: 'not-found' }> => {
+  if (!shouldUseDatabase()) {
+    const reservation = memoryReservations.get(reservationId);
+
+    if (!reservation) {
+      return { ok: false, reason: 'not-found' };
+    }
+
+    reservation.signalPaymentReminderSentAtIso = sentAtIso;
+    memoryReservations.set(reservationId, reservation);
+    saveMemoryToFile();
+    return { ok: true };
+  }
+
+  try {
+    await ensureSchema();
+    const db = getPool();
+    const updated = await db.query(
+      `
+      UPDATE reservations
+      SET signal_payment_reminder_sent_at = $2
+      WHERE id = $1
+      `,
+      [reservationId, sentAtIso],
+    );
+
+    if (updated.rowCount === 0) {
+      return { ok: false, reason: 'not-found' };
+    }
+
+    return { ok: true };
+  } catch (error) {
+    if (enableRuntimeMemoryMode(error)) {
+      const reservation = memoryReservations.get(reservationId);
+
+      if (!reservation) {
+        return { ok: false, reason: 'not-found' };
+      }
+
+      reservation.signalPaymentReminderSentAtIso = sentAtIso;
       memoryReservations.set(reservationId, reservation);
       saveMemoryToFile();
       return { ok: true };
@@ -2873,13 +2937,26 @@ const createBlockedPeriodInMemory = (payload: {
     return { ok: false, reason: 'invalid-time' };
   }
 
-  const reservationSlots = memorySlotsByDate.get(payload.dateIso) ?? new Set<string>();
+  const workerKey = payload.workerEmail ? normalizeWorkerEmail(payload.workerEmail) : '';
+  const hasReservationConflict = Array.from(memoryReservations.values()).some((reservation) => {
+    if (reservation.dateIso !== payload.dateIso || reservation.adminStatus === 'rejected') {
+      return false;
+    }
 
-  if (slotTimes.some((slot) => reservationSlots.has(slot))) {
+    if (
+      workerKey &&
+      normalizeWorkerEmail(reservation.createdByEmail) !== workerKey
+    ) {
+      return false;
+    }
+
+    return reservation.slots.some((slot) => slotTimes.includes(slot));
+  });
+
+  if (hasReservationConflict) {
     return { ok: false, reason: 'reservation-conflict' };
   }
 
-  const workerKey = payload.workerEmail ? normalizeWorkerEmail(payload.workerEmail) : '';
   const perWorkerMap = memoryBlockedSlotsByDate.get(payload.dateIso) ?? new Map<string, Set<string>>();
   const blockedSlots = perWorkerMap.get(workerKey) ?? new Set<string>();
 
@@ -3054,10 +3131,13 @@ export const createBlockedPeriodForAdmin = async (payload: {
       SELECT rs.slot_time
       FROM reservation_slots rs
       INNER JOIN reservations r ON r.id = rs.reservation_id
-      WHERE rs.date_iso = $1 AND rs.slot_time = ANY($2::text[]) AND r.admin_status <> 'rejected'
+      WHERE rs.date_iso = $1
+        AND rs.slot_time = ANY($2::text[])
+        AND r.admin_status <> 'rejected'
+        AND ($3 = '' OR LOWER(COALESCE(r.created_by_email, '')) = $3)
       LIMIT 1
       `,
-      [payload.dateIso, slotTimes],
+      [payload.dateIso, slotTimes, workerEmail ?? ''],
     );
 
     if (reservationConflict.rowCount && reservationConflict.rowCount > 0) {
@@ -3201,6 +3281,7 @@ export interface DbClientCard {
   createdByEmail: string;
   treatments: unknown;
   passwordHash?: string;
+  hasAviso?: boolean;
 }
 
 export interface DbStockProduct {
@@ -3356,6 +3437,11 @@ const ensureUsersAndCardsSchema = async (): Promise<void> => {
     ADD COLUMN IF NOT EXISTS birth_date_iso TEXT;
   `);
 
+  await db.query(`
+    ALTER TABLE client_cards
+    ADD COLUMN IF NOT EXISTS has_aviso BOOLEAN NOT NULL DEFAULT FALSE;
+  `);
+
   usersAndCardsSchemaReady = true;
 };
 
@@ -3480,8 +3566,9 @@ export const loadAllClientCardsFromDb = async (): Promise<DbClientCard[]> => {
       created_by_email: string;
       treatments: unknown;
       password_hash: string | null;
+      has_aviso: boolean;
     }>(`
-      SELECT id, full_name, email, phone, birth_date_iso, notes, created_at, created_by_email, treatments, password_hash
+      SELECT id, full_name, email, phone, birth_date_iso, notes, created_at, created_by_email, treatments, password_hash, has_aviso
       FROM client_cards
     `);
 
@@ -3496,6 +3583,7 @@ export const loadAllClientCardsFromDb = async (): Promise<DbClientCard[]> => {
       createdByEmail: row.created_by_email,
       treatments: row.treatments ?? [],
       passwordHash: row.password_hash ?? undefined,
+      hasAviso: row.has_aviso,
     }));
   } catch (error) {
     if (enableRuntimeMemoryMode(error)) {
@@ -3521,8 +3609,8 @@ export const saveClientCardToDb = async (card: DbClientCard): Promise<void> => {
     await client.query('BEGIN');
     await client.query(
       `
-      INSERT INTO client_cards (id, full_name, email, phone, birth_date_iso, notes, created_at, created_by_email, treatments, password_hash)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      INSERT INTO client_cards (id, full_name, email, phone, birth_date_iso, notes, created_at, created_by_email, treatments, password_hash, has_aviso)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       ON CONFLICT (id) DO UPDATE SET
         full_name = EXCLUDED.full_name,
         email = EXCLUDED.email,
@@ -3531,7 +3619,8 @@ export const saveClientCardToDb = async (card: DbClientCard): Promise<void> => {
         notes = EXCLUDED.notes,
         created_by_email = EXCLUDED.created_by_email,
         treatments = EXCLUDED.treatments,
-        password_hash = EXCLUDED.password_hash
+        password_hash = EXCLUDED.password_hash,
+        has_aviso = EXCLUDED.has_aviso
       `,
       [
         card.id,
@@ -3544,6 +3633,7 @@ export const saveClientCardToDb = async (card: DbClientCard): Promise<void> => {
         card.createdByEmail,
         JSON.stringify(card.treatments ?? []),
         card.passwordHash ?? null,
+        Boolean(card.hasAviso),
       ],
     );
 

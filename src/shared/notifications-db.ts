@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 export type NotificationType =
+  | 'cumpleanos_cliente'
+  | 'senal_pago_pendiente'
   | 'nueva_reserva'
   | 'cancelacion_reserva'
   | 'reserva_confirmada'
@@ -12,6 +14,17 @@ export type NotificationType =
   | 'empleado_nuevo'
   | 'aviso_importante'
   | 'otra';
+
+const ALLOWED_NOTIFICATION_TYPES: NotificationType[] = [
+  'cumpleanos_cliente',
+  'senal_pago_pendiente',
+  'cancelacion_reserva',
+  'aviso_importante',
+  'otra',
+];
+
+const isAllowedNotification = (notification: Notification): boolean =>
+  ALLOWED_NOTIFICATION_TYPES.includes(notification.type);
 
 export interface Notification {
   id: string;
@@ -185,11 +198,11 @@ export async function getAllNotifications(): Promise<Notification[]> {
       const result = await notificationsPool.query(
         'SELECT * FROM notifications ORDER BY created_at DESC',
       );
-      return result.rows.map(rowToNotification);
+      return result.rows.map(rowToNotification).filter(isAllowedNotification);
     } catch (error) {
       console.error('Error fetching notifications from DB:', error);
       loadNotificationsFromCache();
-      const notifications = Array.from(notificationsMemory.values());
+      const notifications = Array.from(notificationsMemory.values()).filter(isAllowedNotification);
       notifications.sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
@@ -198,7 +211,7 @@ export async function getAllNotifications(): Promise<Notification[]> {
   } else {
     // Memory mode
     loadNotificationsFromCache();
-    const notifications = Array.from(notificationsMemory.values());
+    const notifications = Array.from(notificationsMemory.values()).filter(isAllowedNotification);
     notifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return notifications;
   }
@@ -213,11 +226,13 @@ export async function getUnreadNotifications(): Promise<Notification[]> {
       const result = await notificationsPool.query(
         'SELECT * FROM notifications WHERE read = FALSE ORDER BY created_at DESC',
       );
-      return result.rows.map(rowToNotification);
+      return result.rows.map(rowToNotification).filter(isAllowedNotification);
     } catch (error) {
       console.error('Error fetching unread notifications from DB:', error);
       loadNotificationsFromCache();
-      const notifications = Array.from(notificationsMemory.values()).filter((n) => !n.read);
+      const notifications = Array.from(notificationsMemory.values()).filter(
+        (n) => !n.read && isAllowedNotification(n),
+      );
       notifications.sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
@@ -226,7 +241,9 @@ export async function getUnreadNotifications(): Promise<Notification[]> {
   } else {
     // Memory mode
     loadNotificationsFromCache();
-    const notifications = Array.from(notificationsMemory.values()).filter((n) => !n.read);
+    const notifications = Array.from(notificationsMemory.values()).filter(
+      (n) => !n.read && isAllowedNotification(n),
+    );
     notifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return notifications;
   }

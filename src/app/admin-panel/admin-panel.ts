@@ -44,7 +44,7 @@ type CierreStatsMetric = 'efectivo' | 'tarjeta' | 'bizum' | 'digital' | 'total';
 type AdminCardTarget = 'packs' | 'reservas' | 'agenda' | 'clientes' | 'almacen' | 'cierre';
 type EmployeeManagementTab = 'crear' | 'listado' | 'buscar' | 'superadmin';
 type ClientManagementTab = 'crear' | 'listado' | 'buscar';
-type ClientDetailTab = 'ficha' | 'tratamiento' | 'opciones' | 'estadisticas' | 'cobro';
+type ClientDetailTab = 'ficha' | 'tratamiento' | 'opciones' | 'estadisticas' | 'cobro' | 'aviso';
 type ClientHistoryTab = 'packs' | 'citas';
 type AdminUserRole = 'superadmin' | 'admin' | 'client';
 type EmployeeWorkStatus = 'idle' | 'working' | 'vacation' | 'sick_leave' | 'recovering_hours';
@@ -251,6 +251,7 @@ interface ClientCardItem {
   notes: string;
   createdAtIso: string;
   createdByEmail: string;
+  hasAviso?: boolean;
   treatments: Array<{
     id: string;
     name: string;
@@ -996,6 +997,7 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly clientEditPhone = signal('');
   protected readonly clientEditBirthDateIso = signal('');
   protected readonly clientEditNotes = signal('');
+  protected readonly clientEditHasAviso = signal(false);
   protected readonly clientEditLoading = signal(false);
   protected readonly clientDeleteLoading = signal(false);
   protected readonly clientTreatmentName = signal('');
@@ -2714,6 +2716,7 @@ export class AdminPanelComponent implements OnDestroy {
     this.clientEditPhone.set(card.phone);
     this.clientEditBirthDateIso.set(card.birthDateIso ?? '');
     this.clientEditNotes.set(card.notes ?? '');
+    this.clientEditHasAviso.set(Boolean(card.hasAviso));
     this.showClientDetailModal.set(true);
     this.showDeleteClientConfirmModal.set(false);
     this.showClientReservationStockModal.set(false);
@@ -2753,6 +2756,7 @@ export class AdminPanelComponent implements OnDestroy {
     this.clientEditPhone.set('');
     this.clientEditBirthDateIso.set('');
     this.clientEditNotes.set('');
+    this.clientEditHasAviso.set(false);
     this.clientEditLoading.set(false);
     this.clientDeleteLoading.set(false);
     this.clientTreatmentName.set('');
@@ -3515,6 +3519,10 @@ export class AdminPanelComponent implements OnDestroy {
   protected onClientEditNotesInput(event: Event): void {
     const target = event.target as HTMLTextAreaElement;
     this.clientEditNotes.set(target.value);
+  }
+
+  protected toggleClientAviso(): void {
+    this.clientEditHasAviso.update((value) => !value);
   }
 
   protected onClientSearchInput(event: Event): void {
@@ -4730,8 +4738,8 @@ export class AdminPanelComponent implements OnDestroy {
     this.clientCardsError.set('');
     this.clientCardsMessage.set('');
 
-    if (!fullName || !email || !phone || !birthDateIso) {
-      this.clientCardsError.set('Nombre, email, teléfono y fecha de nacimiento son obligatorios.');
+    if (!fullName || !email || !phone) {
+      this.clientCardsError.set('Nombre, email y teléfono son obligatorios.');
       return;
     }
 
@@ -4796,8 +4804,8 @@ export class AdminPanelComponent implements OnDestroy {
     this.clientCardsError.set('');
     this.clientCardsMessage.set('');
 
-    if (!fullName || !email || !phone || !birthDateIso) {
-      this.clientCardsError.set('Nombre, email, teléfono y fecha de nacimiento son obligatorios.');
+    if (!fullName || !email || !phone) {
+      this.clientCardsError.set('Nombre, email y teléfono son obligatorios.');
       return;
     }
 
@@ -4817,6 +4825,7 @@ export class AdminPanelComponent implements OnDestroy {
           phone,
           birthDateIso,
           notes,
+          hasAviso: this.clientEditHasAviso(),
         },
       )
       .subscribe({
