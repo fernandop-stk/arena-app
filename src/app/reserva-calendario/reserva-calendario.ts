@@ -1,4 +1,5 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, afterNextRender, computed, inject, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
@@ -10,7 +11,7 @@ interface TimeSlotItem {
   time: string;
   disabled: boolean;
   past: boolean;
-  reason: 'available' | 'past' | 'occupied' | 'closed' | 'blocked';
+  reason: 'available' | 'past' | 'occupied' | 'closed' | 'blocked' | 'after-closing';
   statusLabel: string;
 }
 
@@ -33,9 +34,11 @@ interface CalendarGridCell {
 export class ReservaCalendarioComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly http = inject(HttpClient);
   private readonly citasService = inject(CitasService);
   private readonly reservaStateService = inject(ReservaStateService);
 
+  protected readonly isAdminSession = signal(false);
   protected readonly reservaCalendarioService = inject(ReservaCalendarioService);
   protected readonly appointmentTypes = this.citasService.getAppointmentTypes();
   protected readonly title = this.reservaCalendarioService.getTitle();
@@ -113,7 +116,20 @@ export class ReservaCalendarioComponent {
 
   constructor() {
     this.initializeDurationFromQuery();
-    this.loadDayAvailability();
+    this.reservaCalendarioService.loadOpenDays().subscribe(() => this.loadDayAvailability());
+
+    afterNextRender(() => {
+      this.http
+        .get<{ ok: boolean; isAuthenticated: boolean; isAdmin: boolean }>('/api/auth/session')
+        .subscribe({
+          next: (response) => {
+            this.isAdminSession.set(Boolean(response?.isAuthenticated && response?.isAdmin));
+          },
+          error: () => {
+            this.isAdminSession.set(false);
+          },
+        });
+    });
   }
 
   protected onTypeChange(appointmentTypeId: number): void {
@@ -457,9 +473,16 @@ export class ReservaCalendarioComponent {
 
           const availableSet = new Set(availableSlots);
           const blockedSet = new Set(blockedSlots);
+          const closingTime = this.reservaCalendarioService.getClosingTime(selectedIso);
+          const durationLabel = this.formatDurationLabel(duration, true);
           const mappedSlots = allSlots.map((time) => {
             const isPast = this.isSlotInPast(time, selectedIso);
             const isClosed = this.reservaCalendarioService.isRecurringClosedSlot(
+              selectedIso,
+              time,
+              duration,
+            );
+            const endTimeAfterClosing = this.reservaCalendarioService.getEndTimeIfExceedsClosing(
               selectedIso,
               time,
               duration,
@@ -469,6 +492,8 @@ export class ReservaCalendarioComponent {
 
             if (isClosed) {
               reason = 'closed';
+            } else if (endTimeAfterClosing) {
+              reason = 'after-closing';
             } else if (isPast) {
               reason = 'past';
             } else if (blockedSet.has(time)) {
@@ -477,19 +502,30 @@ export class ReservaCalendarioComponent {
               reason = 'occupied';
             }
 
+            let statusLabel = '';
+
+            if (reason === 'after-closing') {
+              statusLabel = `La duración de este tratamiento es de ${durationLabel}, acabaría a las ${endTimeAfterClosing} y cerramos a las ${closingTime}`;
+            } else if (
+              reason === 'closed' &&
+              !this.reservaCalendarioService.isRecurringClosedDay(selectedIso) &&
+              !this.reservaCalendarioService.isStartInsideMiddayClosure(selectedIso, time)
+            ) {
+              statusLabel = `La duración de este tratamiento es de ${durationLabel} y coincide con el cierre de 14:00 a 15:00`;
+            } else if (reason === 'closed' || reason === 'blocked') {
+              statusLabel = 'Cerrado';
+            } else if (reason === 'past') {
+              statusLabel = 'No disponible';
+            } else if (reason === 'occupied') {
+              statusLabel = 'Ocupada';
+            }
+
             return {
               time,
               disabled: reason !== 'available',
               past: isPast,
               reason,
-              statusLabel:
-                reason === 'closed' || reason === 'blocked'
-                  ? 'Cerrado'
-                  : reason === 'past'
-                    ? 'No disponible'
-                    : reason === 'occupied'
-                      ? 'Ocupada'
-                      : '',
+              statusLabel,
             };
           });
 
@@ -601,7 +637,7 @@ export class ReservaCalendarioComponent {
     this.loadDayAvailability();
   }
 
-  private formatDurationLabel(duration: number): string {
+  private formatDurationLabel(duration: number, verbose = false): string {
     if (duration < 60) {
       return `${duration} min`;
     }
@@ -613,7 +649,7 @@ export class ReservaCalendarioComponent {
       return hours === 1 ? '1 h' : `${hours} h`;
     }
 
-    return `${hours} h ${remainingMinutes} min`;
+    return verbose ? `${hours} h y ${remainingMinutes} min` : `${hours} h ${remainingMinutes} min`;
   }
 
   private getMonthStart(date: Date): Date {

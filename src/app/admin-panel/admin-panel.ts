@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Component, OnDestroy, afterNextRender, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CitasService, type AppointmentType } from '../citas/citas.service';
-import { getPackPriceByName } from '../../shared/pack-prices';
+import { getPackPriceByName, requiresReservationSignalByName } from '../../shared/pack-prices';
 import { TratamientosService, type TratamientoItem } from '../tratamientos/tratamientos.service';
 import { AgendaPackPickerModalComponent } from './components/agenda-pack-picker-modal/agenda-pack-picker-modal';
 import { PaymentFlowModalComponent } from './components/payment-flow-modal/payment-flow-modal';
@@ -97,6 +97,7 @@ interface AdminReservationItem {
   paymentAmountEuro: number;
   adminStatus: 'pending' | 'accepted' | 'rejected';
   clientConfirmationStatus: 'pending' | 'confirmed';
+  clientConfirmationSource?: 'online' | 'salon' | null;
   clientConfirmationReminderSentAtIso?: string | null;
   createdByEmail?: string | null;
   createdAtIso: string;
@@ -578,6 +579,8 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly agendaDayScheduleDateIso = signal('');
   protected readonly agendaDayScheduleError = signal('');
   protected readonly agendaDayScheduleLoadingReservationId = signal('');
+  protected readonly agendaOpenDays = signal<Set<string>>(new Set());
+  protected readonly agendaOpenDayLoading = signal(false);
   protected readonly agendaDraggedReservationId = signal('');
   protected readonly agendaTimeSlotOptions = this.buildHalfHourOptions('09:00', '18:00');
   protected readonly agendaDurationOptions = Array.from(
@@ -607,6 +610,11 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly agendaEditCalendarMonthIso = signal('');
   protected readonly agendaEditDraftName = signal('');
   protected readonly agendaEditDraftDuration = signal(0);
+  // Valores con los que se abrió la edición; los desplegables empiezan vacíos hasta que se toca uno.
+  protected readonly agendaEditOriginalName = signal('');
+  protected readonly agendaEditOriginalDuration = signal(0);
+  protected readonly agendaEditNameTouched = signal(false);
+  protected readonly agendaEditDurationTouched = signal(false);
   protected readonly agendaEditDraftAdditionalComments = signal('');
   protected readonly agendaEditDraftStockProductId = signal('');
   protected readonly agendaEditDraftStockUnits = signal('1');
@@ -1099,6 +1107,7 @@ export class AdminPanelComponent implements OnDestroy {
             this.loadReservations();
             this.loadAgendaAlerts();
             this.loadBlockedPeriods();
+            this.loadAgendaOpenDays();
             this.loadClientCards();
             this.loadStockProducts();
 
@@ -6133,6 +6142,49 @@ export class AdminPanelComponent implements OnDestroy {
     return Number(reservation.signalAmountEuro ?? 0) > 0;
   }
 
+  /** Etiqueta corta para la tarjeta de la agenda: cómo se confirmó la cita. */
+  protected getAgendaCardConfirmationLabel(reservation: AdminReservationItem): string {
+    if (reservation.adminStatus === 'rejected') {
+      return 'Cancelada';
+    }
+
+    if (reservation.clientConfirmationStatus !== 'confirmed') {
+      return 'Sin confirmar';
+    }
+
+    if (reservation.clientConfirmationSource === 'online') {
+      return 'Confirmada online';
+    }
+
+    if (reservation.clientConfirmationSource === 'salon') {
+      return 'Confirmada en pelu';
+    }
+
+    return 'Confirmada';
+  }
+
+  /** Etiqueta corta para la tarjeta de la agenda: estado de la señal. */
+  protected getAgendaCardSignalLabel(reservation: AdminReservationItem): string {
+    const amount = Math.max(0, Number(reservation.signalAmountEuro ?? 0));
+
+    if (amount > 0) {
+      const methodLabel = reservation.signalPaymentMethod
+        ? ` (${this.getPaymentMethodDisplayLabel(reservation.signalPaymentMethod)})`
+        : '';
+      return `Señal pagada ${amount.toFixed(2)} €${methodLabel}`;
+    }
+
+    return this.reservationRequiresSignal(reservation) ? 'Señal pendiente' : 'Sin señal';
+  }
+
+  private reservationRequiresSignal(reservation: AdminReservationItem): boolean {
+    if (reservation.reservationServiceItems?.some((item) => item.requiresReservationSignal)) {
+      return true;
+    }
+
+    return requiresReservationSignalByName(reservation.appointmentTypeName);
+  }
+
   protected getReservationSignalBadgeLabel(reservation: AdminReservationItem): string {
     const amount = Math.max(0, Number(reservation.signalAmountEuro ?? 0));
 
@@ -9561,6 +9613,10 @@ export class AdminPanelComponent implements OnDestroy {
     this.agendaEditCalendarMonthIso.set(r.dateIso.slice(0, 7));
     this.agendaEditDraftName.set(selectedService?.nombre ?? initialServiceName);
     this.agendaEditDraftDuration.set(initialDuration);
+    this.agendaEditOriginalName.set(selectedService?.nombre ?? initialServiceName);
+    this.agendaEditOriginalDuration.set(initialDuration);
+    this.agendaEditNameTouched.set(false);
+    this.agendaEditDurationTouched.set(false);
     this.agendaEditDraftAdditionalComments.set(r.additionalComments ?? '');
     this.agendaEditDraftStockLines.set(
       (r.reservationStockItems ?? []).map((item) => ({ ...item })),
@@ -9700,7 +9756,6 @@ export class AdminPanelComponent implements OnDestroy {
     const firstWeekday = (monthStart.getDay() + 6) % 7;
     const gridStart = new Date(year, month - 1, 1 - firstWeekday);
     const todayIso = this.getTodayIso();
-    const originalStartTime = original.startTime;
     const durationMinutes = Math.max(
       30,
       Number(this.agendaEditDraftDuration()) || original.durationMinutes,
@@ -9718,9 +9773,12 @@ export class AdminPanelComponent implements OnDestroy {
       const isPast = dateIso < todayIso;
       const isClosed = this.isAgendaRecurringClosedDay(dateIso);
       const isSameAsOriginal = dateIso === original.dateIso;
+      // Basta con que exista algún hueco ese día: la hora y el trabajador se ajustan en los pasos siguientes.
       const isSlotAvailable =
         isSameAsOriginal ||
-        this.isAgendaEditSlotAvailableForAnyWorker(dateIso, originalStartTime, durationMinutes);
+        isPast ||
+        isClosed ||
+        this.getAgendaEditTimeOptionsForAnyWorker(dateIso, durationMinutes).length > 0;
       const isDisabled = isPast || isClosed || !isSlotAvailable;
       let tooltip = '';
 
@@ -9729,7 +9787,7 @@ export class AdminPanelComponent implements OnDestroy {
       } else if (isClosed) {
         tooltip = 'Día cerrado';
       } else if (!isSlotAvailable) {
-        tooltip = `Sin huecos a las ${originalStartTime} para ninguna trabajadora`;
+        tooltip = 'Sin huecos ese día para esta duración';
       }
 
       days.push({
@@ -9778,7 +9836,7 @@ export class AdminPanelComponent implements OnDestroy {
       this.getReservationWorkerKey(workerEmail) ===
       this.getReservationWorkerKey(original.createdByEmail);
 
-    return this.agendaTimeSlotOptions.filter((time) => {
+    const timesForWorker = this.agendaTimeSlotOptions.filter((time) => {
       if (this.isAgendaRecurringClosedSlot(dateIso, time)) {
         return false;
       }
@@ -9789,6 +9847,85 @@ export class AdminPanelComponent implements OnDestroy {
 
       return this.isAgendaEditSlotAvailableForWorker(dateIso, time, durationMinutes, workerEmail);
     });
+
+    if (timesForWorker.length > 0) {
+      return timesForWorker;
+    }
+
+    // Sin hueco para el trabajador actual: se ofrecen las horas libres de cualquier trabajador
+    // para poder continuar y cambiar el trabajador en el siguiente paso.
+    return this.getAgendaEditTimeOptionsForAnyWorker(dateIso, durationMinutes);
+  }
+
+  /** True cuando las horas mostradas no están libres para el trabajador seleccionado. */
+  protected isAgendaEditWorkerWithoutSlotOnDraftDate(): boolean {
+    const dateIso = this.agendaEditDraftDateIso();
+    const original = this.agendaDetailReservation();
+
+    if (!dateIso || !original) {
+      return false;
+    }
+
+    const durationMinutes = Math.max(
+      30,
+      Number(this.agendaEditDraftDuration()) || original.durationMinutes,
+    );
+    const workerEmail = this.agendaEditDraftWorkerEmail();
+    const isSameWorker =
+      this.getReservationWorkerKey(workerEmail) ===
+      this.getReservationWorkerKey(original.createdByEmail);
+
+    return !this.agendaTimeSlotOptions.some((time) => {
+      if (this.isAgendaRecurringClosedSlot(dateIso, time)) {
+        return false;
+      }
+
+      if (dateIso === original.dateIso && time === original.startTime && isSameWorker) {
+        return true;
+      }
+
+      return this.isAgendaEditSlotAvailableForWorker(dateIso, time, durationMinutes, workerEmail);
+    });
+  }
+
+  private getAgendaEditTimeOptionsForAnyWorker(dateIso: string, durationMinutes: number): string[] {
+    const original = this.agendaDetailReservation();
+
+    return this.agendaTimeSlotOptions.filter((time) => {
+      if (this.isAgendaRecurringClosedSlot(dateIso, time)) {
+        return false;
+      }
+
+      if (original && dateIso === original.dateIso && time === original.startTime) {
+        return true;
+      }
+
+      return this.isAgendaEditSlotAvailableForAnyWorker(dateIso, time, durationMinutes);
+    });
+  }
+
+  private static readonly AGENDA_EDIT_SECTIONS = [
+    'fecha',
+    'horario',
+    'duracion',
+    'trabajador',
+    'comentarios',
+  ] as const;
+
+  protected hasNextAgendaEditSection(): boolean {
+    const sections = AdminPanelComponent.AGENDA_EDIT_SECTIONS;
+    return sections.indexOf(this.agendaEditSection()) < sections.length - 1;
+  }
+
+  protected goToNextAgendaEditSection(): void {
+    const sections = AdminPanelComponent.AGENDA_EDIT_SECTIONS;
+    const nextIndex = sections.indexOf(this.agendaEditSection()) + 1;
+
+    if (nextIndex >= sections.length) {
+      return;
+    }
+
+    this.setAgendaEditSection(sections[nextIndex]);
   }
 
   protected onAgendaEditDraftStartTimeChange(event: Event): void {
@@ -9835,23 +9972,42 @@ export class AdminPanelComponent implements OnDestroy {
   protected onAgendaEditDraftNameChange(event: Event): void {
     const target = event.target as HTMLSelectElement;
     const nextName = target.value;
+
+    if (!nextName) {
+      this.agendaEditNameTouched.set(false);
+      this.agendaEditDurationTouched.set(false);
+      this.agendaEditDraftName.set(this.agendaEditOriginalName());
+      this.agendaEditDraftDuration.set(this.agendaEditOriginalDuration());
+      return;
+    }
+
+    this.agendaEditNameTouched.set(true);
     this.agendaEditDraftName.set(nextName);
 
     const selectedService = this.getAgendaEditSelectedService(nextName);
 
     if (selectedService) {
       this.agendaEditDraftDuration.set(selectedService.duracionMinutos);
+      this.agendaEditDurationTouched.set(true);
     }
   }
 
   protected onAgendaEditDraftDurationChange(event: Event): void {
     const target = event.target as HTMLSelectElement;
+
+    if (!target.value) {
+      this.agendaEditDurationTouched.set(false);
+      this.agendaEditDraftDuration.set(this.agendaEditOriginalDuration());
+      return;
+    }
+
     const parsedDuration = Number(target.value);
 
     if (!Number.isFinite(parsedDuration)) {
       return;
     }
 
+    this.agendaEditDurationTouched.set(true);
     this.agendaEditDraftDuration.set(parsedDuration);
   }
 
@@ -9975,16 +10131,18 @@ export class AdminPanelComponent implements OnDestroy {
 
     if (
       !this.isSuperadmin() &&
-      isScheduleChanged &&
+      (isScheduleChanged || isWorkerChanged) &&
       this.hasReservationConflict(
         nextDateIso,
         nextStartTime,
         nextDurationMinutes,
         r.id,
-        r.createdByEmail,
+        nextWorkerEmail,
       )
     ) {
-      this.agendaDetailError.set('El nuevo día/hora/duración solapa con otra cita existente.');
+      this.agendaDetailError.set(
+        'El nuevo día/hora/duración solapa con otra cita del trabajador seleccionado. Cambia la hora o el trabajador antes de guardar.',
+      );
       return;
     }
 
@@ -10643,6 +10801,10 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected isAgendaRecurringClosedDay(dateIso: string): boolean {
+    if (this.agendaOpenDays().has(dateIso)) {
+      return false;
+    }
+
     const date = new Date(`${dateIso}T00:00:00`);
 
     if (Number.isNaN(date.getTime())) {
@@ -10651,6 +10813,109 @@ export class AdminPanelComponent implements OnDestroy {
 
     const weekDay = date.getDay();
     return weekDay === 0 || weekDay === 1;
+  }
+
+  protected isAgendaOpenedDay(dateIso: string): boolean {
+    return this.agendaOpenDays().has(dateIso);
+  }
+
+  /** True para domingos/lunes futuros: se pueden abrir (o volver a cerrar si ya están abiertos). */
+  protected canToggleAgendaOpenDay(dateIso: string): boolean {
+    if (!dateIso || this.isAgendaDateInPast(dateIso)) {
+      return false;
+    }
+
+    const date = new Date(`${dateIso}T00:00:00`);
+
+    if (Number.isNaN(date.getTime())) {
+      return false;
+    }
+
+    const weekDay = date.getDay();
+    return weekDay === 0 || weekDay === 1;
+  }
+
+  protected openAgendaDay(dateIso: string): void {
+    if (!this.requirePermission('bloqueos_gestionar', 'Abrir días cerrados')) return;
+    if (!this.canToggleAgendaOpenDay(dateIso) || this.agendaOpenDayLoading()) return;
+
+    this.agendaDayScheduleError.set('');
+    this.agendaOpenDayLoading.set(true);
+
+    this.http
+      .post<{ ok: boolean; error?: string }>('/api/admin/dias-abiertos', { dateIso })
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.agendaDayScheduleError.set(response.error ?? 'No se pudo abrir el día.');
+            return;
+          }
+
+          this.agendaOpenDays.update((current) => new Set([...current, dateIso]));
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.agendaDayScheduleError.set(
+            typeof apiError === 'string' && apiError ? apiError : 'No se pudo abrir el día.',
+          );
+          this.agendaOpenDayLoading.set(false);
+        },
+        complete: () => {
+          this.agendaOpenDayLoading.set(false);
+        },
+      });
+  }
+
+  protected closeAgendaOpenedDay(dateIso: string): void {
+    if (!this.requirePermission('bloqueos_gestionar', 'Abrir días cerrados')) return;
+    if (!this.isAgendaOpenedDay(dateIso) || this.agendaOpenDayLoading()) return;
+
+    this.agendaDayScheduleError.set('');
+    this.agendaOpenDayLoading.set(true);
+
+    this.http
+      .delete<{ ok: boolean; error?: string }>(`/api/admin/dias-abiertos/${dateIso}`)
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.agendaDayScheduleError.set(response.error ?? 'No se pudo cerrar el día.');
+            return;
+          }
+
+          this.agendaOpenDays.update((current) => {
+            const next = new Set(current);
+            next.delete(dateIso);
+            return next;
+          });
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.agendaDayScheduleError.set(
+            typeof apiError === 'string' && apiError ? apiError : 'No se pudo cerrar el día.',
+          );
+          this.agendaOpenDayLoading.set(false);
+        },
+        complete: () => {
+          this.agendaOpenDayLoading.set(false);
+        },
+      });
+  }
+
+  private loadAgendaOpenDays(): void {
+    this.http
+      .get<{ ok: boolean; openDays?: Array<{ dateIso: string }> }>('/api/admin/dias-abiertos')
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            return;
+          }
+
+          this.agendaOpenDays.set(new Set((response.openDays ?? []).map((item) => item.dateIso)));
+        },
+        error: () => {
+          // Sin lista de días abiertos la agenda sigue funcionando con el horario habitual.
+        },
+      });
   }
 
   protected isAgendaRecurringClosedSlot(dateIso: string, time: string): boolean {

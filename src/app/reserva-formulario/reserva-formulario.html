@@ -1,62 +1,35 @@
 <section class="reserva-formulario">
-  <div class="reserva-formulario--container">
-    <header class="reserva-formulario--container__hero">
-      <h1 class="reserva-formulario--container__title">{{ title }}</h1>
-      <p class="reserva-formulario--container__description">{{ description }}</p>
-      <p class="reserva-formulario--container__summary">
-        {{ appointmentTypeName }} · {{ reservationSelection?.dateIso }} ·
-        {{ reservationSelection?.time }}
-      </p>
-      @if (requiresReservationSignal) {
-        <p
-          class="reserva-formulario--container__summary reserva-formulario--container__summary--warning"
-        >
-          Este servicio requiere señal y la franja quedará ocupada provisionalmente durante
-          {{ provisionalHoldHours }} horas.
-        </p>
-      }
-    </header>
+    <div class="reserva-formulario--container">
+        <header class="reserva-formulario--container__hero">
+            <h1 class="reserva-formulario--container__title">{{ title }}</h1>
+            <p class="reserva-formulario--container__description">{{ description }}</p>
+            <p class="reserva-formulario--container__summary">
+                {{ appointmentTypeName }} · {{ reservationSelection?.dateIso }} · {{ reservationSelection?.time }}
+            </p>
+            @if (requiresReservationSignal) {
+            <p class="reserva-formulario--container__summary reserva-formulario--container__summary--warning">
+                Este servicio requiere señal y la franja quedará ocupada provisionalmente durante {{ provisionalHoldHours }} horas.
+            </p>
+            }
+        </header>
 
-    <form
-      class="reserva-formulario--container__form"
-      [formGroup]="form"
-      (ngSubmit)="submitReservation()"
-    >
-      <label class="reserva-formulario--container__label" for="nombre">Nombre</label>
-      <input
-        id="nombre"
-        type="text"
-        class="reserva-formulario--container__input"
-        formControlName="nombre"
-      />
-      @if (isFieldInvalid('nombre')) {
-        <p class="reserva-formulario--container__error">Introduce un nombre válido.</p>
-      }
+        <form class="reserva-formulario--container__form" [formGroup]="form" (ngSubmit)="submitReservation()">
+            <label class="reserva-formulario--container__label" for="nombre">Nombre</label>
+            <input id="nombre" type="text" class="reserva-formulario--container__input" formControlName="nombre" /> @if (isFieldInvalid('nombre')) {
+            <p class="reserva-formulario--container__error">Introduce un nombre válido.</p>
+            }
 
-      <label class="reserva-formulario--container__label" for="telefono">Teléfono</label>
-      <input
-        id="telefono"
-        type="tel"
-        class="reserva-formulario--container__input"
-        formControlName="telefono"
-      />
-      @if (isFieldInvalid('telefono')) {
-        <p class="reserva-formulario--container__error">Introduce un teléfono válido.</p>
-      }
+            <label class="reserva-formulario--container__label" for="telefono">Teléfono</label>
+            <input id="telefono" type="tel" class="reserva-formulario--container__input" formControlName="telefono" /> @if (isFieldInvalid('telefono')) {
+            <p class="reserva-formulario--container__error">Introduce un teléfono válido.</p>
+            }
 
-      <label class="reserva-formulario--container__label" for="email">Email</label>
-      <input
-        id="email"
-        type="email"
-        class="reserva-formulario--container__input"
-        formControlName="email"
-      />
-      @if (isFieldInvalid('email')) {
-        <p class="reserva-formulario--container__error">Introduce un email válido.</p>
-      }
+            <label class="reserva-formulario--container__label" for="email">Email</label>
+            <input id="email" type="email" class="reserva-formulario--container__input" formControlName="email" /> @if (isFieldInvalid('email')) {
+            <p class="reserva-formulario--container__error">Introduce un email válido.</p>
+            }
 
-      <label class="reserva-formulario--container__label" for="observaciones"
-        >Observaciones
+            <label class="reserva-formulario--container__label" for="observaciones">Observaciones
         <span class="reserva-formulario--container__label--optional">(opcional)</span></label
       >
       <textarea
@@ -114,7 +87,7 @@
         </p>
         <h2 class="reserva-formulario--container__warning-title">Este servicio requiere señal</h2>
         <p class="reserva-formulario--container__warning-text">
-          Los servicios de Pack Ilumina y Pack Full Color requieren reserva previa con señal. La
+          Los servicios de Pack Ilumina y Pack Full Color requieren reserva previa con señal de 20€. La
           franja se marcará como ocupada de forma provisional durante 48 horas si no se confirma.
         </p>
         <a

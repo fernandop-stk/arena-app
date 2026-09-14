@@ -1502,6 +1502,30 @@
             font-size: 0.76rem;
             font-weight: 600;
         }
+        &__agenda-reservation-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.3rem;
+            margin-top: 0.3rem;
+        }
+        &__agenda-reservation-badge {
+            display: inline-block;
+            padding: 0.12rem 0.5rem;
+            border-radius: 999px;
+            font-size: 0.66rem;
+            font-weight: 700;
+            line-height: 1.3;
+            color: colors.$color-text-soft;
+            background: rgba(120, 110, 100, 0.12);
+            &--ok {
+                color: #1f6b3a;
+                background: rgba(63, 160, 98, 0.16);
+            }
+            &--warn {
+                color: #8a5a1f;
+                background: rgba(224, 150, 50, 0.18);
+            }
+        }
         &__agenda-duration-controls {
             margin-top: 0.2rem;
             display: grid;
@@ -1969,6 +1993,19 @@
                 box-shadow: 0 0 0 2px rgba(201, 123, 99, 0.16);
             }
         }
+        &__agenda-open-day-badge {
+            display: inline-block;
+            margin-left: 0.5rem;
+            padding: 0.1rem 0.5rem;
+            border-radius: 999px;
+            font-size: 0.65rem;
+            font-weight: 800;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            color: #1f6b3a;
+            background: rgba(63, 160, 98, 0.16);
+            vertical-align: middle;
+        }
         &__btn {
             min-height: 2.6rem;
             border-radius: 999px;
@@ -1983,6 +2020,13 @@
             justify-content: center;
             transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
             width: min(233px, 100%);
+            &--compact {
+                width: auto;
+                min-height: 2.2rem;
+                padding: 0 0.9rem;
+                font-size: 0.8rem;
+                white-space: nowrap;
+            }
             &:hover:not(:disabled) {
                 box-shadow: 0 4px 12px rgba(201, 123, 99, 0.25);
             }

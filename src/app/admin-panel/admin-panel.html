@@ -357,16 +357,32 @@
                     <div>
                         <h3 class="admin-panel--container__modal-title">Agenda por horas</h3>
                         <p class="admin-panel--container__modal-subtitle">
-                            {{ formatDate(agendaDayScheduleDateIso()) }}
+                            {{ formatDate(agendaDayScheduleDateIso()) }} @if (isAgendaOpenedDay(agendaDayScheduleDateIso())) {
+                            <span class="admin-panel--container__agenda-open-day-badge">Día abierto</span> }
                         </p>
                     </div>
-                    <button type="button" class="admin-panel--container__modal-close" (click)="closeAgendaDayScheduleModal()" aria-label="Cerrar">
+                    <div style="display: flex; align-items: center; gap: 0.5rem">
+                        @if (canToggleAgendaOpenDay(agendaDayScheduleDateIso()) && hasPermission('bloqueos_gestionar')) { @if (isAgendaOpenedDay(agendaDayScheduleDateIso())) {
+                        <button type="button" class="admin-panel--container__btn admin-panel--container__btn--secondary admin-panel--container__btn--compact" [disabled]="agendaOpenDayLoading()" (click)="closeAgendaOpenedDay(agendaDayScheduleDateIso())" title="Volver a dejar este día cerrado (solo si no tiene reservas)">
+                            {{ agendaOpenDayLoading() ? 'Guardando…' : 'Volver a cerrar día' }}
+                        </button> } @else {
+                        <button type="button" class="admin-panel--container__btn admin-panel--container__btn--primary admin-panel--container__btn--compact" [disabled]="agendaOpenDayLoading()" (click)="openAgendaDay(agendaDayScheduleDateIso())" title="Abrir este día con el horario habitual de martes a viernes para que se puedan hacer reservas">
+                            {{ agendaOpenDayLoading() ? 'Abriendo…' : 'Abrir día' }}
+                        </button> } }
+                        <button type="button" class="admin-panel--container__modal-close" (click)="closeAgendaDayScheduleModal()" aria-label="Cerrar">
                   ×
                 </button>
+                    </div>
                 </div>
 
+                @if (agendaDayScheduleError()) {
+                <p class="admin-panel--container__error" style="margin: 0">{{ agendaDayScheduleError() }}</p>
+                }
+
                 <p class="admin-panel--container__hint" style="margin: 0">
-                    Arrastra una cita a otra hora para recolocarla. @if (isSuperadmin()) { También puedes ajustar la duración y permitir solapes. }
+                    @if (isAgendaOpenedDay(agendaDayScheduleDateIso())) { Este día está abierto excepcionalmente con el horario habitual (10:00 a 18:00, cierre de 14:00 a 15:00). Las clientas ya pueden reservar online. } @else if (canToggleAgendaOpenDay(agendaDayScheduleDateIso()))
+                    { Este día está cerrado. Pulsa «Abrir día» para habilitarlo con el horario habitual y permitir reservas online y manuales. } @else { Arrastra una cita a otra hora para recolocarla. @if (isSuperadmin()) { También puedes ajustar la duración
+                    y permitir solapes. } }
                 </p>
 
                 <div class="admin-panel--container__agenda-worker-columns" style="
@@ -473,6 +489,14 @@
                                         <p class="admin-panel--container__agenda-reservation-meta">
                                             {{ reservation.appointmentTypeName }} € {{ formatDuration(reservation.durationMinutes) }}
                                         </p>
+                                        <div class="admin-panel--container__agenda-reservation-badges">
+                                            <span class="admin-panel--container__agenda-reservation-badge" [class.admin-panel--container__agenda-reservation-badge--ok]="reservation.clientConfirmationStatus === 'confirmed'" [class.admin-panel--container__agenda-reservation-badge--warn]="reservation.clientConfirmationStatus !== 'confirmed'">
+                                                {{ getAgendaCardConfirmationLabel(reservation) }}
+                                            </span>
+                                            <span class="admin-panel--container__agenda-reservation-badge" [class.admin-panel--container__agenda-reservation-badge--ok]="hasReservationSignal(reservation)" [class.admin-panel--container__agenda-reservation-badge--warn]="!hasReservationSignal(reservation) && getAgendaCardSignalLabel(reservation) === 'Señal pendiente'">
+                                                {{ getAgendaCardSignalLabel(reservation) }}
+                                            </span>
+                                        </div>
 
                                         @if (isSuperadmin()) {
                                         <div class="admin-panel--container__agenda-reservation-actions-inline">
@@ -658,6 +682,14 @@
                                         <p class="admin-panel--container__agenda-reservation-meta">
                                             {{ reservation.appointmentTypeName }} € {{ formatDuration(reservation.durationMinutes) }}
                                         </p>
+                                        <div class="admin-panel--container__agenda-reservation-badges">
+                                            <span class="admin-panel--container__agenda-reservation-badge" [class.admin-panel--container__agenda-reservation-badge--ok]="reservation.clientConfirmationStatus === 'confirmed'" [class.admin-panel--container__agenda-reservation-badge--warn]="reservation.clientConfirmationStatus !== 'confirmed'">
+                                                {{ getAgendaCardConfirmationLabel(reservation) }}
+                                            </span>
+                                            <span class="admin-panel--container__agenda-reservation-badge" [class.admin-panel--container__agenda-reservation-badge--ok]="hasReservationSignal(reservation)" [class.admin-panel--container__agenda-reservation-badge--warn]="!hasReservationSignal(reservation) && getAgendaCardSignalLabel(reservation) === 'Señal pendiente'">
+                                                {{ getAgendaCardSignalLabel(reservation) }}
+                                            </span>
+                                        </div>
                                         @if (isSuperadmin()) {
                                         <div class="admin-panel--container__agenda-reservation-actions-inline">
                                             <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--soft" style="
@@ -1183,13 +1215,22 @@
                       }
                     </select> @if (getAgendaEditTimeOptions().length === 0) {
                     <p class="admin-panel--container__error">
-                        No hay horas disponibles para la fecha y trabajador seleccionados.
+                        No hay horas disponibles para la fecha y duración seleccionadas.
+                    </p>
+                    } @else if (isAgendaEditWorkerWithoutSlotOnDraftDate()) {
+                    <p class="admin-panel--container__hint admin-panel--container__hint--compact">
+                        El trabajador actual no tiene hueco ese día. Elige la hora, pulsa «Continuar» y cambia el trabajador en el paso «Trabajador» antes de guardar.
                     </p>
                     } } @if (agendaEditSection() === 'duracion') {
+                    <p class="admin-panel--container__hint admin-panel--container__hint--compact">
+                        Actualmente la clienta tiene: <strong>{{ agendaEditOriginalName() }}</strong> · <strong>{{ formatDuration(agendaEditOriginalDuration()) }}</strong>. Deja los desplegables vacíos si no quieres cambiarlo.
+                    </p>
+
                     <label class="admin-panel--container__label" for="agendaEditName">
                       Tratamiento / pack
                     </label>
-                    <select id="agendaEditName" class="admin-panel--container__input" [value]="agendaEditDraftName()" (change)="onAgendaEditDraftNameChange($event)">
+                    <select id="agendaEditName" class="admin-panel--container__input" [value]="agendaEditNameTouched() ? agendaEditDraftName() : ''" (change)="onAgendaEditDraftNameChange($event)">
+                      <option value="">— Sin cambios ({{ agendaEditOriginalName() }}) —</option>
                       @for (packName of agendaEditPackOptionNames(); track packName) {
                         <option [value]="packName">{{ packName }}</option>
                       }
@@ -1198,7 +1239,8 @@
                     <label class="admin-panel--container__label" for="agendaEditDuration">
                       Duración
                     </label>
-                    <select id="agendaEditDuration" class="admin-panel--container__input" [value]="agendaEditDraftDuration()" (change)="onAgendaEditDraftDurationChange($event)">
+                    <select id="agendaEditDuration" class="admin-panel--container__input" [value]="agendaEditDurationTouched() ? agendaEditDraftDuration() : ''" (change)="onAgendaEditDraftDurationChange($event)">
+                      <option value="">— Sin cambios ({{ formatDuration(agendaEditOriginalDuration()) }}) —</option>
                       @for (duration of agendaEditDurationOptions(); track duration) {
                         <option [value]="duration">{{ formatDuration(duration) }}</option>
                       }
@@ -1224,11 +1266,15 @@
                 </div>
 
                 <div class="admin-panel--container__agenda-detail-actions">
+                    @if (hasNextAgendaEditSection()) {
+                    <button type="button" class="admin-panel--container__action-button" [disabled]="agendaDetailSaving()" (click)="goToNextAgendaEditSection()" title="Seguir cambiando otros datos de la cita antes de guardar">
+                    Continuar →
+                  </button> }
                     <button type="button" class="admin-panel--container__action-button" [disabled]="agendaDetailSaving()" (click)="saveAgendaReservationEdit()">
                     @if (agendaDetailSaving()) {
                       Guardando...
                     } @else {
-                      💾 Guardar cambios
+                      💾 Guardar
                     }
                   </button>
                     <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--soft" [disabled]="agendaDetailSaving()" (click)="agendaDetailMode.set('view')">

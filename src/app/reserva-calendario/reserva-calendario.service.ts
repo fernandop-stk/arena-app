@@ -1,7 +1,7 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { AppointmentType } from '../citas/citas.service';
-import { Observable, map } from 'rxjs';
+import { Observable, catchError, map, of, tap } from 'rxjs';
 
 export interface CalendarDay {
   iso: string;
@@ -21,10 +21,31 @@ export class ReservaCalendarioService {
   private static readonly SATURDAY_WEEKDAY = 6;
   private static readonly WEEKDAY_FIRST_START_MINUTES = 10 * 60;
   private static readonly WEEKDAY_LAST_START_MINUTES = 18 * 60;
+  private static readonly WEEKDAY_CLOSING_MINUTES = 19 * 60;
   private static readonly SATURDAY_FIRST_START_MINUTES = 9 * 60;
   private static readonly SATURDAY_LAST_START_MINUTES = 13 * 60;
+  private static readonly SATURDAY_CLOSING_MINUTES = 14 * 60;
   private static readonly MIDDAY_CLOSED_START_MINUTES = 14 * 60;
   private static readonly MIDDAY_CLOSED_END_MINUTES = 15 * 60;
+  // Más de 4 h: el tratamiento puede atravesar el cierre de mediodía (misma regla que el servidor).
+  private static readonly LONG_TREATMENT_MIN_MINUTES = 4 * 60;
+
+  /** Días normalmente cerrados (domingo/lunes) que la admin ha abierto expresamente. */
+  private readonly openDays = signal<Set<string>>(new Set());
+
+  loadOpenDays(): Observable<string[]> {
+    return this.http
+      .get<{ ok: boolean; openDays?: string[] }>('/api/reservas/dias-abiertos')
+      .pipe(
+        map((response) => response.openDays ?? []),
+        catchError(() => of([] as string[])),
+        tap((openDays) => this.openDays.set(new Set(openDays))),
+      );
+  }
+
+  isAdminOpenedDay(dateIso: string): boolean {
+    return this.openDays().has(dateIso);
+  }
 
   getTitle(): string {
     return 'Elige día y hora';
@@ -130,6 +151,10 @@ export class ReservaCalendarioService {
   }
 
   isRecurringClosedDay(dateIso: string): boolean {
+    if (this.isAdminOpenedDay(dateIso)) {
+      return false;
+    }
+
     const date = new Date(`${dateIso}T00:00:00`);
 
     if (Number.isNaN(date.getTime())) {
@@ -160,7 +185,62 @@ export class ReservaCalendarioService {
       return false;
     }
 
-    return this.overlapsMiddayClosure(hours * 60 + minutes, durationMinutes);
+    const startMinutes = hours * 60 + minutes;
+
+    if (this.isLongTreatment(durationMinutes)) {
+      return this.isStartInsideMiddayClosure(dateIso, time);
+    }
+
+    return this.overlapsMiddayClosure(startMinutes, durationMinutes);
+  }
+
+  isLongTreatment(durationMinutes: number): boolean {
+    return durationMinutes > ReservaCalendarioService.LONG_TREATMENT_MIN_MINUTES;
+  }
+
+  isStartInsideMiddayClosure(dateIso: string, time: string): boolean {
+    if (this.getWeekDay(dateIso) === ReservaCalendarioService.SATURDAY_WEEKDAY) {
+      return false;
+    }
+
+    const startMinutes = this.toMinutes(time);
+
+    return (
+      startMinutes >= ReservaCalendarioService.MIDDAY_CLOSED_START_MINUTES &&
+      startMinutes < ReservaCalendarioService.MIDDAY_CLOSED_END_MINUTES
+    );
+  }
+
+  getClosingTime(dateIso: string): string {
+    const serviceWindow = this.getServiceWindowByDate(dateIso);
+
+    return serviceWindow ? this.formatTime(serviceWindow.closingMinutes) : '';
+  }
+
+  /** Devuelve la hora de fin si el tratamiento acabaría después del cierre; si cabe, null. */
+  getEndTimeIfExceedsClosing(dateIso: string, time: string, durationMinutes: number): string | null {
+    const serviceWindow = this.getServiceWindowByDate(dateIso);
+    const startMinutes = this.toMinutes(time);
+
+    if (!serviceWindow || startMinutes < 0) {
+      return null;
+    }
+
+    const endMinutes = startMinutes + durationMinutes;
+
+    return endMinutes > serviceWindow.closingMinutes ? this.formatTime(endMinutes) : null;
+  }
+
+  private toMinutes(time: string): number {
+    const [hoursRaw, minutesRaw] = time.split(':');
+    const hours = Number(hoursRaw);
+    const minutes = Number(minutesRaw);
+
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+      return -1;
+    }
+
+    return hours * 60 + minutes;
   }
 
   private toIsoDate(date: Date): string {
@@ -182,11 +262,20 @@ export class ReservaCalendarioService {
 
   private getServiceWindowByDate(
     dateIso: string,
-  ): { firstStartMinutes: number; lastStartMinutes: number } | null {
+  ): { firstStartMinutes: number; lastStartMinutes: number; closingMinutes: number } | null {
     const weekDay = this.getWeekDay(dateIso);
 
     if (weekDay === null) {
       return null;
+    }
+
+    if (this.isAdminOpenedDay(dateIso)) {
+      // Un día abierto por la admin funciona como un día laborable normal.
+      return {
+        firstStartMinutes: ReservaCalendarioService.WEEKDAY_FIRST_START_MINUTES,
+        lastStartMinutes: ReservaCalendarioService.WEEKDAY_LAST_START_MINUTES,
+        closingMinutes: ReservaCalendarioService.WEEKDAY_CLOSING_MINUTES,
+      };
     }
 
     if (
@@ -200,12 +289,14 @@ export class ReservaCalendarioService {
       return {
         firstStartMinutes: ReservaCalendarioService.SATURDAY_FIRST_START_MINUTES,
         lastStartMinutes: ReservaCalendarioService.SATURDAY_LAST_START_MINUTES,
+        closingMinutes: ReservaCalendarioService.SATURDAY_CLOSING_MINUTES,
       };
     }
 
     return {
       firstStartMinutes: ReservaCalendarioService.WEEKDAY_FIRST_START_MINUTES,
       lastStartMinutes: ReservaCalendarioService.WEEKDAY_LAST_START_MINUTES,
+      closingMinutes: ReservaCalendarioService.WEEKDAY_CLOSING_MINUTES,
     };
   }
 

@@ -27,6 +27,9 @@ import {
   getAvailableSlotsForDate,
   getManuallyBlockedSlotsForDate,
   listBlockedPeriodsForAdmin,
+  listOpenDaysForAdmin,
+  openDayForAdmin,
+  closeOpenedDayForAdmin,
   loadAllCierresFromDb,
   listReservationsForAdmin,
   getReservationByIdForAdmin,
@@ -1436,7 +1439,7 @@ const buildReservationEmailHtml = (data: {
             <h2 style="margin:0 0 10px;font-size:16px;color:#3b2f2a;">Datos del establecimiento</h2>
             <p style="margin:0 0 4px;font-size:14px;line-height:1.5;color:#7a675d;"><strong>Dirección:</strong> ${establishmentAddress}</p>
             <p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#7a675d;"><strong>Teléfono:</strong> ${establishmentPhone}</p>
-            <p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#7a675d;"><strong>Bizum:</strong> ${bizumPhone}</p>
+            <p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#7a675d;"><strong>WhatsApp:</strong> ${bizumPhone}</p>
 
             <p style="margin:0;font-size:14px;line-height:1.6;color:#7a675d;">Gracias por confiar en Arena Studio. ¡Te esperamos!</p>
           </td>
@@ -5753,7 +5756,11 @@ app.patch('/api/admin/reservas/:id/client-confirmation', async (req, res) => {
       return res.status(409).json({ ok: false, error: 'La reserva ya está rechazada.' });
     }
 
-    const updated = await updateReservationClientConfirmationStatus(reservationId, 'confirmed');
+    const updated = await updateReservationClientConfirmationStatus(
+      reservationId,
+      'confirmed',
+      'salon',
+    );
 
     if (!updated.ok) {
       return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
@@ -5861,6 +5868,107 @@ app.delete('/api/admin/bloqueos/:id', async (req, res) => {
   } catch (error) {
     console.error('Error eliminando bloqueo admin:', error);
     return res.status(500).json({ ok: false, error: 'No se pudo eliminar el bloqueo.' });
+  }
+});
+
+app.get('/api/admin/dias-abiertos', async (req, res) => {
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  try {
+    const openDays = await listOpenDaysForAdmin();
+    return res.status(200).json({ ok: true, openDays });
+  } catch (error) {
+    console.error('Error listando días abiertos:', error);
+    return res.status(500).json({ ok: false, error: 'No se pudieron listar los días abiertos.' });
+  }
+});
+
+app.post('/api/admin/dias-abiertos', async (req, res) => {
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const dateIso = `${req.body?.dateIso ?? ''}`.trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
+    return res.status(400).json({ ok: false, error: 'Fecha inválida.' });
+  }
+
+  if (dateIso < new Date().toISOString().slice(0, 10)) {
+    return res.status(400).json({ ok: false, error: 'No se puede abrir un día pasado.' });
+  }
+
+  try {
+    const opened = await openDayForAdmin(dateIso, session.email || null);
+
+    if (!opened.ok) {
+      return res.status(400).json({
+        ok: false,
+        error:
+          opened.reason === 'not-closed-day'
+            ? 'Ese día ya está abierto en el horario habitual.'
+            : 'Fecha inválida.',
+      });
+    }
+
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Error abriendo día:', error);
+    return res.status(500).json({ ok: false, error: 'No se pudo abrir el día.' });
+  }
+});
+
+app.delete('/api/admin/dias-abiertos/:dateIso', async (req, res) => {
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const dateIso = `${req.params['dateIso'] ?? ''}`.trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
+    return res.status(400).json({ ok: false, error: 'Fecha inválida.' });
+  }
+
+  try {
+    const closed = await closeOpenedDayForAdmin(dateIso);
+
+    if (!closed.ok) {
+      if (closed.reason === 'reservation-conflict') {
+        return res.status(409).json({
+          ok: false,
+          error: 'No se puede volver a cerrar el día porque ya tiene reservas.',
+        });
+      }
+
+      return res.status(404).json({ ok: false, error: 'Ese día no estaba abierto.' });
+    }
+
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Error cerrando día abierto:', error);
+    return res.status(500).json({ ok: false, error: 'No se pudo cerrar el día.' });
+  }
+});
+
+app.get('/api/reservas/dias-abiertos', async (_req, res) => {
+  try {
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const openDays = (await listOpenDaysForAdmin())
+      .map((item) => item.dateIso)
+      .filter((dateIso) => dateIso >= todayIso);
+
+    return res.status(200).json({ ok: true, openDays });
+  } catch (error) {
+    console.error('Error consultando días abiertos:', error);
+    return res.status(500).json({ ok: false, error: 'No se pudieron consultar los días abiertos.' });
   }
 });
 
@@ -7441,7 +7549,11 @@ app.get('/api/reservas/confirmacion', async (req, res) => {
           );
       }
 
-      const updated = await updateReservationClientConfirmationStatus(reservation.id, 'confirmed');
+      const updated = await updateReservationClientConfirmationStatus(
+        reservation.id,
+        'confirmed',
+        'online',
+      );
 
       if (!updated.ok) {
         return res

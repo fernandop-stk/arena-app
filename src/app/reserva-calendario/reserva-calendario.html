@@ -227,11 +227,19 @@
             </div>
             } @else if (slotsError()) {
             <p class="reserva-calendario--container__hint">{{ slotsError() }}</p>
-            } @else if (timeSlots().length === 0 || !hasAnyAvailableSlot()) {
+            } @else if (timeSlots().length === 0) {
             <p class="reserva-calendario--container__hint">
                 No hay horas disponibles para ese día y servicio.
             </p>
-            } @else { @if (alertError()) {
+            } @else { @if (!hasAnyAvailableSlot()) {
+            <p class="reserva-calendario--container__hint">
+                No hay horas disponibles para ese día con una duración de {{ getSelectedDurationLabel() }}. Prueba otro día o consulta con el salón.
+            </p>
+            } @else if (reservaCalendarioService.isLongTreatment(selectedDurationMinutes())) {
+            <p class="reserva-calendario--container__hint">
+                La duracion de este servicio puede variar según la hora de inicio y el cierre de mediodía.
+            </p>
+            } @if (alertError()) {
             <div class="reserva-calendario--container__alert-error">
                 <p>{{ alertError() }}</p>
             </div>
@@ -243,11 +251,11 @@
                     <button type="button" class="reserva-calendario--container__time" [class.reserva-calendario--container__time--selected]="
                     selectedTime() === slot.time
                   " [class.reserva-calendario--container__time--disabled]="slot.disabled" [class.reserva-calendario--container__time--closed]="
-                    slot.reason === 'closed' || slot.reason === 'blocked'
-                  " [disabled]="slot.disabled" (click)="onSelectTime(slot.time, slot.disabled)">
+                    slot.reason === 'closed' || slot.reason === 'blocked' || slot.reason === 'after-closing'
+                  " [disabled]="slot.disabled" [title]="slot.statusLabel" (click)="onSelectTime(slot.time, slot.disabled)">
                   {{ slot.time }}
                 </button> @if (slot.disabled) {
-                    <p class="reserva-calendario--container__time-status">
+                    <p class="reserva-calendario--container__time-status" [class.reserva-calendario--container__time-status--info]="slot.reason === 'after-closing'">
                         {{ slot.statusLabel }}
                     </p>
                     @if (slot.reason === 'occupied') {
@@ -268,8 +276,7 @@
           </button>
             </div>
         </div>
-        }
-
+        } @if (!isAdminSession()) {
         <section class="reserva-calendario--container__client-cta" aria-label="Área cliente">
             <div>
                 <p class="reserva-calendario--container__client-cta-kicker">Área cliente</p>
@@ -290,5 +297,6 @@
         </a>
             </div>
         </section>
+        }
     </div>
 </section>

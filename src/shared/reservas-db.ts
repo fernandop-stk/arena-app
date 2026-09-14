@@ -18,6 +18,8 @@ export interface ReservaPersistRequest {
 
 export type AdminReservationStatus = 'pending' | 'accepted' | 'rejected';
 export type ClientConfirmationStatus = 'pending' | 'confirmed';
+// 'online' = la clienta confirmó desde el enlace del email; 'salon' = confirmada desde la peluquería.
+export type ClientConfirmationSource = 'online' | 'salon';
 export type ReservationSignalPaymentMethod = 'efectivo' | 'tarjeta' | 'bizum';
 
 export interface AdminReservationItem {
@@ -40,6 +42,7 @@ export interface AdminReservationItem {
   paymentAmountEuro: number;
   adminStatus: AdminReservationStatus;
   clientConfirmationStatus: ClientConfirmationStatus;
+  clientConfirmationSource?: ClientConfirmationSource | null;
   clientConfirmationReminderSentAtIso?: string | null;
   signalPaymentReminderSentAtIso?: string | null;
   createdByEmail?: string | null;
@@ -66,14 +69,49 @@ const SUNDAY_WEEKDAY = 0;
 const SATURDAY_WEEKDAY = 6;
 const WEEKDAY_FIRST_START_MINUTES = 10 * 60;
 const WEEKDAY_LAST_START_MINUTES = 18 * 60;
+const WEEKDAY_CLOSING_MINUTES = 19 * 60;
 const SATURDAY_FIRST_START_MINUTES = 9 * 60;
 const SATURDAY_LAST_START_MINUTES = 13 * 60;
+const SATURDAY_CLOSING_MINUTES = 14 * 60;
 const MIDDAY_CLOSED_START_MINUTES = 14 * 60;
 const MIDDAY_CLOSED_END_MINUTES = 15 * 60;
+// A partir de esta duración (más de 4 h) el tratamiento puede atravesar el cierre de mediodía.
+export const LONG_TREATMENT_MIN_MINUTES = 4 * 60;
+
+export const isLongTreatment = (durationMinutes: number): boolean =>
+  durationMinutes > LONG_TREATMENT_MIN_MINUTES;
+
+// Días normalmente cerrados (domingo/lunes) que la admin ha abierto. Se cachean en memoria
+// porque las funciones de ventana horaria son sincrónicas.
+const openDaysCache = new Set<string>();
+let openDaysCacheLoadedAtMs = 0;
+const OPEN_DAYS_CACHE_TTL_MS = 60 * 1000;
+
+export interface AdminOpenDayItem {
+  dateIso: string;
+  createdAtIso: string;
+  createdByEmail: string | null;
+}
+
+const isValidDateIso = (dateIso: string): boolean =>
+  /^\d{4}-\d{2}-\d{2}$/.test(dateIso) && !Number.isNaN(new Date(`${dateIso}T00:00:00`).getTime());
+
+export const isRecurringClosedWeekday = (dateIso: string): boolean => {
+  const date = new Date(`${dateIso}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+
+  const weekDay = date.getDay();
+  return weekDay === SUNDAY_WEEKDAY || weekDay === MONDAY_WEEKDAY;
+};
+
+export const isAdminOpenedDay = (dateIso: string): boolean => openDaysCache.has(dateIso);
 
 const getServiceWindowByDate = (
   dateIso: string,
-): { firstStartMinutes: number; lastStartMinutes: number } | null => {
+): { firstStartMinutes: number; lastStartMinutes: number; closingMinutes: number } | null => {
   const date = new Date(`${dateIso}T00:00:00`);
 
   if (Number.isNaN(date.getTime())) {
@@ -82,7 +120,7 @@ const getServiceWindowByDate = (
 
   const weekDay = date.getDay();
 
-  if (weekDay === SUNDAY_WEEKDAY) {
+  if (weekDay === SUNDAY_WEEKDAY && !isAdminOpenedDay(dateIso)) {
     // Domingo cerrado.
     return null;
   }
@@ -91,13 +129,28 @@ const getServiceWindowByDate = (
     return {
       firstStartMinutes: SATURDAY_FIRST_START_MINUTES,
       lastStartMinutes: SATURDAY_LAST_START_MINUTES,
+      closingMinutes: SATURDAY_CLOSING_MINUTES,
     };
   }
 
   return {
     firstStartMinutes: WEEKDAY_FIRST_START_MINUTES,
     lastStartMinutes: WEEKDAY_LAST_START_MINUTES,
+    closingMinutes: WEEKDAY_CLOSING_MINUTES,
   };
+};
+
+export const getClosingMinutesForDate = (dateIso: string): number | null =>
+  getServiceWindowByDate(dateIso)?.closingMinutes ?? null;
+
+const exceedsClosingTime = (
+  dateIso: string,
+  startMinutes: number,
+  durationMinutes: number,
+): boolean => {
+  const closingMinutes = getClosingMinutesForDate(dateIso);
+
+  return closingMinutes !== null && startMinutes + durationMinutes > closingMinutes;
 };
 
 let pool: Pool | null = null;
@@ -126,6 +179,7 @@ interface MemoryReservation {
   paymentAmountEuro: number;
   adminStatus: AdminReservationStatus;
   clientConfirmationStatus: ClientConfirmationStatus;
+  clientConfirmationSource?: ClientConfirmationSource | null;
   clientConfirmationReminderSentAtIso?: string | null;
   signalPaymentReminderSentAtIso?: string | null;
   createdByEmail?: string | null;
@@ -205,7 +259,145 @@ const cleanupExpiredProvisionalReservations = async (): Promise<void> => {
   }
 
   await ensureSchema();
+  await refreshOpenDaysCacheIfStale();
   return;
+};
+
+const loadOpenDaysCacheFromDb = async (): Promise<void> => {
+  const db = getPool();
+  const result = await db.query<{ date_iso: string }>('SELECT date_iso FROM admin_open_days');
+
+  openDaysCache.clear();
+  result.rows.forEach((row) => openDaysCache.add(row.date_iso));
+  openDaysCacheLoadedAtMs = Date.now();
+};
+
+const refreshOpenDaysCacheIfStale = async (): Promise<void> => {
+  if (!shouldUseDatabase() || Date.now() - openDaysCacheLoadedAtMs < OPEN_DAYS_CACHE_TTL_MS) {
+    return;
+  }
+
+  try {
+    await ensureSchema();
+    await loadOpenDaysCacheFromDb();
+  } catch (error) {
+    if (!enableRuntimeMemoryMode(error)) {
+      throw error;
+    }
+  }
+};
+
+export const listOpenDaysForAdmin = async (): Promise<AdminOpenDayItem[]> => {
+  if (shouldUseDatabase()) {
+    try {
+      await ensureSchema();
+      const db = getPool();
+      const result = await db.query<{
+        date_iso: string;
+        created_at: string;
+        created_by_email: string | null;
+      }>('SELECT date_iso, created_at, created_by_email FROM admin_open_days ORDER BY date_iso ASC');
+
+      openDaysCache.clear();
+      result.rows.forEach((row) => openDaysCache.add(row.date_iso));
+      openDaysCacheLoadedAtMs = Date.now();
+
+      return result.rows.map((row) => ({
+        dateIso: row.date_iso,
+        createdAtIso: new Date(row.created_at).toISOString(),
+        createdByEmail: row.created_by_email,
+      }));
+    } catch (error) {
+      if (!enableRuntimeMemoryMode(error)) {
+        throw error;
+      }
+    }
+  }
+
+  return Array.from(openDaysCache)
+    .sort()
+    .map((dateIso) => ({ dateIso, createdAtIso: '', createdByEmail: null }));
+};
+
+export const openDayForAdmin = async (
+  dateIso: string,
+  createdByEmail: string | null,
+): Promise<{ ok: true } | { ok: false; reason: 'invalid-date' | 'not-closed-day' }> => {
+  if (!isValidDateIso(dateIso)) {
+    return { ok: false, reason: 'invalid-date' };
+  }
+
+  if (!isRecurringClosedWeekday(dateIso)) {
+    return { ok: false, reason: 'not-closed-day' };
+  }
+
+  if (shouldUseDatabase()) {
+    try {
+      await ensureSchema();
+      const db = getPool();
+      await db.query(
+        `
+        INSERT INTO admin_open_days (date_iso, created_by_email)
+        VALUES ($1, $2)
+        ON CONFLICT (date_iso) DO NOTHING
+        `,
+        [dateIso, createdByEmail],
+      );
+    } catch (error) {
+      if (!enableRuntimeMemoryMode(error)) {
+        throw error;
+      }
+    }
+  }
+
+  openDaysCache.add(dateIso);
+  return { ok: true };
+};
+
+export const closeOpenedDayForAdmin = async (
+  dateIso: string,
+): Promise<{ ok: true } | { ok: false; reason: 'not-found' | 'reservation-conflict' }> => {
+  if (!openDaysCache.has(dateIso)) {
+    await refreshOpenDaysCacheIfStale();
+  }
+
+  if (!openDaysCache.has(dateIso)) {
+    return { ok: false, reason: 'not-found' };
+  }
+
+  if (shouldUseDatabase()) {
+    try {
+      await ensureSchema();
+      const db = getPool();
+      const activeReservations = await db.query<{ id: string }>(
+        `SELECT id FROM reservations WHERE date_iso = $1 AND admin_status <> 'rejected' LIMIT 1`,
+        [dateIso],
+      );
+
+      if (activeReservations.rowCount && activeReservations.rowCount > 0) {
+        return { ok: false, reason: 'reservation-conflict' };
+      }
+
+      await db.query('DELETE FROM admin_open_days WHERE date_iso = $1', [dateIso]);
+      openDaysCache.delete(dateIso);
+      return { ok: true };
+    } catch (error) {
+      if (!enableRuntimeMemoryMode(error)) {
+        throw error;
+      }
+    }
+  }
+
+  const hasActiveReservation = Array.from(memoryReservations.values()).some(
+    (reservation) => reservation.dateIso === dateIso && reservation.adminStatus !== 'rejected',
+  );
+
+  if (hasActiveReservation) {
+    return { ok: false, reason: 'reservation-conflict' };
+  }
+
+  openDaysCache.delete(dateIso);
+  return { ok: true };
 };
 
 const DEV_CACHE_FILE = path.join(process.cwd(), '.dev-reservas-cache.json');
@@ -462,6 +654,11 @@ const ensureSchema = async (): Promise<void> => {
 
     await db.query(`
       ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS client_confirmation_source TEXT NULL;
+    `);
+
+    await db.query(`
+      ALTER TABLE reservations
       ADD COLUMN IF NOT EXISTS client_confirmation_reminder_sent_at TIMESTAMPTZ NULL;
     `);
 
@@ -623,6 +820,16 @@ const ensureSchema = async (): Promise<void> => {
       END $$;
     `);
 
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS admin_open_days (
+        date_iso TEXT PRIMARY KEY,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_by_email TEXT NULL
+      );
+    `);
+
+    await loadOpenDaysCacheFromDb();
+
     schemaReady = true;
   })();
 
@@ -652,7 +859,7 @@ export const toTime = (minutes: number): string => {
   return `${hours}:${mins}`;
 };
 
-const getRecurringClosedSlotsForDate = (dateIso: string): Set<string> => {
+const getRecurringClosedSlotsForDate = (dateIso: string, durationMinutes = 0): Set<string> => {
   const serviceWindow = getServiceWindowByDate(dateIso);
 
   if (!serviceWindow) {
@@ -668,7 +875,7 @@ const getRecurringClosedSlotsForDate = (dateIso: string): Set<string> => {
   const blockedSlots = new Set<string>();
   const weekDay = date.getDay();
 
-  if (weekDay === MONDAY_WEEKDAY) {
+  if (weekDay === MONDAY_WEEKDAY && !isAdminOpenedDay(dateIso)) {
     for (
       let current = serviceWindow.firstStartMinutes;
       current <= serviceWindow.lastStartMinutes;
@@ -680,7 +887,7 @@ const getRecurringClosedSlotsForDate = (dateIso: string): Set<string> => {
     return blockedSlots;
   }
 
-  if (weekDay === SATURDAY_WEEKDAY) {
+  if (weekDay === SATURDAY_WEEKDAY || isLongTreatment(durationMinutes)) {
     return blockedSlots;
   }
 
@@ -695,6 +902,24 @@ const getRecurringClosedSlotsForDate = (dateIso: string): Set<string> => {
   }
 
   return blockedSlots;
+};
+
+// Los tratamientos largos pueden atravesar el cierre de mediodía, pero no empezar dentro de él.
+const hasRecurringClosureConflict = (
+  dateIso: string,
+  slotTimes: string[],
+  durationMinutes: number,
+): boolean => {
+  if (slotTimes.length === 0) {
+    return false;
+  }
+
+  if (getRecurringClosedSlotsForDate(dateIso).has(slotTimes[0])) {
+    return true;
+  }
+
+  const closedForSpan = getRecurringClosedSlotsForDate(dateIso, durationMinutes);
+  return slotTimes.some((slot) => closedForSpan.has(slot));
 };
 
 const buildSlotTimes = (startMinutes: number, durationMinutes: number): string[] => {
@@ -849,13 +1074,6 @@ const getWorkerBlockCountsFromMemory = (dateIso: string): Map<string, number> =>
   return counts;
 };
 
-const getEffectiveBlockedSlotsFromMemory = (dateIso: string, workerEmail?: string): Set<string> => {
-  const blockedSlots = getBlockedSlotsFromMemory(dateIso, workerEmail);
-
-  getRecurringClosedSlotsForDate(dateIso).forEach((slot) => blockedSlots.add(slot));
-  return blockedSlots;
-};
-
 const normalizeBlockReason = (value: string): string => {
   const trimmed = value.trim();
 
@@ -881,9 +1099,10 @@ const createReservationWithSlotsInMemory = (
   const maxConcurrent = Math.max(1, Math.floor(options?.maxConcurrentReservations ?? 1));
   const slotUsage = getSlotUsageCountsFromMemory(payload.dateIso);
   const assigneeWorker = normalizeWorkerEmail(payload.createdByEmail);
-  const blockedSlots = options?.allowClosedSchedule
-    ? getBlockedSlotsFromMemory(payload.dateIso, assigneeWorker || undefined)
-    : getEffectiveBlockedSlotsFromMemory(payload.dateIso, assigneeWorker || undefined);
+  const blockedSlots = getBlockedSlotsFromMemory(payload.dateIso, assigneeWorker || undefined);
+  const hasRecurringClosedConflict =
+    !options?.allowClosedSchedule &&
+    hasRecurringClosureConflict(payload.dateIso, slotTimes, payload.durationMinutes);
 
   if (!assigneeWorker) {
     const workerBlockCounts = getWorkerBlockCountsFromMemory(payload.dateIso);
@@ -901,7 +1120,10 @@ const createReservationWithSlotsInMemory = (
     assigneeWorker,
   );
   const hasConflict =
-    hasCapacityConflict || hasWorkerConflict || slotTimes.some((slot) => blockedSlots.has(slot));
+    hasCapacityConflict ||
+    hasWorkerConflict ||
+    hasRecurringClosedConflict ||
+    slotTimes.some((slot) => blockedSlots.has(slot));
 
   if (hasConflict) {
     return { ok: false, conflict: true };
@@ -1170,7 +1392,7 @@ export const getAvailableSlotsForDate = async (
       }
 
       bookedCountBySlot = getSlotUsageCountsFromMemory(dateIso, normalizedWorkerEmail);
-      blockedSet = getEffectiveBlockedSlotsFromMemory(dateIso, normalizedWorkerEmail || undefined);
+      blockedSet = getBlockedSlotsFromMemory(dateIso, normalizedWorkerEmail || undefined);
 
       if (!normalizedWorkerEmail) {
         getWorkerBlockCountsFromMemory(dateIso).forEach((count, slot) => {
@@ -1180,7 +1402,7 @@ export const getAvailableSlotsForDate = async (
     }
   } else {
     bookedCountBySlot = getSlotUsageCountsFromMemory(dateIso, normalizedWorkerEmail);
-    blockedSet = getEffectiveBlockedSlotsFromMemory(dateIso, normalizedWorkerEmail || undefined);
+    blockedSet = getBlockedSlotsFromMemory(dateIso, normalizedWorkerEmail || undefined);
 
     if (!normalizedWorkerEmail) {
       getWorkerBlockCountsFromMemory(dateIso).forEach((count, slot) => {
@@ -1189,16 +1411,20 @@ export const getAvailableSlotsForDate = async (
     }
   }
 
-  getRecurringClosedSlotsForDate(dateIso).forEach((slot) => blockedSet.add(slot));
-
-  const { firstStartMinutes, lastStartMinutes } = serviceWindow;
+  const { firstStartMinutes, lastStartMinutes, closingMinutes } = serviceWindow;
   const availableSlots: string[] = [];
 
   for (let start = firstStartMinutes; start <= lastStartMinutes; start += STEP_MINUTES) {
+    if (start + durationMinutes > closingMinutes) {
+      break;
+    }
+
     const neededSlots = buildSlotTimes(start, durationMinutes);
-    const hasConflict = neededSlots.some(
-      (slot) => (bookedCountBySlot.get(slot) ?? 0) >= maxConcurrent || blockedSet.has(slot),
-    );
+    const hasConflict =
+      hasRecurringClosureConflict(dateIso, neededSlots, durationMinutes) ||
+      neededSlots.some(
+        (slot) => (bookedCountBySlot.get(slot) ?? 0) >= maxConcurrent || blockedSet.has(slot),
+      );
 
     if (!hasConflict) {
       availableSlots.push(toTime(start));
@@ -1259,6 +1485,13 @@ export const createReservationWithSlots = async (
   const maxConcurrent = Math.max(1, Math.floor(options?.maxConcurrentReservations ?? 1));
   const normalizedWorkerEmail = normalizeWorkerEmail(payload.createdByEmail);
 
+  if (
+    !effectiveAllowClosedSchedule &&
+    exceedsClosingTime(payload.dateIso, startMinutes, payload.durationMinutes)
+  ) {
+    return { ok: false, conflict: true };
+  }
+
   if (!shouldUseDatabase()) {
     return createReservationWithSlotsInMemory(payload, startMinutes, options);
   }
@@ -1266,9 +1499,11 @@ export const createReservationWithSlots = async (
   let client: PoolClient | null = null;
   const reservationId = `${payload.dateIso}-${startMinutes}-${Date.now()}`;
   const slotTimes = buildSlotTimes(startMinutes, payload.durationMinutes);
-  const recurringClosedSlots = getRecurringClosedSlotsForDate(payload.dateIso);
 
-  if (!effectiveAllowClosedSchedule && slotTimes.some((slot) => recurringClosedSlots.has(slot))) {
+  if (
+    !effectiveAllowClosedSchedule &&
+    hasRecurringClosureConflict(payload.dateIso, slotTimes, payload.durationMinutes)
+  ) {
     return { ok: false, conflict: true };
   }
 
@@ -1587,6 +1822,7 @@ const mapMemoryReservationToAdminItem = (reservation: MemoryReservation): AdminR
   paymentAmountEuro: Number(reservation.paymentAmountEuro) || 0,
   adminStatus: reservation.adminStatus,
   clientConfirmationStatus: reservation.clientConfirmationStatus ?? 'pending',
+  clientConfirmationSource: reservation.clientConfirmationSource ?? null,
   clientConfirmationReminderSentAtIso: reservation.clientConfirmationReminderSentAtIso ?? null,
   signalPaymentReminderSentAtIso: reservation.signalPaymentReminderSentAtIso ?? null,
   createdByEmail: reservation.createdByEmail ?? null,
@@ -1628,6 +1864,7 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
       payment_amount_euro: number | string;
       admin_status: string;
       client_confirmation_status: string;
+      client_confirmation_source: string | null;
       client_confirmation_reminder_sent_at: string | null;
       signal_payment_reminder_sent_at: string | null;
       created_by_email: string | null;
@@ -1654,6 +1891,7 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
         payment_amount_euro,
         admin_status,
         client_confirmation_status,
+        client_confirmation_source,
         client_confirmation_reminder_sent_at,
         signal_payment_reminder_sent_at,
         created_by_email,
@@ -1693,6 +1931,10 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
       paymentAmountEuro: Number(row.payment_amount_euro) || 0,
       adminStatus: row.admin_status as AdminReservationStatus,
       clientConfirmationStatus: row.client_confirmation_status as ClientConfirmationStatus,
+      clientConfirmationSource:
+        row.client_confirmation_source === 'online' || row.client_confirmation_source === 'salon'
+          ? row.client_confirmation_source
+          : null,
       clientConfirmationReminderSentAtIso: row.client_confirmation_reminder_sent_at,
       signalPaymentReminderSentAtIso: row.signal_payment_reminder_sent_at,
       createdByEmail: row.created_by_email,
@@ -1826,7 +2068,10 @@ export const markReservationSignalPaymentReminderSentAt = async (
 export const updateReservationClientConfirmationStatus = async (
   reservationId: string,
   status: ClientConfirmationStatus,
+  source: ClientConfirmationSource | null = null,
 ): Promise<{ ok: true } | { ok: false; reason: 'not-found' }> => {
+  const effectiveSource = status === 'confirmed' ? source : null;
+
   if (!shouldUseDatabase()) {
     const reservation = memoryReservations.get(reservationId);
 
@@ -1835,6 +2080,7 @@ export const updateReservationClientConfirmationStatus = async (
     }
 
     reservation.clientConfirmationStatus = status;
+    reservation.clientConfirmationSource = effectiveSource;
     memoryReservations.set(reservationId, reservation);
     saveMemoryToFile();
     return { ok: true };
@@ -1846,10 +2092,11 @@ export const updateReservationClientConfirmationStatus = async (
     const updated = await db.query(
       `
       UPDATE reservations
-      SET client_confirmation_status = $2
+      SET client_confirmation_status = $2,
+          client_confirmation_source = $3
       WHERE id = $1
       `,
-      [reservationId, status],
+      [reservationId, status, effectiveSource],
     );
 
     if (updated.rowCount === 0) {
@@ -1866,6 +2113,7 @@ export const updateReservationClientConfirmationStatus = async (
       }
 
       reservation.clientConfirmationStatus = status;
+      reservation.clientConfirmationSource = effectiveSource;
       memoryReservations.set(reservationId, reservation);
       saveMemoryToFile();
       return { ok: true };
@@ -2574,6 +2822,13 @@ export const updateReservationByAdmin = async (
   const effectiveAllowClosedSchedule = options?.allowClosedSchedule === true;
   const maxConcurrent = Math.max(1, Math.floor(options?.maxConcurrentReservations ?? 1));
 
+  if (
+    !effectiveAllowClosedSchedule &&
+    exceedsClosingTime(payload.dateIso, startMinutes, payload.durationMinutes)
+  ) {
+    return { ok: false, reason: 'invalid-time' };
+  }
+
   if (!shouldUseDatabase()) {
     const reservation = memoryReservations.get(reservationId);
 
@@ -2582,11 +2837,13 @@ export const updateReservationByAdmin = async (
     }
 
     const assignedWorker = normalizeWorkerEmail(reservation.createdByEmail);
-    const blockedSlots = effectiveAllowClosedSchedule
-      ? getBlockedSlotsFromMemory(payload.dateIso, assignedWorker || undefined)
-      : getEffectiveBlockedSlotsFromMemory(payload.dateIso, assignedWorker || undefined);
+    const blockedSlots = getBlockedSlotsFromMemory(payload.dateIso, assignedWorker || undefined);
 
-    if (nextSlots.some((slot) => blockedSlots.has(slot))) {
+    if (
+      nextSlots.some((slot) => blockedSlots.has(slot)) ||
+      (!effectiveAllowClosedSchedule &&
+        hasRecurringClosureConflict(payload.dateIso, nextSlots, payload.durationMinutes))
+    ) {
       return { ok: false, reason: 'blocked-conflict' };
     }
 
@@ -2672,13 +2929,12 @@ export const updateReservationByAdmin = async (
       return { ok: false, reason: 'blocked-conflict' };
     }
 
-    if (!effectiveAllowClosedSchedule) {
-      const recurringClosedSlots = getRecurringClosedSlotsForDate(payload.dateIso);
-
-      if (nextSlots.some((slot) => recurringClosedSlots.has(slot))) {
-        await client.query('ROLLBACK');
-        return { ok: false, reason: 'blocked-conflict' };
-      }
+    if (
+      !effectiveAllowClosedSchedule &&
+      hasRecurringClosureConflict(payload.dateIso, nextSlots, payload.durationMinutes)
+    ) {
+      await client.query('ROLLBACK');
+      return { ok: false, reason: 'blocked-conflict' };
     }
 
     const adminStatus = (current.rows[0]?.admin_status ?? 'pending') as AdminReservationStatus;
@@ -2787,11 +3043,13 @@ export const updateReservationByAdmin = async (
       }
 
       const assignedWorker = normalizeWorkerEmail(reservation.createdByEmail);
-      const blockedSlots = effectiveAllowClosedSchedule
-        ? getBlockedSlotsFromMemory(payload.dateIso, assignedWorker || undefined)
-        : getEffectiveBlockedSlotsFromMemory(payload.dateIso, assignedWorker || undefined);
+      const blockedSlots = getBlockedSlotsFromMemory(payload.dateIso, assignedWorker || undefined);
 
-      if (nextSlots.some((slot) => blockedSlots.has(slot))) {
+      if (
+        nextSlots.some((slot) => blockedSlots.has(slot)) ||
+        (!effectiveAllowClosedSchedule &&
+          hasRecurringClosureConflict(payload.dateIso, nextSlots, payload.durationMinutes))
+      ) {
         return { ok: false, reason: 'blocked-conflict' };
       }
 
@@ -3085,6 +3343,8 @@ export const createBlockedPeriodForAdmin = async (payload: {
   if (!shouldUseDatabase()) {
     return createBlockedPeriodInMemory(payload);
   }
+
+  await refreshOpenDaysCacheIfStale();
 
   const startMinutes = toMinutes(payload.startTime);
   const endMinutes = toMinutes(payload.endTime);
