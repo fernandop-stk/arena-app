@@ -1,0 +1,40 @@
+name: Keep Render awake
+
+# Render (plan free) apaga el servicio tras 15 min sin tráfico. Este ping mantiene la app
+# despierta solo en horario útil: 08:00–23:50 (hora de Madrid). De noche se deja dormir
+# para ahorrar horas del plan gratuito.
+on:
+  schedule:
+    # Cada 10 min entre 06:00 y 22:59 UTC (cubre 08:00–23:50 Madrid tanto en horario de
+    # verano UTC+2 como de invierno UTC+1). El filtro de hora local está en el paso "Ping".
+    - cron: '*/10 6-22 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping /api/health (solo de 08:00 a 23:50 hora de Madrid)
+        env:
+          HEALTH_URL: https://www.arenahairstudio.com/api/health
+        run: |
+          set -euo pipefail
+          now="$(TZ=Europe/Madrid date +%H%M)"
+          echo "Hora Madrid: ${now:0:2}:${now:2:2}"
+
+          if [ "$now" -lt 0800 ] || [ "$now" -gt 2350 ]; then
+            echo "Fuera de horario (08:00–23:50). No se hace ping."
+            exit 0
+          fi
+
+          # El arranque en frío de Render puede tardar ~1 min: se reintenta con margen.
+          curl -fsS \
+            --max-time 120 \
+            --retry 3 --retry-delay 20 --retry-all-errors \
+            -H 'User-Agent: arena-app-keepalive (GitHub Actions)' \
+            "$HEALTH_URL"
+          echo
+          echo "Ping OK."
