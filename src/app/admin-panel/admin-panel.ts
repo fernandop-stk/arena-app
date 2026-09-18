@@ -623,6 +623,11 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly isLoadingReservations = signal(false);
   protected readonly showAgendaCalendarModal = signal(false);
   protected readonly agendaCalendarMonthIso = signal('');
+  protected readonly agendaCalendarSearch = signal('');
+  protected readonly agendaCalendarSearchOpen = signal(false);
+  protected readonly agendaCalendarHighlightedReservationId = signal('');
+  protected readonly agendaCalendarHighlightedDateIso = signal('');
+  private agendaCalendarHighlightTimer: ReturnType<typeof setTimeout> | null = null;
   protected readonly showAgendaWeekScheduleModal = signal(false);
   protected readonly agendaWeekStartIso = signal('');
   protected readonly agendaAlerts = signal<AgendaAlertItem[]>([]);
@@ -1565,7 +1570,84 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected closeAgendaCalendarModal(): void {
     this.showAgendaCalendarModal.set(false);
+    this.clearAgendaCalendarSearch();
     this.closeAgendaDayScheduleModal();
+  }
+
+  protected onAgendaCalendarSearchInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.agendaCalendarSearch.set(target.value);
+    this.agendaCalendarSearchOpen.set(true);
+  }
+
+  protected openAgendaCalendarSearchResults(): void {
+    if (this.agendaCalendarSearch().trim()) {
+      this.agendaCalendarSearchOpen.set(true);
+    }
+  }
+
+  protected closeAgendaCalendarSearchResults(): void {
+    this.agendaCalendarSearchOpen.set(false);
+  }
+
+  protected clearAgendaCalendarSearch(): void {
+    this.agendaCalendarSearch.set('');
+    this.agendaCalendarSearchOpen.set(false);
+    this.clearAgendaCalendarHighlight();
+  }
+
+  protected getAgendaCalendarSearchResults(): AdminReservationItem[] {
+    const query = this.normalizeSearchText(this.agendaCalendarSearch());
+
+    if (!query) {
+      return [];
+    }
+
+    return this.getAgendaCalendarReservations()
+      .filter((reservation) =>
+        this.normalizeSearchText(reservation.customerName ?? '').includes(query),
+      )
+      .sort((a, b) => {
+        const byDate = a.dateIso.localeCompare(b.dateIso);
+        return byDate !== 0 ? byDate : a.startTime.localeCompare(b.startTime);
+      })
+      .slice(0, 12);
+  }
+
+  protected getAgendaCalendarHighlightedReservation(): AdminReservationItem | null {
+    const id = this.agendaCalendarHighlightedReservationId();
+
+    if (!id) {
+      return null;
+    }
+
+    return this.reservations().find((reservation) => reservation.id === id) ?? null;
+  }
+
+  // Resalta la cita elegida y su casilla del mes durante 15 s; salta al mes de la cita si hace falta.
+  protected selectAgendaCalendarSearchResult(reservation: AdminReservationItem): void {
+    this.agendaCalendarMonthIso.set(reservation.dateIso.slice(0, 7));
+    this.agendaCalendarHighlightedReservationId.set(reservation.id);
+    this.agendaCalendarHighlightedDateIso.set(reservation.dateIso);
+    this.agendaCalendarSearchOpen.set(false);
+
+    if (this.agendaCalendarHighlightTimer) {
+      clearTimeout(this.agendaCalendarHighlightTimer);
+    }
+
+    this.agendaCalendarHighlightTimer = setTimeout(() => {
+      this.clearAgendaCalendarHighlight();
+    }, 15_000);
+  }
+
+  protected clearAgendaCalendarHighlight(): void {
+    if (this.agendaCalendarHighlightTimer) {
+      clearTimeout(this.agendaCalendarHighlightTimer);
+      this.agendaCalendarHighlightTimer = null;
+    }
+
+    this.agendaCalendarHighlightedReservationId.set('');
+    this.agendaCalendarHighlightedDateIso.set('');
   }
 
   protected closeAgendaDayScheduleModal(): void {
@@ -9210,6 +9292,10 @@ export class AdminPanelComponent implements OnDestroy {
   ngOnDestroy(): void {
     if (this.inactivityTimer) {
       clearInterval(this.inactivityTimer);
+    }
+
+    if (this.agendaCalendarHighlightTimer) {
+      clearTimeout(this.agendaCalendarHighlightTimer);
     }
 
     if (typeof window !== 'undefined') {

@@ -312,7 +312,42 @@
                     </svg>
                   </button>
                     </div>
+
+                    <div class="admin-panel--container__agenda-search">
+                        <div class="admin-panel--container__agenda-search-field">
+                            <input class="admin-panel--container__input admin-panel--container__agenda-search-input" type="search" placeholder="Buscar cita por nombre de clienta" autocomplete="off" aria-label="Buscar cita por nombre de clienta" [value]="agendaCalendarSearch()" (input)="onAgendaCalendarSearchInput($event)"
+                                (focus)="openAgendaCalendarSearchResults()" (keydown.escape)="closeAgendaCalendarSearchResults()" /> @if (agendaCalendarSearch()) {
+                            <button type="button" class="admin-panel--container__agenda-search-clear" aria-label="Limpiar búsqueda" (click)="clearAgendaCalendarSearch()">×</button> }
+                        </div>
+
+                        @if (agendaCalendarSearchOpen() && agendaCalendarSearch().trim()) {
+                        <ul class="admin-panel--container__agenda-search-results" role="listbox">
+                            @for (reservation of getAgendaCalendarSearchResults(); track reservation.id) {
+                            <li>
+                                <button type="button" role="option" class="admin-panel--container__agenda-search-result" [class.admin-panel--container__agenda-search-result--active]="reservation.id === agendaCalendarHighlightedReservationId()" (click)="selectAgendaCalendarSearchResult(reservation)">
+                                    <strong class="admin-panel--container__agenda-search-result-name">{{ reservation.customerName }}</strong>
+                                    <span class="admin-panel--container__agenda-search-result-meta">{{ formatDate(reservation.dateIso) }} · {{ reservation.startTime }}</span>
+                                    <span class="admin-panel--container__agenda-search-result-meta">{{ reservation.appointmentTypeName }}</span>
+                                </button>
+                            </li>
+                            } @empty {
+                            <li class="admin-panel--container__agenda-search-empty">No hay citas con ese nombre.</li>
+                            }
+                        </ul>
+                        }
+                    </div>
                 </div>
+
+                @if (getAgendaCalendarHighlightedReservation(); as highlighted) {
+                <div class="admin-panel--container__agenda-search-selected" role="status">
+                    <span class="admin-panel--container__agenda-search-selected-dot" aria-hidden="true"></span>
+                    <span class="admin-panel--container__agenda-search-selected-text">
+                        <strong>{{ highlighted.customerName }}</strong> · {{ formatDate(highlighted.dateIso) }} {{ highlighted.startTime }} · {{ highlighted.appointmentTypeName }}
+                    </span>
+                    <button type="button" class="admin-panel--container__agenda-search-selected-open" (click)="openAgendaDaySchedule(highlighted.dateIso)">Abrir día</button>
+                    <button type="button" class="admin-panel--container__agenda-search-clear" aria-label="Quitar resaltado" (click)="clearAgendaCalendarHighlight()">×</button>
+                </div>
+                }
 
                 <div class="admin-panel--container__calendar-weekdays">
                     @for (dayName of ['L', 'M', 'X', 'J', 'V', 'S', 'D']; track dayName) {
@@ -322,7 +357,8 @@
                 <div class="admin-panel--container__calendar-grid">
                     @for (day of getAgendaCalendarDays(); track day.dateIso) {
                     <button type="button" class="admin-panel--container__calendar-day admin-panel--container__calendar-day--agenda" [class.admin-panel--container__calendar-day--outside]="!day.isCurrentMonth" [class.admin-panel--container__calendar-day--today]="day.isToday"
-                        [class.admin-panel--container__calendar-day--closed]="day.isClosedDay" [style.filter]="day.isPast ? 'brightness(0.72)' : null" (click)="openAgendaDaySchedule(day.dateIso)">
+                        [class.admin-panel--container__calendar-day--closed]="day.isClosedDay" [class.admin-panel--container__calendar-day--highlighted]="day.dateIso === agendaCalendarHighlightedDateIso()" [style.filter]="day.isPast ? 'brightness(0.72)' : null"
+                        (click)="openAgendaDaySchedule(day.dateIso)">
                     <span class="admin-panel--container__agenda-day-number-wrap">
                       <span class="admin-panel--container__calendar-day-number">{{
                         day.dayNumber
