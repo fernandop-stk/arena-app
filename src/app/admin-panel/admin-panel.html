@@ -753,6 +753,21 @@
         </div>
         }
 
+        <!-- Popup de error de los modales de agenda (no cierra el modal ni borra lo escrito) -->
+        @if (agendaFormErrorPopup()) {
+        <div class="admin-panel--container__modal-backdrop admin-panel--container__modal-backdrop--error" (click)="closeAgendaFormErrorPopup()">
+            <div class="admin-panel--container__modal admin-panel--container__modal--error-popup" role="alertdialog" aria-live="assertive" (click)="$event.stopPropagation()">
+                <p class="admin-panel--container__error-popup-title">No se pudo completar la acción</p>
+                <p class="admin-panel--container__error-popup-text">{{ agendaFormErrorPopup() }}</p>
+                <div class="admin-panel--container__modal-actions">
+                    <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--accept" (click)="closeAgendaFormErrorPopup()">
+                        Entendido, corregir
+                    </button>
+                </div>
+            </div>
+        </div>
+        }
+
         <!-- Modal de confirmación de reserva rápida -->
         @if (showQuickReserveModal()) {
         <div class="admin-panel--container__modal-backdrop" (click)="cancelQuickReserve()">
@@ -872,6 +887,38 @@
                   </span>
                 </label>
 
+                    <div class="admin-panel--container__block-form admin-panel--container__block-form--compact admin-panel--container__service-extras">
+                        <p class="admin-panel--container__hint">
+                            @if (isAgendaManualReserveInsidePack()) { Tratamientos dentro del pack (precio reducido, editable) } @else { Tratamientos adicionales (precio editable) }
+                        </p>
+                        <div class="admin-panel--container__service-extras-add">
+                            <select class="admin-panel--container__input" [value]="agendaManualReserveExtraTreatmentId()" (change)="onAgendaManualReserveExtraTreatmentChange($event)">
+                              @for (treatment of getExtraTreatmentOptions(); track treatment.id) {
+                                <option [value]="treatment.id">{{ getExtraTreatmentOptionLabel(treatment, isAgendaManualReserveInsidePack()) }}</option>
+                              }
+                            </select>
+                            <button type="button" class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact" (click)="addAgendaManualReserveServiceLine()">
+                              Añadir
+                            </button>
+                        </div>
+                        @if (agendaManualReserveServiceLines().length > 0) {
+                        <div class="admin-panel--container__payment-line-list">
+                            @for (line of agendaManualReserveServiceLines(); track line.id) {
+                            <div class="admin-panel--container__service-extra-line">
+                                <span class="admin-panel--container__service-extra-name">{{ line.name }} · {{ line.durationMinutes }} min</span>
+                                <input class="admin-panel--container__input admin-panel--container__service-extra-price" type="number" min="0" step="0.01" [value]="line.unitPriceEuro" (change)="updateAgendaManualReserveServiceLinePrice(line.id, $any($event.target).value)" aria-label="Precio"
+                                />
+                                <span>€</span>
+                                <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--reject admin-panel--container__service-extra-remove" (click)="removeAgendaManualReserveServiceLine(line.id)" title="Quitar tratamiento">🗑️</button>
+                            </div>
+                            }
+                        </div>
+                        <p class="admin-panel--container__reservation-text">
+                            Total servicios: <strong>{{ getAgendaManualReserveServicesTotal() | number: '1.2-2' }} €</strong>
+                        </p>
+                        }
+                    </div>
+
                     <label class="admin-panel--container__label">
                   <input
                     type="checkbox"
@@ -985,7 +1032,21 @@
                   </label>
                     </div>
 
-                    @if (agendaManualReserveError()) {
+                    <label class="admin-panel--container__label">
+                  Comentario para la ficha de la clienta (opcional)
+                  <textarea
+                    class="admin-panel--container__input admin-panel--container__textarea"
+                    rows="3"
+                    maxlength="500"
+                    placeholder="Se guardará en la ficha con la fecha y la cita de ese día"
+                    [value]="agendaManualReserveClientComment()"
+                    (input)="agendaManualReserveClientComment.set($any($event.target).value)"
+                  ></textarea>
+                </label> @if (agendaManualReserveClientComment().trim() && agendaManualReserveClientMode() === 'manual') {
+                    <p class="admin-panel--container__hint admin-panel--container__hint--compact">
+                        Solo se guardará en la ficha si la clienta ya tiene una (se busca por email o teléfono).
+                    </p>
+                    } @if (agendaManualReserveError()) {
                     <p class="admin-panel--container__error">{{ agendaManualReserveError() }}</p>
                     }
                 </div>
@@ -1096,10 +1157,13 @@
                     ✏️ Modificar
                   </button>
                     <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--accept" [disabled]="
-                      agendaDetailReservation()!.adminStatus === 'accepted' ||
+                      (agendaDetailReservation()!.adminStatus === 'accepted' &&
+                        !canAddSignalToConfirmedAgendaReservation(agendaDetailReservation()!)) ||
                       actionLoadingId() !== ''
                     " (click)="openAgendaConfirmReservationModal()">
-                    @if (agendaDetailReservation()!.adminStatus === 'accepted') {
+                    @if (canAddSignalToConfirmedAgendaReservation(agendaDetailReservation()!)) {
+                      Cita confirmada · Añadir señal
+                    } @else if (agendaDetailReservation()!.adminStatus === 'accepted') {
                       Cita confirmada
                     } @else {
                       Confirmar cita
@@ -1244,7 +1308,39 @@
                       @for (duration of agendaEditDurationOptions(); track duration) {
                         <option [value]="duration">{{ formatDuration(duration) }}</option>
                       }
-                    </select> } @if (agendaEditSection() === 'trabajador') {
+                    </select>
+
+                    <div class="admin-panel--container__block-form admin-panel--container__block-form--compact admin-panel--container__service-extras">
+                        <p class="admin-panel--container__hint">
+                            @if (isAgendaEditInsidePack()) { Tratamientos dentro del pack (precio reducido, editable) } @else { Tratamientos adicionales (precio editable) }
+                        </p>
+                        <div class="admin-panel--container__service-extras-add">
+                            <select class="admin-panel--container__input" [value]="agendaEditDraftExtraTreatmentId()" (change)="onAgendaEditDraftExtraTreatmentChange($event)">
+                              @for (treatment of getExtraTreatmentOptions(); track treatment.id) {
+                                <option [value]="treatment.id">{{ getExtraTreatmentOptionLabel(treatment, isAgendaEditInsidePack()) }}</option>
+                              }
+                            </select>
+                            <button type="button" class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact" (click)="addAgendaEditDraftExtraTreatment()">
+                              Añadir
+                            </button>
+                        </div>
+                        @if (agendaEditDraftExtraServiceLines().length > 0) {
+                        <div class="admin-panel--container__payment-line-list">
+                            @for (line of agendaEditDraftExtraServiceLines(); track line.id) {
+                            <div class="admin-panel--container__service-extra-line">
+                                <span class="admin-panel--container__service-extra-name">{{ line.name }} · {{ line.durationMinutes }} min</span>
+                                <input class="admin-panel--container__input admin-panel--container__service-extra-price" type="number" min="0" step="0.01" [value]="line.unitPriceEuro" (change)="updateAgendaEditDraftExtraTreatmentPrice(line.id, $any($event.target).value)" aria-label="Precio"
+                                />
+                                <span>€</span>
+                                <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--reject admin-panel--container__service-extra-remove" (click)="removeAgendaEditDraftExtraTreatment(line.id)" title="Quitar tratamiento">🗑️</button>
+                            </div>
+                            }
+                        </div>
+                        }
+                        <p class="admin-panel--container__reservation-text">
+                            Total servicios: <strong>{{ getAgendaEditServicesTotal() | number: '1.2-2' }} €</strong>
+                        </p>
+                    </div> } @if (agendaEditSection() === 'trabajador') {
                     <label class="admin-panel--container__label" for="agendaEditWorker">
                       Trabajador asignado
                     </label>
@@ -1262,7 +1358,15 @@
                     <p class="admin-panel--container__hint admin-panel--container__hint--compact" style="margin-top: 0.35rem; text-align: right">
                         {{ agendaEditDraftAdditionalComments().length }}/500
                     </p>
-                    }
+
+                    <label class="admin-panel--container__label" for="agendaEditClientComment">
+                      Comentario para la ficha de la clienta
+                    </label>
+                    <textarea id="agendaEditClientComment" class="admin-panel--container__input" rows="3" maxlength="500" [value]="agendaEditDraftClientComment()" (input)="onAgendaEditDraftClientCommentInput($event)" placeholder="Al guardar se añade a la ficha con la fecha y la cita de ese día"></textarea>                    @if (!getAgendaDetailClientCardId()) {
+                    <p class="admin-panel--container__hint admin-panel--container__hint--compact">
+                        Esta clienta no tiene ficha: el comentario no se podrá guardar en ella.
+                    </p>
+                    } }
                 </div>
 
                 <div class="admin-panel--container__agenda-detail-actions">
@@ -2237,7 +2341,7 @@
                 </label>
 
                 <label class="admin-panel--container__label">
-                  Fecha de nacimiento
+                  Fecha de nacimiento (opcional)
                   <input
                     class="admin-panel--container__input"
                     type="date"
@@ -2473,14 +2577,33 @@
                         Guardar cambios de ficha
                       </button>
                     </div>
-                  }
 
-                  @if (isClientDetailTab('aviso')) {
                     <div
                       class="admin-panel--container__block-form admin-panel--container__block-form--compact admin-panel--container__client-modal-card"
                     >
-                      <p class="admin-panel--container__hint">Aviso de la ficha</p>
-                      <label class="admin-panel--container__client-warning-toggle">
+                      <p class="admin-panel--container__hint">Comentarios de citas</p>
+                      @if (getClientAppointmentNotes(card).length === 0) {
+                        <p class="admin-panel--container__hint">
+                          Todavía no hay comentarios guardados desde las citas.
+                        </p>
+                      } @else {
+                        <ul class="admin-panel--container__client-appointment-notes">
+                          @for (note of getClientAppointmentNotes(card); track note.id) {
+                            <li class="admin-panel--container__client-appointment-note">
+                              <span class="admin-panel--container__client-appointment-note-meta">
+                                {{ getClientAppointmentNoteLabel(note) }}
+                                · {{ getWorkerDisplayName(note.createdByEmail) }}
+                              </span>
+                    <span class="admin-panel--container__client-appointment-note-text">{{ note.text }}</span>
+                    </li>
+                    }
+                    </ul>
+                    }
+                </div>
+                } @if (isClientDetailTab('aviso')) {
+                <div class="admin-panel--container__block-form admin-panel--container__block-form--compact admin-panel--container__client-modal-card">
+                    <p class="admin-panel--container__hint">Aviso de la ficha</p>
+                    <label class="admin-panel--container__client-warning-toggle">
                         <input
                           type="checkbox"
                           [checked]="clientEditHasAviso()"
@@ -3469,36 +3592,52 @@
         <h2 class="admin-panel--container__subtitle">Cierre de caja</h2>
 
         <div class="admin-panel--container__employee-subtabs">
-          <button
-            type="button"
-            class="admin-panel--container__employee-subtab"
-            [class.admin-panel--container__employee-subtab--active]="
-              cierreManagementTab() === 'registro'
-            "
-            (click)="setCierreManagementTab('registro')"
-          >
-            Registro
-          </button>
-          <button
-            type="button"
-            class="admin-panel--container__employee-subtab"
-            [class.admin-panel--container__employee-subtab--active]="
-              cierreManagementTab() === 'historial'
-            "
-            (click)="setCierreManagementTab('historial')"
-          >
-            Historial
-          </button>
-          <button
-            type="button"
-            class="admin-panel--container__employee-subtab"
-            [class.admin-panel--container__employee-subtab--active]="
-              cierreManagementTab() === 'estadisticas'
-            "
-            (click)="setCierreManagementTab('estadisticas')"
-          >
-            Estadísticas
-          </button>
+          @if (canAccessCierreManagementTab('registro')) {
+            <button
+              type="button"
+              class="admin-panel--container__employee-subtab"
+              [class.admin-panel--container__employee-subtab--active]="
+                cierreManagementTab() === 'registro'
+              "
+              (click)="setCierreManagementTab('registro')"
+            >
+              Registro
+            </button>
+            <button
+              type="button"
+              class="admin-panel--container__employee-subtab"
+              [class.admin-panel--container__employee-subtab--active]="
+                cierreManagementTab() === 'historial'
+              "
+              (click)="setCierreManagementTab('historial')"
+            >
+              Historial
+            </button>
+          }
+          @if (canAccessCierreManagementTab('estadisticas')) {
+            <button
+              type="button"
+              class="admin-panel--container__employee-subtab"
+              [class.admin-panel--container__employee-subtab--active]="
+                cierreManagementTab() === 'estadisticas'
+              "
+              (click)="setCierreManagementTab('estadisticas')"
+            >
+              Estadísticas
+            </button>
+          }
+          @if (canAccessCierreManagementTab('comparativa')) {
+            <button
+              type="button"
+              class="admin-panel--container__employee-subtab"
+              [class.admin-panel--container__employee-subtab--active]="
+                cierreManagementTab() === 'comparativa'
+              "
+              (click)="setCierreManagementTab('comparativa')"
+            >
+              Comparativa
+            </button>
+          }
         </div>
 
         @if (cierreError()) {
@@ -3508,7 +3647,7 @@
           <p class="admin-panel--container__success-message">{{ cierreMessage() }}</p>
         }
 
-        @if (cierreManagementTab() === 'registro') {
+        @if (cierreManagementTab() === 'registro' && canAccessCierreManagementTab('registro')) {
           <!-- Formulario de registro -->
           <div class="admin-panel--container__block-form">
             <h3 class="admin-panel--container__block-form-title">Registrar cierre del día</h3>
@@ -3701,7 +3840,7 @@
               </span>
                                     </div>
                             </div>
-                            } @if (cierreManagementTab() === 'historial') {
+                            } @if (cierreManagementTab() === 'historial' && canAccessCierreManagementTab('historial')) {
                             <!-- Historial de cierres -->
                             <div class="admin-panel--container__section admin-panel--container__cierre-card">
                                 <h3 class="admin-panel--container__block-form-title">Historial de cierres</h3>
@@ -4119,7 +4258,7 @@
           }
         }
 
-        @if (cierreManagementTab() === 'estadisticas') {
+        @if (cierreManagementTab() === 'estadisticas' && canAccessCierreManagementTab('estadisticas')) {
           <div class="admin-panel--container__section admin-panel--container__cierre-card">
             <h3 class="admin-panel--container__block-form-title">Estadísticas de caja</h3>
             <p class="admin-panel--container__hint">
@@ -4274,6 +4413,149 @@
                                     </div>
                                     }
                                 </div>
+                            </div>
+                            } @if (cierreManagementTab() === 'comparativa' && canAccessCierreManagementTab('comparativa')) { @let cierreComparePeriods = getCierreComparePeriods(); @let cierreCompareRows = getCierreCompareRows(cierreComparePeriods.base, cierreComparePeriods.other);
+                            <div class="admin-panel--container__section admin-panel--container__cierre-card">
+                                <h3 class="admin-panel--container__block-form-title">Comparativa de caja</h3>
+                                <p class="admin-panel--container__hint">
+                                    Elige un día, semana, mes, año o rango personalizado y compáralo con el periodo anterior, con el mismo periodo del año pasado o con otro periodo que elijas.
+                                </p>
+
+                                <div class="admin-panel--container__client-stats-filters admin-panel--container__client-stats-filters--compare">
+                                    <label class="admin-panel--container__label">
+                                        Tipo de periodo
+                                        <span class="admin-panel--container__time-select-wrap">
+                                            <select
+                                                class="admin-panel--container__input admin-panel--container__time-select"
+                                                [value]="cierreCompareMode()"
+                                                (change)="onCierreCompareModeChange($event)"
+                                            >
+                                                <option value="dia">Día suelto</option>
+                                                <option value="semana">Semana</option>
+                                                <option value="mes">Mes</option>
+                                                <option value="anio">Año</option>
+                                                <option value="personalizado">Rango personalizado</option>
+                                            </select>
+                                        </span>
+                                    </label>
+
+                                    <label class="admin-panel--container__label">
+                                        Comparar con
+                                        <span class="admin-panel--container__time-select-wrap">
+                                            <select
+                                                class="admin-panel--container__input admin-panel--container__time-select"
+                                                [value]="cierreCompareTarget()"
+                                                (change)="onCierreCompareTargetChange($event)"
+                                            >
+                                                <option value="anterior">Periodo anterior</option>
+                                                <option value="anio_anterior">Mismo periodo del año pasado</option>
+                                                <option value="personalizado">Otro periodo que yo elija</option>
+                                            </select>
+                                        </span>
+                                    </label>
+                                </div>
+
+                                <div class="admin-panel--container__cierre-compare-periods">
+                                    <div class="admin-panel--container__cierre-compare-period">
+                                        <p class="admin-panel--container__employee-history-title">Periodo A</p>
+                                        <ng-container *ngTemplateOutlet="cierreComparePeriodInputs; context: { which: 'base', anchor: cierreCompareBase() }"></ng-container>
+                                    </div>
+
+                                    @if (cierreCompareTarget() === 'personalizado') {
+                                    <div class="admin-panel--container__cierre-compare-period">
+                                        <p class="admin-panel--container__employee-history-title">Periodo B</p>
+                                        <ng-container *ngTemplateOutlet="cierreComparePeriodInputs; context: { which: 'other', anchor: cierreCompareOther() }"></ng-container>
+                                    </div>
+                                    }
+                                </div>
+
+                                <ng-template #cierreComparePeriodInputs let-which="which" let-anchor="anchor">
+                                    @switch (cierreCompareMode()) { @case ('dia') {
+                                    <label class="admin-panel--container__label">
+                                        Día
+                                        <input class="admin-panel--container__input" type="date" lang="es-ES" [value]="anchor.dateIso" (input)="onCierreCompareAnchorInput(which, 'dateIso', $event)" />
+                                    </label> } @case ('semana') {
+                                    <label class="admin-panel--container__label">
+                                        Cualquier día de la semana
+                                        <input class="admin-panel--container__input" type="date" lang="es-ES" [value]="anchor.dateIso" (input)="onCierreCompareAnchorInput(which, 'dateIso', $event)" />
+                                    </label> } @case ('mes') {
+                                    <label class="admin-panel--container__label">
+                                        Mes
+                                        <input class="admin-panel--container__input" type="month" lang="es-ES" [value]="anchor.monthIso" (input)="onCierreCompareAnchorInput(which, 'monthIso', $event)" />
+                                    </label> } @case ('anio') {
+                                    <label class="admin-panel--container__label">
+                                        Año
+                                        <input class="admin-panel--container__input" type="number" min="2000" max="2100" step="1" [value]="anchor.year" (input)="onCierreCompareAnchorInput(which, 'year', $event)" />
+                                    </label> } @default {
+                                    <div class="admin-panel--container__client-stats-range">
+                                        <label class="admin-panel--container__label">
+                                            Desde
+                                            <input class="admin-panel--container__input" type="date" lang="es-ES" [value]="anchor.startIso" (input)="onCierreCompareAnchorInput(which, 'startIso', $event)" />
+                                        </label>
+                                        <label class="admin-panel--container__label">
+                                            Hasta
+                                            <input class="admin-panel--container__input" type="date" lang="es-ES" [value]="anchor.endIso" (input)="onCierreCompareAnchorInput(which, 'endIso', $event)" />
+                                        </label>
+                                    </div>
+                                    } }
+                                </ng-template>
+
+                                @if (!cierreComparePeriods.base || !cierreComparePeriods.other) {
+                                <p class="admin-panel--container__hint">
+                                    Completa las fechas de ambos periodos para ver la comparativa.
+                                </p>
+                                } @else {
+                                <div class="admin-panel--container__employee-stats-grid">
+                                    <span class="admin-panel--container__employee-stat-chip">
+                                        A · {{ cierreComparePeriods.base.label }} · {{ cierreComparePeriods.base.total | number: '1.2-2' }} € · {{ cierreComparePeriods.base.cierresCount }} cierres
+                                    </span>
+                                    <span class="admin-panel--container__employee-stat-chip">
+                                        B · {{ cierreComparePeriods.other.label }} · {{ cierreComparePeriods.other.total | number: '1.2-2' }} € · {{ cierreComparePeriods.other.cierresCount }} cierres
+                                    </span>
+                                    <span class="admin-panel--container__employee-stat-chip">
+                                        {{ getCierreCompareModeLabel() }} · {{ getCierreCompareTargetLabel() }}
+                                    </span>
+                                </div>
+
+                                <div class="admin-panel--container__table-wrapper admin-panel--container__cierre-compare-table-wrapper">
+                                    <table class="admin-panel--container__table admin-panel--container__cierre-compare-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Concepto</th>
+                                                <th>A · {{ cierreComparePeriods.base.label }}</th>
+                                                <th>B · {{ cierreComparePeriods.other.label }}</th>
+                                                <th>Diferencia (A − B)</th>
+                                                <th>Variación</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @for (row of cierreCompareRows; track row.name) {
+                                            <tr [class.admin-panel--container__cierre-compare-row--total]="row.name === 'Total'">
+                                                <td>{{ row.name }}</td>
+                                                <td>
+                                                    <div class="admin-panel--container__cierre-compare-cell">
+                                                        <strong>{{ row.baseAmount | number: '1.2-2' }} €</strong>
+                                                        <span class="admin-panel--container__cierre-compare-bar admin-panel--container__cierre-compare-bar--base" [style.width.%]="getCierreCompareBarPercent(row.baseAmount, row.baseAmount, row.otherAmount)"></span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div class="admin-panel--container__cierre-compare-cell">
+                                                        <strong>{{ row.otherAmount | number: '1.2-2' }} €</strong>
+                                                        <span class="admin-panel--container__cierre-compare-bar admin-panel--container__cierre-compare-bar--other" [style.width.%]="getCierreCompareBarPercent(row.otherAmount, row.baseAmount, row.otherAmount)"></span>
+                                                    </div>
+                                                </td>
+                                                <td class="admin-panel--container__cierre-compare-diff" [class.admin-panel--container__cierre-compare-diff--up]="row.diffAmount > 0" [class.admin-panel--container__cierre-compare-diff--down]="row.diffAmount < 0">
+                                                    {{ row.diffAmount > 0 ? '+' : '' }}{{ row.diffAmount | number: '1.2-2' }} €
+                                                </td>
+                                                <td class="admin-panel--container__cierre-compare-diff" [class.admin-panel--container__cierre-compare-diff--up]="row.diffAmount > 0" [class.admin-panel--container__cierre-compare-diff--down]="row.diffAmount < 0">
+                                                    @if (row.diffPercent === null) { — } @else { {{ row.diffPercent > 0 ? '+' : '' }}{{ row.diffPercent | number: '1.0-1' }} % }
+                                                </td>
+                                            </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                                }
                             </div>
                             } } @if (activeTab() === 'estadisticas') {
                             <h2 class="admin-panel--container__subtitle">Estadísticas de packs</h2>
@@ -5303,6 +5585,37 @@
                                             <p class="admin-panel--container__error">{{ cobroReservationStockError() }}</p>
                                             }
                                         </div>
+
+                                        <div class="admin-panel--container__block-form admin-panel--container__block-form--compact admin-panel--container__service-extras" style="margin-top: 0.75rem">
+                                            <p class="admin-panel--container__hint">
+                                                @if (isCobroReservationInsidePack()) { Añadir tratamiento dentro del pack (precio reducido, editable) } @else { Añadir tratamiento (precio editable) }
+                                            </p>
+                                            @if (getCobroReservationExtraTreatmentLines(reservation).length > 0) {
+                                            <div class="admin-panel--container__payment-line-list">
+                                                @for (line of getCobroReservationExtraTreatmentLines(reservation); track line.id) {
+                                                <div class="admin-panel--container__service-extra-line">
+                                                    <span class="admin-panel--container__service-extra-name">{{ line.name }}</span>
+                                                    <strong>{{ (line.unitPriceEuro * line.quantity) | number: '1.2-2' }} €</strong>
+                                                    <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--reject admin-panel--container__service-extra-remove" [disabled]="cobroReservationTreatmentLoading()" (click)="removeTreatmentFromPaymentReservation(line.id)"
+                                                        title="Quitar tratamiento">🗑️</button>
+                                                </div>
+                                                }
+                                            </div>
+                                            }
+                                            <div class="admin-panel--container__service-extras-add">
+                                                <select class="admin-panel--container__input" [value]="cobroReservationTreatmentId()" (change)="onCobroReservationTreatmentChange($event)">
+                                                  @for (treatment of getExtraTreatmentOptions(); track treatment.id) {
+                                                    <option [value]="treatment.id">{{ getExtraTreatmentOptionLabel(treatment, isCobroReservationInsidePack()) }}</option>
+                                                  }
+                                                </select>
+                                                <input class="admin-panel--container__input admin-panel--container__service-extra-price" type="number" min="0" step="0.01" [value]="cobroReservationTreatmentPrice()" (input)="onCobroReservationTreatmentPriceInput($event)" aria-label="Precio del tratamiento"
+                                                />
+                                                <span>€</span>
+                                                <button type="button" class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact" [disabled]="cobroReservationTreatmentLoading()" (click)="addTreatmentToPaymentReservation()">
+                                                    {{ cobroReservationTreatmentLoading() ? 'Guardando...' : 'Añadir' }}
+                                                </button>
+                                            </div>
+                                        </div>
                                         }
 
                                         <div class="admin-panel--container__cobro-summary" style="margin: 1rem 0">
@@ -5391,6 +5704,11 @@
                                             </p>
                                         </div>
 
+                                        <label class="admin-panel--container__label" style="margin-top: 0.75rem; display: grid">
+                                            Comentario para la ficha de la clienta (opcional)
+                                            <textarea class="admin-panel--container__input admin-panel--container__textarea" rows="3" maxlength="500" [disabled]="paymentMethodReservation()?.paymentReceived" [value]="cobroReservationClientComment()" (input)="onCobroReservationClientCommentInput($event)" placeholder="Al confirmar se añade a la ficha con la fecha y la cita de ese día"></textarea>
+                                        </label>
+
                                         <div class="admin-panel--container__modal-actions">
                                             <button type="button" class="admin-panel--container__button admin-panel--container__button--secondary" (click)="closePaymentMethodModal()">
             Cancelar
@@ -5461,7 +5779,9 @@
                                 <div class="admin-panel--container__modal-backdrop" (click)="closeSenalModal()">
                                     <section class="admin-panel--container__modal admin-panel--container__modal--compact" role="dialog" aria-modal="true" aria-label="Señal de reserva" (click)="$event.stopPropagation()">
                                         <div class="admin-panel--container__modal-head">
-                                            <h2 class="admin-panel--container__modal-title">Señal de reserva</h2>
+                                            <h2 class="admin-panel--container__modal-title">
+                                                {{ isSenalModalForConfirmedReservation() ? 'Registrar señal' : 'Señal de reserva' }}
+                                            </h2>
                                             <button type="button" class="admin-panel--container__modal-close" (click)="closeSenalModal()" aria-label="Cerrar">
             ×
           </button>
@@ -5486,12 +5806,12 @@
               senalPaymentMethod() === 'bizum'
             " (click)="senalPaymentMethod.set('bizum')">
             📱 Bizum
-          </button>
+          </button> @if (!isSenalModalForConfirmedReservation()) {
                                             <button type="button" class="admin-panel--container__payment-option admin-panel--container__payment-option--neutral" [class.admin-panel--container__payment-option--selected]="
               senalPaymentMethod() === 'sin_senal'
             " (click)="senalPaymentMethod.set('sin_senal')">
             Sin señal
-          </button>
+          </button> }
                                         </div>
 
                                         @if (senalError()) {
@@ -5506,7 +5826,9 @@
           </button>
                                             <button type="button" class="admin-panel--container__button admin-panel--container__button--primary" [disabled]="!senalPaymentMethod() || senalLoading()" (click)="submitSenalAndConfirm()">
             @if (senalLoading()) {
-              Confirmando...
+              Guardando...
+            } @else if (isSenalModalForConfirmedReservation()) {
+              Guardar señal
             } @else {
               Confirmar cita
             }

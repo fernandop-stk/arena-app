@@ -1084,6 +1084,17 @@ const normalizeBlockReason = (value: string): string => {
   return trimmed.slice(0, 120);
 };
 
+export type ReservationCreateConflictReason =
+  | 'after-closing'
+  | 'recurring-closed'
+  | 'blocked'
+  | 'slot-conflict'
+  | 'worker-conflict';
+
+export type ReservationCreateResult =
+  | { ok: true; reservationId: string }
+  | { ok: false; conflict: true; reason: ReservationCreateConflictReason };
+
 const createReservationWithSlotsInMemory = (
   payload: ReservaPersistRequest,
   startMinutes: number,
@@ -1091,7 +1102,7 @@ const createReservationWithSlotsInMemory = (
     allowClosedSchedule?: boolean;
     maxConcurrentReservations?: number;
   },
-): { ok: true; reservationId: string } | { ok: false; conflict: true } => {
+): ReservationCreateResult => {
   purgeExpiredProvisionalReservationsInMemory();
 
   const reservationId = `${payload.dateIso}-${startMinutes}-${Date.now()}`;
@@ -1119,14 +1130,21 @@ const createReservationWithSlotsInMemory = (
     slotTimes,
     assigneeWorker,
   );
-  const hasConflict =
-    hasCapacityConflict ||
-    hasWorkerConflict ||
-    hasRecurringClosedConflict ||
-    slotTimes.some((slot) => blockedSlots.has(slot));
 
-  if (hasConflict) {
-    return { ok: false, conflict: true };
+  if (hasRecurringClosedConflict) {
+    return { ok: false, conflict: true, reason: 'recurring-closed' };
+  }
+
+  if (slotTimes.some((slot) => blockedSlots.has(slot))) {
+    return { ok: false, conflict: true, reason: 'blocked' };
+  }
+
+  if (hasCapacityConflict) {
+    return { ok: false, conflict: true, reason: 'slot-conflict' };
+  }
+
+  if (hasWorkerConflict) {
+    return { ok: false, conflict: true, reason: 'worker-conflict' };
   }
 
   const createdAtIso = new Date().toISOString();
@@ -1463,7 +1481,7 @@ export const createReservationWithSlots = async (
     allowClosedSchedule?: boolean;
     maxConcurrentReservations?: number;
   },
-): Promise<{ ok: true; reservationId: string } | { ok: false; conflict: true }> => {
+): Promise<ReservationCreateResult> => {
   seedMockReservationsInMemory();
   await cleanupExpiredProvisionalReservations();
 
@@ -1489,7 +1507,7 @@ export const createReservationWithSlots = async (
     !effectiveAllowClosedSchedule &&
     exceedsClosingTime(payload.dateIso, startMinutes, payload.durationMinutes)
   ) {
-    return { ok: false, conflict: true };
+    return { ok: false, conflict: true, reason: 'after-closing' };
   }
 
   if (!shouldUseDatabase()) {
@@ -1504,7 +1522,7 @@ export const createReservationWithSlots = async (
     !effectiveAllowClosedSchedule &&
     hasRecurringClosureConflict(payload.dateIso, slotTimes, payload.durationMinutes)
   ) {
-    return { ok: false, conflict: true };
+    return { ok: false, conflict: true, reason: 'recurring-closed' };
   }
 
   try {
@@ -1540,7 +1558,7 @@ export const createReservationWithSlots = async (
 
     if (hasBlockedConflict) {
       await client.query('ROLLBACK');
-      return { ok: false, conflict: true };
+      return { ok: false, conflict: true, reason: 'blocked' };
     }
 
     const activeReservationConflict = await client.query<{
@@ -1565,7 +1583,7 @@ export const createReservationWithSlots = async (
 
     if (hasCapacityConflict) {
       await client.query('ROLLBACK');
-      return { ok: false, conflict: true };
+      return { ok: false, conflict: true, reason: 'slot-conflict' };
     }
 
     if (normalizedWorkerEmail) {
@@ -1585,7 +1603,7 @@ export const createReservationWithSlots = async (
 
       if (workerConflict.rowCount && workerConflict.rowCount > 0) {
         await client.query('ROLLBACK');
-        return { ok: false, conflict: true };
+        return { ok: false, conflict: true, reason: 'worker-conflict' };
       }
     }
 
@@ -1644,7 +1662,7 @@ export const createReservationWithSlots = async (
 
     if (inserted.rowCount !== slotTimes.length) {
       await client.query('ROLLBACK');
-      return { ok: false, conflict: true };
+      return { ok: false, conflict: true, reason: 'slot-conflict' };
     }
 
     await client.query('COMMIT');
@@ -3540,6 +3558,7 @@ export interface DbClientCard {
   createdAtIso: string;
   createdByEmail: string;
   treatments: unknown;
+  appointmentNotes?: unknown;
   passwordHash?: string;
   hasAviso?: boolean;
 }
@@ -3702,6 +3721,11 @@ const ensureUsersAndCardsSchema = async (): Promise<void> => {
     ADD COLUMN IF NOT EXISTS has_aviso BOOLEAN NOT NULL DEFAULT FALSE;
   `);
 
+  await db.query(`
+    ALTER TABLE client_cards
+    ADD COLUMN IF NOT EXISTS appointment_notes JSONB NOT NULL DEFAULT '[]';
+  `);
+
   usersAndCardsSchemaReady = true;
 };
 
@@ -3825,10 +3849,11 @@ export const loadAllClientCardsFromDb = async (): Promise<DbClientCard[]> => {
       created_at: string;
       created_by_email: string;
       treatments: unknown;
+      appointment_notes: unknown;
       password_hash: string | null;
       has_aviso: boolean;
     }>(`
-      SELECT id, full_name, email, phone, birth_date_iso, notes, created_at, created_by_email, treatments, password_hash, has_aviso
+      SELECT id, full_name, email, phone, birth_date_iso, notes, created_at, created_by_email, treatments, appointment_notes, password_hash, has_aviso
       FROM client_cards
     `);
 
@@ -3842,6 +3867,7 @@ export const loadAllClientCardsFromDb = async (): Promise<DbClientCard[]> => {
       createdAtIso: new Date(row.created_at).toISOString(),
       createdByEmail: row.created_by_email,
       treatments: row.treatments ?? [],
+      appointmentNotes: row.appointment_notes ?? [],
       passwordHash: row.password_hash ?? undefined,
       hasAviso: row.has_aviso,
     }));
@@ -3869,8 +3895,8 @@ export const saveClientCardToDb = async (card: DbClientCard): Promise<void> => {
     await client.query('BEGIN');
     await client.query(
       `
-      INSERT INTO client_cards (id, full_name, email, phone, birth_date_iso, notes, created_at, created_by_email, treatments, password_hash, has_aviso)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      INSERT INTO client_cards (id, full_name, email, phone, birth_date_iso, notes, created_at, created_by_email, treatments, password_hash, has_aviso, appointment_notes)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       ON CONFLICT (id) DO UPDATE SET
         full_name = EXCLUDED.full_name,
         email = EXCLUDED.email,
@@ -3880,7 +3906,8 @@ export const saveClientCardToDb = async (card: DbClientCard): Promise<void> => {
         created_by_email = EXCLUDED.created_by_email,
         treatments = EXCLUDED.treatments,
         password_hash = EXCLUDED.password_hash,
-        has_aviso = EXCLUDED.has_aviso
+        has_aviso = EXCLUDED.has_aviso,
+        appointment_notes = EXCLUDED.appointment_notes
       `,
       [
         card.id,
@@ -3894,6 +3921,7 @@ export const saveClientCardToDb = async (card: DbClientCard): Promise<void> => {
         JSON.stringify(card.treatments ?? []),
         card.passwordHash ?? null,
         Boolean(card.hasAviso),
+        JSON.stringify(card.appointmentNotes ?? []),
       ],
     );
 

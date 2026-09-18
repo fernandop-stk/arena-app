@@ -17,6 +17,8 @@ import {
   ClientConfirmationStatus,
   createBlockedPeriodForAdmin,
   createReservationWithSlots,
+  getClosingMinutesForDate,
+  type ReservationCreateConflictReason,
   deleteClientCardFromDb,
   deleteCierreCajaFromDb,
   deleteBlockedPeriodForAdmin,
@@ -63,6 +65,7 @@ import {
 } from './shared/reservas-db';
 import {
   getPackPriceByName,
+  getServicePriceByName,
   getProvisionalReservationHoursByName,
   requiresReservationSignalByName,
 } from './shared/pack-prices';
@@ -107,6 +110,36 @@ const createNotificationAndBroadcast = async (
   const notification = await createNotification(payload);
   broadcastNotificationsRefresh();
   return notification;
+};
+
+// Acciones de la clienta vía enlace de email; se deduplica porque el enlace puede abrirse varias veces.
+// Devuelve true solo si la notificación es nueva (sirve para no repetir tampoco el email a admin).
+const createOnlineReservationNotification = async (payload: {
+  type: 'reserva_confirmada' | 'cancelacion_reserva';
+  title: string;
+  message: string;
+  relatedId: string;
+}): Promise<boolean> => {
+  try {
+    const existing = await getAllNotifications();
+    const duplicateExists = existing.some(
+      (notification) =>
+        notification.relatedId === payload.relatedId && notification.type === payload.type,
+    );
+
+    if (duplicateExists) {
+      return false;
+    }
+
+    await createNotificationAndBroadcast({
+      ...payload,
+      actionUrl: `/admin/reservas?id=${payload.relatedId}`,
+    });
+    return true;
+  } catch (error) {
+    console.error('Error creando notificación de acción online de la clienta:', error);
+    return false;
+  }
 };
 
 const startBirthdayNotificationScheduler = (): void => {
@@ -545,36 +578,73 @@ async function notifyAcceptedReservation(reservation: {
   }
 }
 
-const buildAdminNewReservationEmailHtml = (data: {
+// Packs y bonos se reservan como "Pack"; el resto del catálogo son tratamientos.
+const getReservationKindLabel = (appointmentTypeName: string): 'Pack' | 'Tratamiento' => {
+  const mainService = `${appointmentTypeName ?? ''}`.split('+')[0]?.trim() ?? '';
+  return /^(pack|bono)\b/i.test(mainService) ? 'Pack' : 'Tratamiento';
+};
+
+const formatDateIsoForEmail = (dateIso: string): string => {
+  const parsed = new Date(`${dateIso}T00:00:00`);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIso) || Number.isNaN(parsed.getTime())) {
+    return dateIso;
+  }
+
+  const weekday = parsed.toLocaleDateString('es-ES', { weekday: 'long' });
+  const [year, month, day] = dateIso.split('-');
+  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${day}/${month}/${year}`;
+};
+
+type AdminReservationEventKind = 'nueva_reserva' | 'cancelacion';
+
+const buildAdminReservationEventEmailHtml = (data: {
+  kind: AdminReservationEventKind;
   customerName: string;
+  customerPhone?: string;
   appointmentTypeName: string;
   dateIso: string;
   time: string;
 }): string => {
+  const isCancellation = data.kind === 'cancelacion';
   const customerName = escapeHtml(data.customerName);
+  const customerPhone = escapeHtml(data.customerPhone ?? '');
   const appointmentTypeName = escapeHtml(data.appointmentTypeName);
-  const dateIso = escapeHtml(data.dateIso);
+  const reservationKind = getReservationKindLabel(data.appointmentTypeName);
+  const dateLabel = escapeHtml(formatDateIsoForEmail(data.dateIso));
   const time = escapeHtml(data.time);
+  const heading = isCancellation ? 'Cancelación online de cita' : 'Nueva reserva online';
+  const intro = isCancellation
+    ? 'Una clienta ha solicitado cancelar su cita desde el enlace del email:'
+    : 'Una clienta ha reservado directamente en tu agenda:';
+  const footer = isCancellation
+    ? 'La cita sigue en la agenda hasta que el equipo la gestione desde el panel (aceptar la cancelación o contactar con la clienta).'
+    : 'La cita ya está en tu agenda. Puedes traspasarla a otra trabajadora desde el panel si lo prefieres.';
+  const headerGradient = isCancellation
+    ? 'linear-gradient(135deg,#a63d2a 0%,#c97b63 100%)'
+    : 'linear-gradient(135deg,#c97b63 0%,#d9a441 100%)';
 
   return `
     <div style="background:#fcf3ea;padding:24px;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;color:#3b2f2a;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;margin:0 auto;background:#fff9f4;border-radius:16px;overflow:hidden;border:1px solid #e8d8c9;">
         <tr>
-          <td style="background:linear-gradient(135deg,#c97b63 0%,#d9a441 100%);padding:24px;">
+          <td style="background:${headerGradient};padding:24px;">
             <p style="margin:0 0 6px;color:#fff6ee;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Arena Hair Studio</p>
-            <h1 style="margin:0;color:#ffffff;font-size:22px;line-height:1.25;">Nueva reserva online</h1>
+            <h1 style="margin:0;color:#ffffff;font-size:22px;line-height:1.25;">${heading}</h1>
           </td>
         </tr>
         <tr>
           <td style="padding:24px;">
-            <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#5a4a42;">Una clienta ha reservado directamente en tu agenda:</p>
+            <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#5a4a42;">${intro}</p>
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#fff;border:1px solid #ecd9ca;border-radius:12px;overflow:hidden;">
               <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Clienta</strong><br><span style="color:#7a675d;">${customerName}</span></td></tr>
-              <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Tratamiento / pack</strong><br><span style="color:#7a675d;">${appointmentTypeName}</span></td></tr>
-              <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Fecha</strong><br><span style="color:#7a675d;">${dateIso}</span></td></tr>
+              ${customerPhone ? `<tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Teléfono</strong><br><span style="color:#7a675d;">${customerPhone}</span></td></tr>` : ''}
+              <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Tipo de reserva</strong><br><span style="color:#7a675d;">${reservationKind}</span></td></tr>
+              <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>${reservationKind}</strong><br><span style="color:#7a675d;">${appointmentTypeName}</span></td></tr>
+              <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Fecha</strong><br><span style="color:#7a675d;">${dateLabel}</span></td></tr>
               <tr><td style="padding:14px 16px;font-size:14px;"><strong>Hora</strong><br><span style="color:#7a675d;">${time}</span></td></tr>
             </table>
-            <p style="margin:16px 0 0;font-size:12px;line-height:1.55;color:#8f7b6f;">La cita ya está en tu agenda. Puedes traspasarla a otra trabajadora desde el panel si lo prefieres.</p>
+            <p style="margin:16px 0 0;font-size:12px;line-height:1.55;color:#8f7b6f;">${footer}</p>
           </td>
         </tr>
       </table>
@@ -625,12 +695,16 @@ const buildAdminWaitlistEmailHtml = (data: {
   `;
 };
 
-async function notifyAdminNewReservation(data: {
+async function notifyAdminReservationEvent(data: {
+  kind: AdminReservationEventKind;
   customerName: string;
+  customerPhone?: string;
   appointmentTypeName: string;
   dateIso: string;
   time: string;
 }): Promise<void> {
+  const eventLabel = data.kind === 'cancelacion' ? 'cancelación online' : 'nueva reserva online';
+
   try {
     const apiKey = process.env['RESEND_API_KEY'];
     const fromEmail = process.env['RESEND_FROM_EMAIL'] ?? 'onboarding@resend.dev';
@@ -639,20 +713,42 @@ async function notifyAdminNewReservation(data: {
       return;
     }
 
+    const reservationKind = getReservationKindLabel(data.appointmentTypeName);
+    const subjectPrefix = data.kind === 'cancelacion' ? 'Cancelación online' : 'Nueva reserva online';
     const resend = new Resend(apiKey);
     const sendResult = await resend.emails.send({
       from: fromEmail,
       to: resolveEmailRecipient(ADMIN_NOTIFICATIONS_EMAIL),
-      subject: `Nueva reserva online - ${data.appointmentTypeName} (${data.dateIso} ${data.time})`,
-      html: buildAdminNewReservationEmailHtml(data),
+      subject: `${subjectPrefix} - ${data.customerName} · ${reservationKind}: ${data.appointmentTypeName} (${data.dateIso} ${data.time})`,
+      html: buildAdminReservationEventEmailHtml(data),
     });
 
     if (sendResult.error) {
-      throw new Error(sendResult.error.message || 'Resend rechazó el aviso a admin.');
+      throw new Error(sendResult.error.message || `Resend rechazó el aviso de ${eventLabel}.`);
     }
   } catch (error) {
-    console.error('Error enviando aviso de nueva reserva a admin:', error);
+    console.error(`Error enviando aviso de ${eventLabel} a admin:`, error);
   }
+}
+
+async function notifyAdminNewReservation(data: {
+  customerName: string;
+  customerPhone?: string;
+  appointmentTypeName: string;
+  dateIso: string;
+  time: string;
+}): Promise<void> {
+  await notifyAdminReservationEvent({ ...data, kind: 'nueva_reserva' });
+}
+
+async function notifyAdminReservationCancellation(data: {
+  customerName: string;
+  customerPhone?: string;
+  appointmentTypeName: string;
+  dateIso: string;
+  time: string;
+}): Promise<void> {
+  await notifyAdminReservationEvent({ ...data, kind: 'cancelacion' });
 }
 
 async function notifyAdminWaitlistSignup(data: {
@@ -1177,6 +1273,7 @@ type EmployeePermission =
   | 'reservas_gestionar'
   | 'reservas_borrar'
   | 'cierre_registrar'
+  | 'caja_comparar'
   | 'estadisticas_ver'
   | 'clientes_gestionar'
   | 'almacen_gestionar'
@@ -1191,6 +1288,7 @@ const ALL_EMPLOYEE_PERMISSIONS: EmployeePermission[] = [
   'reservas_gestionar',
   'reservas_borrar',
   'cierre_registrar',
+  'caja_comparar',
   'estadisticas_ver',
   'clientes_gestionar',
   'almacen_gestionar',
@@ -1236,6 +1334,17 @@ interface ClientTreatmentItem {
   paymentMethod?: 'efectivo' | 'tarjeta' | 'bizum' | null;
 }
 
+interface ClientAppointmentNoteItem {
+  id: string;
+  text: string;
+  dateIso: string;
+  startTime: string;
+  appointmentTypeName: string;
+  reservationId: string;
+  createdAtIso: string;
+  createdByEmail: string;
+}
+
 interface DailyPaymentSummaryItem {
   dateIso: string;
   efectivo: number;
@@ -1266,6 +1375,7 @@ interface ClientCardItem {
   createdAtIso: string;
   createdByEmail: string;
   treatments: ClientTreatmentItem[];
+  appointmentNotes?: ClientAppointmentNoteItem[];
   passwordHash?: string;
   hasAviso?: boolean;
 }
@@ -1691,6 +1801,8 @@ const buildClientCardId = (): string =>
   `client-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const buildClientTreatmentId = (): string =>
   `treat-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+const buildClientAppointmentNoteId = (): string =>
+  `anote-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const buildStockProductId = (): string =>
   `stock-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const buildStockSaleId = (): string =>
@@ -1738,6 +1850,9 @@ const normalizeClientCard = (card: ClientCardItem): ClientCardItem => ({
   treatments: (card.treatments ?? [])
     .slice()
     .sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso)),
+  appointmentNotes: (Array.isArray(card.appointmentNotes) ? card.appointmentNotes : [])
+    .slice()
+    .sort((a, b) => `${b.createdAtIso}`.localeCompare(`${a.createdAtIso}`)),
 });
 
 const normalizeStockProduct = (product: StockProductItem): StockProductItem => {
@@ -5276,6 +5391,63 @@ app.post('/api/admin/clientes/:id/packs', async (req, res) => {
   return res.status(200).json({ ok: true, card: nextCard });
 });
 
+app.post('/api/admin/clientes/:id/comentarios', async (req, res) => {
+  seedAuthUsers();
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const id = `${req.params['id'] ?? ''}`.trim();
+  const text = `${req.body?.text ?? ''}`.trim().slice(0, 500);
+  const dateIso = `${req.body?.dateIso ?? ''}`.trim().slice(0, 10);
+  const startTime = `${req.body?.startTime ?? ''}`.trim().slice(0, 5);
+  const appointmentTypeName = `${req.body?.appointmentTypeName ?? ''}`.trim().slice(0, 160);
+  const reservationId = `${req.body?.reservationId ?? ''}`.trim().slice(0, 80);
+
+  if (!id || !text) {
+    return res.status(400).json({ ok: false, error: 'El comentario no puede estar vacío.' });
+  }
+
+  const card = clientCardsById.get(id);
+
+  if (!card) {
+    return res.status(404).json({ ok: false, error: 'Ficha de cliente no encontrada.' });
+  }
+
+  const note: ClientAppointmentNoteItem = {
+    id: buildClientAppointmentNoteId(),
+    text,
+    dateIso,
+    startTime,
+    appointmentTypeName,
+    reservationId,
+    createdAtIso: new Date().toISOString(),
+    createdByEmail: session.email,
+  };
+
+  const nextCard = normalizeClientCard({
+    ...card,
+    appointmentNotes: [note, ...(card.appointmentNotes ?? [])],
+  });
+
+  try {
+    await saveClientCardToDb(nextCard);
+  } catch (error) {
+    console.error('Error persistiendo comentario de cita en DB:', error);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo guardar el comentario en la ficha. Intenta de nuevo.',
+    });
+  }
+
+  clientCardsById.set(card.id, nextCard);
+  void persistClientCardsToDisk();
+
+  return res.status(200).json({ ok: true, card: nextCard });
+});
+
 app.patch('/api/admin/clientes/:clientId/packs/:treatmentId/payment', async (req, res) => {
   seedAuthUsers();
   const session = isAdminRequest(req.headers.cookie);
@@ -6280,10 +6452,14 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
           .map((item) => {
             const index = Number(item.id.replace('svc-', ''));
             const serviceMeta = Number.isFinite(index) ? nextMeta.services[index] : null;
+            const quantity = Math.max(1, Number(serviceMeta?.quantity ?? 1));
 
             return {
               name: serviceMeta?.name ?? item.label,
-              quantity: Math.max(1, Number(serviceMeta?.quantity ?? 1)),
+              quantity,
+              unitPriceEuro: Number(
+                Math.max(0, Number(serviceMeta?.unitPriceEuro ?? item.amount / quantity)).toFixed(2),
+              ),
             };
           });
 
@@ -6300,9 +6476,11 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
         const paymentNote = `Cobrada desde agenda (${reservation.dateIso} ${reservation.startTime}) · final ${splitLabel}${signalLabel}`;
 
         const remainingTargets = new Map<string, number>();
+        const chargedUnitPriceByName = new Map<string, number>();
         serviceTargets.forEach((target) => {
           const current = remainingTargets.get(target.name) ?? 0;
           remainingTargets.set(target.name, current + target.quantity);
+          chargedUnitPriceByName.set(target.name, target.unitPriceEuro);
         });
 
         const nextTreatments = (targetCard.treatments ?? []).map((treatment) => {
@@ -6317,13 +6495,17 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
           }
 
           remainingTargets.set(treatment.name, pending - 1);
+          // La ficha refleja el precio realmente cobrado (p. ej. tratamiento dentro de pack).
+          const chargedUnitPrice = chargedUnitPriceByName.get(treatment.name);
           return {
             ...treatment,
             paymentMethod: resolvedPaymentMethod ?? treatment.paymentMethod ?? 'efectivo',
             priceEuro:
-              treatment.priceEuro !== undefined
-                ? Number(Math.max(0, treatment.priceEuro).toFixed(2))
-                : undefined,
+              chargedUnitPrice !== undefined
+                ? chargedUnitPrice
+                : treatment.priceEuro !== undefined
+                  ? Number(Math.max(0, treatment.priceEuro).toFixed(2))
+                  : undefined,
             note: treatment.note ? `${treatment.note} · ${paymentNote}` : paymentNote,
           };
         });
@@ -6723,6 +6905,168 @@ app.delete('/api/admin/reservas/:id/stock-line/:productId', async (req, res) => 
   }
 });
 
+app.patch('/api/admin/reservas/:id/service-line', async (req, res) => {
+  const session = getAuthSession(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const reservationId = `${req.params['id'] ?? ''}`.trim();
+  const name = `${req.body?.name ?? ''}`.trim().slice(0, 80);
+  const durationMinutes = Math.max(0, Math.floor(Number(req.body?.durationMinutes ?? 0) || 0));
+  const rawPrice = Number(req.body?.unitPriceEuro ?? NaN);
+
+  if (!reservationId || !name) {
+    return res.status(400).json({ ok: false, error: 'Selecciona un tratamiento válido.' });
+  }
+
+  try {
+    const reservations = await listReservationsForAdmin();
+    const reservation = reservations.find((item) => item.id === reservationId);
+
+    if (!reservation) {
+      return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+    }
+
+    if (reservation.adminStatus === 'rejected') {
+      return res
+        .status(409)
+        .json({ ok: false, error: 'No se puede editar una reserva cancelada.' });
+    }
+
+    const parsed = parseReservationMetaFromComments(reservation.additionalComments);
+    const baseMeta =
+      parsed.meta ??
+      buildDefaultReservationMeta({
+        appointmentTypeName: reservation.appointmentTypeName,
+        durationMinutes: reservation.durationMinutes,
+        requiresReservationSignal: requiresReservationSignalByName(
+          reservation.appointmentTypeName,
+        ),
+      });
+    const insidePack = baseMeta.services.some((item) => item.type === 'pack');
+    const unitPriceEuro = Number.isFinite(rawPrice)
+      ? Math.max(0, Number(rawPrice.toFixed(2)))
+      : getServicePriceByName(name, insidePack);
+
+    const updatedMeta: ReservationMetaPayload = {
+      ...baseMeta,
+      services: [
+        ...baseMeta.services,
+        {
+          id: `svc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: 'treatment',
+          name,
+          quantity: 1,
+          durationMinutes,
+          unitPriceEuro,
+          requiresReservationSignal: false,
+        },
+      ],
+    };
+    const summary = getReservationMetaSummary(updatedMeta);
+    const additionalComments = composeReservationCommentsWithMeta(
+      parsed.plainComments,
+      updatedMeta,
+    );
+
+    const updated = await updateReservationDetailsByAdmin(reservationId, {
+      appointmentTypeName: summary.appointmentTypeName || reservation.appointmentTypeName,
+      customerName: reservation.customerName,
+      customerPhone: reservation.customerPhone,
+      customerEmail: reservation.customerEmail,
+      additionalComments,
+    });
+
+    if (!updated.ok) {
+      return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+    }
+
+    if (reservation.paymentReceived) {
+      const reopened = await updateReservationPaymentReceived(reservationId, false);
+
+      if (!reopened.ok) {
+        return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+      }
+    }
+
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Error añadiendo tratamiento a reserva:', error);
+    return res
+      .status(500)
+      .json({ ok: false, error: 'No se pudo añadir el tratamiento a la reserva.' });
+  }
+});
+
+app.delete('/api/admin/reservas/:id/service-line/:lineId', async (req, res) => {
+  const session = getAuthSession(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const reservationId = `${req.params['id'] ?? ''}`.trim();
+  const lineId = `${req.params['lineId'] ?? ''}`.trim();
+
+  if (!reservationId || !lineId) {
+    return res.status(400).json({ ok: false, error: 'Datos inválidos.' });
+  }
+
+  try {
+    const reservations = await listReservationsForAdmin();
+    const reservation = reservations.find((item) => item.id === reservationId);
+
+    if (!reservation) {
+      return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+    }
+
+    const parsed = parseReservationMetaFromComments(reservation.additionalComments);
+    const baseMeta = parsed.meta;
+    const lineIndex = baseMeta?.services.findIndex((item) => item.id === lineId) ?? -1;
+
+    if (!baseMeta || lineIndex < 0) {
+      return res.status(404).json({ ok: false, error: 'Tratamiento no encontrado en la reserva.' });
+    }
+
+    if (lineIndex === 0) {
+      return res
+        .status(409)
+        .json({ ok: false, error: 'No se puede quitar el servicio principal de la cita.' });
+    }
+
+    const updatedMeta: ReservationMetaPayload = {
+      ...baseMeta,
+      services: baseMeta.services.filter((item) => item.id !== lineId),
+    };
+    const summary = getReservationMetaSummary(updatedMeta);
+    const additionalComments = composeReservationCommentsWithMeta(
+      parsed.plainComments,
+      updatedMeta,
+    );
+
+    const updated = await updateReservationDetailsByAdmin(reservationId, {
+      appointmentTypeName: summary.appointmentTypeName || reservation.appointmentTypeName,
+      customerName: reservation.customerName,
+      customerPhone: reservation.customerPhone,
+      customerEmail: reservation.customerEmail,
+      additionalComments,
+    });
+
+    if (!updated.ok) {
+      return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+    }
+
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Error eliminando tratamiento de reserva:', error);
+    return res
+      .status(500)
+      .json({ ok: false, error: 'No se pudo quitar el tratamiento de la reserva.' });
+  }
+});
+
 app.patch('/api/admin/reservas/:id', async (req, res) => {
   const session = isAdminRequest(req.headers.cookie);
   const superadminSession = isSuperadminRequest(req.headers.cookie);
@@ -6918,6 +7262,37 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
   }
 });
 
+const formatMinutesAsTime = (minutes: number): string =>
+  `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+const describeReservationCreateConflict = (
+  reason: ReservationCreateConflictReason,
+  context: { dateIso: string; time: string; durationMinutes: number; isSuperadmin: boolean },
+): string => {
+  const [hours, minutes] = context.time.split(':').map(Number);
+  const startMinutes = hours * 60 + minutes;
+  const endLabel = formatMinutesAsTime(startMinutes + context.durationMinutes);
+
+  switch (reason) {
+    case 'after-closing': {
+      const closingMinutes = getClosingMinutesForDate(context.dateIso);
+      const closingLabel = closingMinutes !== null ? formatMinutesAsTime(closingMinutes) : '';
+      return `La cita terminaría a las ${endLabel}${closingLabel ? `, después de la hora de cierre (${closingLabel})` : ''}. Reduce la duración o adelanta la hora.`;
+    }
+    case 'recurring-closed':
+      return `La cita (${context.time}–${endLabel}) pasa por una franja cerrada del salón (mediodía o día de cierre). Cambia la hora, la duración o la fecha.`;
+    case 'blocked':
+      return `La franja ${context.time}–${endLabel} coincide con horas bloqueadas manualmente. Cambia la hora o quita el bloqueo.`;
+    case 'worker-conflict':
+      return `La trabajadora seleccionada ya tiene otra cita entre ${context.time} y ${endLabel}. Cambia la hora, la duración o la trabajadora.`;
+    case 'slot-conflict':
+    default:
+      return context.isSuperadmin
+        ? `Ya existe otra cita entre ${context.time} y ${endLabel}. Cambia la hora o la duración.`
+        : `Ese horario (${context.time}–${endLabel}) ya no está disponible. Cambia la hora o la duración.`;
+  }
+};
+
 app.post('/api/admin/reservas', async (req, res) => {
   const session = getAuthSession(req.headers.cookie);
 
@@ -7043,14 +7418,18 @@ app.post('/api/admin/reservas', async (req, res) => {
     if (!created.ok) {
       return res.status(409).json({
         ok: false,
-        error: isSuperadmin
-          ? 'No se pudo crear la reserva porque ya existe un conflicto con otra cita o bloqueo manual.'
-          : 'No se pudo crear la reserva porque ese horario está cerrado o ya no está disponible.',
+        error: describeReservationCreateConflict(created.reason, {
+          dateIso,
+          time,
+          durationMinutes: resolvedDurationMinutes,
+          isSuperadmin,
+        }),
       });
     }
 
     if (!shouldRequireReservationSignal) {
       await updateReservationAdminStatus(created.reservationId, 'accepted');
+      await updateReservationClientConfirmationStatus(created.reservationId, 'confirmed', 'salon');
     }
 
     let emailSent = false;
@@ -7134,7 +7513,10 @@ app.post('/api/admin/reservas', async (req, res) => {
     const message = error instanceof Error ? error.message : 'No se pudo crear la reserva.';
 
     if (message.includes('La hora seleccionada no es válida.')) {
-      return res.status(400).json({ ok: false, error: message });
+      return res.status(400).json({
+        ok: false,
+        error: `La hora ${time} no es válida para el ${dateIso}: está fuera del horario de apertura de ese día. Cambia la hora o la fecha.`,
+      });
     }
 
     console.error('Error creando reserva manual admin:', error);
@@ -7348,18 +7730,10 @@ app.patch('/api/admin/reservas/:id/status', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
     }
 
-    // Crear notificaciones según el nuevo estado
+    // Sin notificación interna: la acción la ejecuta el propio equipo del salón.
     if (status === 'accepted') {
-      try {
-        await createNotificationAndBroadcast({
-          type: 'reserva_confirmada',
-          title: `Reserva confirmada: ${reservation.appointmentTypeName}`,
-          message: `Reserva de ${reservation.customerName} confirmada para ${reservation.dateIso} a las ${reservation.startTime}`,
-          relatedId: reservationId,
-          actionUrl: `/admin/reservas?id=${reservationId}`,
-        });
-      } catch (notifError) {
-        console.error('Error creating confirmation notification:', notifError);
+      if (reservation.clientConfirmationStatus !== 'confirmed') {
+        await updateReservationClientConfirmationStatus(reservationId, 'confirmed', 'salon');
       }
 
       await notifyAcceptedReservation({
@@ -7371,18 +7745,6 @@ app.patch('/api/admin/reservas/:id/status', async (req, res) => {
         startTime: reservation.startTime,
       });
     } else if (status === 'rejected') {
-      try {
-        await createNotificationAndBroadcast({
-          type: 'cancelacion_reserva',
-          title: `Reserva cancelada: ${reservation.appointmentTypeName}`,
-          message: `Reserva de ${reservation.customerName} para ${reservation.dateIso} a las ${reservation.startTime} ha sido cancelada`,
-          relatedId: reservationId,
-          actionUrl: `/admin/reservas?id=${reservationId}`,
-        });
-      } catch (notifError) {
-        console.error('Error creating cancellation notification:', notifError);
-      }
-
       await notifyRejectedReservation({
         customerEmail: reservation.customerEmail,
         customerName: reservation.customerName,
@@ -7567,6 +7929,13 @@ app.get('/api/reservas/confirmacion', async (req, res) => {
           );
       }
 
+      void createOnlineReservationNotification({
+        type: 'reserva_confirmada',
+        title: `Cita confirmada online: ${reservation.appointmentTypeName}`,
+        message: `${reservation.customerName} ha confirmado online su cita del ${reservation.dateIso} a las ${reservation.startTime}`,
+        relatedId: reservation.id,
+      });
+
       return res
         .status(200)
         .send(
@@ -7577,6 +7946,23 @@ app.get('/api/reservas/confirmacion', async (req, res) => {
           ),
         );
     }
+
+    void createOnlineReservationNotification({
+      type: 'cancelacion_reserva',
+      title: `Solicitud de cancelación online: ${reservation.appointmentTypeName}`,
+      message: `${reservation.customerName} (${reservation.customerPhone}) pide cancelar su cita del ${reservation.dateIso} a las ${reservation.startTime}`,
+      relatedId: reservation.id,
+    }).then((isNewRequest) => {
+      if (isNewRequest) {
+        void notifyAdminReservationCancellation({
+          customerName: reservation.customerName,
+          customerPhone: reservation.customerPhone,
+          appointmentTypeName: reservation.appointmentTypeName,
+          dateIso: reservation.dateIso,
+          time: reservation.startTime,
+        });
+      }
+    });
 
     return res
       .status(200)
@@ -7603,37 +7989,26 @@ app.get('/api/reservas/confirmacion', async (req, res) => {
 
 app.post('/api/reservas/email', async (req, res) => {
   const apiKey = process.env['RESEND_API_KEY'];
-
-  if (!apiKey) {
-    return res.status(500).json({
-      ok: false,
-      error: 'RESEND_API_KEY no configurada en el servidor.',
-    });
-  }
-
-  if (apiKey.includes('xxxxxxxx')) {
-    return res.status(500).json({
-      ok: false,
-      error: 'RESEND_API_KEY tiene un valor de ejemplo. Configura la key real de Resend.',
-    });
-  }
-
   const fromEmail = process.env['RESEND_FROM_EMAIL'] ?? 'onboarding@resend.dev';
   const isValidEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(fromEmail);
 
-  if (fromEmail === 'reservas@tu-dominio.com') {
-    return res.status(500).json({
-      ok: false,
-      error: 'RESEND_FROM_EMAIL tiene un valor de ejemplo. Usa un remitente verificado en Resend.',
-    });
+  // Si Resend no está configurado (p. ej. en local) la reserva se crea igual y solo se omite el email.
+  let emailConfigError: string | null = null;
+
+  if (!apiKey) {
+    emailConfigError = 'RESEND_API_KEY no configurada en el servidor.';
+  } else if (apiKey.includes('xxxxxxxx')) {
+    emailConfigError = 'RESEND_API_KEY tiene un valor de ejemplo. Configura la key real de Resend.';
+  } else if (fromEmail === 'reservas@tu-dominio.com') {
+    emailConfigError =
+      'RESEND_FROM_EMAIL tiene un valor de ejemplo. Usa un remitente verificado en Resend.';
+  } else if (!isValidEmail) {
+    emailConfigError =
+      'RESEND_FROM_EMAIL no es válido. Debe ser un email real verificado en Resend (por ejemplo, reservas@tu-dominio.com).';
   }
 
-  if (!isValidEmail) {
-    return res.status(500).json({
-      ok: false,
-      error:
-        'RESEND_FROM_EMAIL no es válido. Debe ser un email real verificado en Resend (por ejemplo, reservas@tu-dominio.com).',
-    });
+  if (emailConfigError) {
+    console.warn(`[reservas/email] ${emailConfigError} Se creará la reserva sin enviar emails.`);
   }
 
   const {
@@ -7719,11 +8094,15 @@ app.post('/api/reservas/email', async (req, res) => {
 
     void notifyAdminNewReservation({
       customerName,
+      customerPhone,
       appointmentTypeName,
       dateIso,
       time,
     });
 
+    if (emailConfigError || !apiKey) {
+      return res.status(200).json({ ok: true, emailSent: false, emailError: emailConfigError });
+    }
 
     const subject = `Confirmación de cita - ${appointmentTypeName} (${dateIso} ${time})`;
     const html = buildReservationEmailHtml({
@@ -7782,7 +8161,7 @@ app.post('/api/reservas/email', async (req, res) => {
       console.error('Error procesando alertas:', alertError);
     }
 
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true, emailSent: true });
   } catch (error) {
     if (reservationId) {
       await deleteReservationById(reservationId);
@@ -8146,7 +8525,9 @@ const initializeFromDb = async (): Promise<void> => {
         createdAtIso: dbCard.createdAtIso,
         createdByEmail: dbCard.createdByEmail,
         treatments: (dbCard.treatments as ClientTreatmentItem[]) ?? [],
+        appointmentNotes: (dbCard.appointmentNotes as ClientAppointmentNoteItem[]) ?? [],
         passwordHash: dbCard.passwordHash,
+        hasAviso: dbCard.hasAviso,
       };
       clientCardsById.set(card.id, normalizeClientCard(card));
     }

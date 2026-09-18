@@ -1,9 +1,22 @@
-import { DecimalPipe } from '@angular/common';
+import { DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Component, OnDestroy, afterNextRender, computed, inject, signal } from '@angular/core';
+import {
+  Component,
+  OnDestroy,
+  afterNextRender,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CitasService, type AppointmentType } from '../citas/citas.service';
-import { getPackPriceByName, requiresReservationSignalByName } from '../../shared/pack-prices';
+import {
+  getPackPriceByName,
+  getServicePriceByName,
+  hasTreatmentInPackPrice,
+  requiresReservationSignalByName,
+} from '../../shared/pack-prices';
 import { TratamientosService, type TratamientoItem } from '../tratamientos/tratamientos.service';
 import { AgendaPackPickerModalComponent } from './components/agenda-pack-picker-modal/agenda-pack-picker-modal';
 import { PaymentFlowModalComponent } from './components/payment-flow-modal/payment-flow-modal';
@@ -38,9 +51,35 @@ type AgendaManagementTab = 'listado' | 'gestion' | 'bloqueos';
 type AgendaRange = 'hoy' | 'semana' | 'mes';
 type ReservationListRangeTab = 'none' | 'dia' | 'semana' | 'mes' | 'total';
 type StockManagementTab = 'crear' | 'ver' | 'vender' | 'historial';
-type CierreManagementTab = 'registro' | 'historial' | 'estadisticas';
+type CierreManagementTab = 'registro' | 'historial' | 'estadisticas' | 'comparativa';
 type CierreStatsRange = 'semana' | 'mes' | 'anio';
 type CierreStatsMetric = 'efectivo' | 'tarjeta' | 'bizum' | 'digital' | 'total';
+type CierreCompareMode = 'dia' | 'semana' | 'mes' | 'anio' | 'personalizado';
+type CierreCompareTarget = 'anterior' | 'anio_anterior' | 'personalizado';
+interface CierreComparePeriodAnchor {
+  dateIso: string;
+  monthIso: string;
+  year: string;
+  startIso: string;
+  endIso: string;
+}
+interface CierreComparePeriodSummary {
+  label: string;
+  startIso: string;
+  endIso: string;
+  cierresCount: number;
+  efectivo: number;
+  tarjeta: number;
+  bizum: number;
+  total: number;
+}
+interface CierreCompareRow {
+  name: string;
+  baseAmount: number;
+  otherAmount: number;
+  diffAmount: number;
+  diffPercent: number | null;
+}
 type AdminCardTarget = 'packs' | 'reservas' | 'agenda' | 'clientes' | 'almacen' | 'cierre';
 type EmployeeManagementTab = 'crear' | 'listado' | 'buscar' | 'superadmin';
 type ClientManagementTab = 'crear' | 'listado' | 'buscar';
@@ -132,6 +171,8 @@ interface ReservationServiceLineItem {
   durationMinutes: number;
   unitPriceEuro: number;
   requiresReservationSignal: boolean;
+  // Solo en borradores: el precio lo ha tocado la trabajadora y no debe re-sincronizarse.
+  priceOverridden?: boolean;
 }
 
 interface ReservationStockLineItem {
@@ -262,6 +303,18 @@ interface ClientCardItem {
     priceEuro?: number;
     paymentMethod?: 'efectivo' | 'tarjeta' | 'bizum' | null;
   }>;
+  appointmentNotes?: ClientAppointmentNote[];
+}
+
+interface ClientAppointmentNote {
+  id: string;
+  text: string;
+  dateIso: string;
+  startTime: string;
+  appointmentTypeName: string;
+  reservationId: string;
+  createdAtIso: string;
+  createdByEmail: string;
 }
 
 interface ClientTreatmentHistoryEntry {
@@ -458,6 +511,7 @@ interface ClientTreatmentCatalogOption {
   imports: [
     RouterLink,
     DecimalPipe,
+    NgTemplateOutlet,
     AgendaPackPickerModalComponent,
     PaymentFlowModalComponent,
     ClientReservationModalComponent,
@@ -598,6 +652,8 @@ export class AdminPanelComponent implements OnDestroy {
   });
   protected readonly agendaDurationDraftByReservationId = signal<Record<string, number>>({});
   protected readonly agendaDropToast = signal('');
+  // Popup de error de los modales de agenda: informa sin cerrar el modal ni perder lo escrito.
+  protected readonly agendaFormErrorPopup = signal('');
   protected readonly agendaDetailReservation = signal<AdminReservationItem | null>(null);
   protected readonly agendaDetailMode = signal<'view' | 'edit'>('view');
   protected readonly agendaEditTarget = signal<'duration' | 'services'>('duration');
@@ -616,6 +672,9 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly agendaEditNameTouched = signal(false);
   protected readonly agendaEditDurationTouched = signal(false);
   protected readonly agendaEditDraftAdditionalComments = signal('');
+  protected readonly agendaEditDraftClientComment = signal('');
+  protected readonly agendaEditDraftExtraServiceLines = signal<ReservationServiceLineItem[]>([]);
+  protected readonly agendaEditDraftExtraTreatmentId = signal<number>(0);
   protected readonly agendaEditDraftStockProductId = signal('');
   protected readonly agendaEditDraftStockUnits = signal('1');
   protected readonly agendaEditDraftStockLines = signal<ReservationStockLineItem[]>([]);
@@ -665,6 +724,8 @@ export class AdminPanelComponent implements OnDestroy {
     this.agendaPackOptions[0]?.duracionMinutos ?? 60,
   );
   protected readonly agendaManualReserveServiceLines = signal<ReservationServiceLineItem[]>([]);
+  protected readonly agendaManualReserveExtraTreatmentId = signal<number>(0);
+  protected readonly agendaManualReserveClientComment = signal('');
   protected readonly agendaManualReserveStockProductId = signal('');
   protected readonly agendaManualReserveStockUnits = signal('1');
   protected readonly agendaManualReserveStockLines = signal<ReservationStockLineItem[]>([]);
@@ -729,6 +790,14 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly isLoadingCierreAutoDiario = signal(false);
   protected readonly cierreStatsRange = signal<CierreStatsRange>('mes');
   protected readonly cierreStatsMetric = signal<CierreStatsMetric>('total');
+  protected readonly cierreCompareMode = signal<CierreCompareMode>('mes');
+  protected readonly cierreCompareTarget = signal<CierreCompareTarget>('anio_anterior');
+  protected readonly cierreCompareBase = signal<CierreComparePeriodAnchor>(
+    this.buildDefaultCierreCompareAnchor(0),
+  );
+  protected readonly cierreCompareOther = signal<CierreComparePeriodAnchor>(
+    this.buildDefaultCierreCompareAnchor(-1),
+  );
   protected readonly showCierreDetailsModal = signal(false);
   protected readonly selectedCierreForDetails = signal<CierreCajaItem | null>(null);
   protected readonly cierreDetailsMethodFilters = signal({
@@ -854,6 +923,10 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly cobroReservationStockUnits = signal('1');
   protected readonly cobroReservationStockLoading = signal(false);
   protected readonly cobroReservationStockError = signal('');
+  protected readonly cobroReservationTreatmentId = signal<number>(0);
+  protected readonly cobroReservationTreatmentPrice = signal('');
+  protected readonly cobroReservationTreatmentLoading = signal(false);
+  protected readonly cobroReservationClientComment = signal('');
   protected readonly cobroSelectedDateIso = signal('');
   protected readonly paymentMethodReservation = computed<AdminReservationItem | null>(() => {
     const reservationId = this.paymentMethodReservationId();
@@ -1073,6 +1146,14 @@ export class AdminPanelComponent implements OnDestroy {
   constructor() {
     this.resetEmployeeHistoryRangeToCurrentMonth();
 
+    effect(() => {
+      const message = this.agendaManualReserveError() || this.agendaDetailError();
+
+      if (message) {
+        this.agendaFormErrorPopup.set(message);
+      }
+    });
+
     if (typeof window !== 'undefined') {
       window.addEventListener('arena-admin-return-home', this.onReturnHomeFromHeader);
     }
@@ -1203,11 +1284,18 @@ export class AdminPanelComponent implements OnDestroy {
       this.cierreError.set('');
       this.cierreMessage.set('');
       this.loadCierres();
-      this.loadCierreAutoDiario();
+      if (this.hasPermission('cierre_registrar')) {
+        this.loadCierreAutoDiario();
+      }
     }
   }
 
   protected setCierreManagementTab(tab: CierreManagementTab): void {
+    if (!this.canAccessCierreManagementTab(tab)) {
+      this.openNoPermissionModal(this.getCierreManagementTabLabel(tab));
+      return;
+    }
+
     this.cierreManagementTab.set(tab);
     this.persistCierreManagementTab(tab);
     this.cierreError.set('');
@@ -5470,6 +5558,147 @@ export class AdminPanelComponent implements OnDestroy {
     return getPackPriceByName(name);
   }
 
+  protected hasTreatmentInPackPrice(name: string): boolean {
+    return hasTreatmentInPackPrice(name);
+  }
+
+  protected getServicePriceByName(name: string, insidePack: boolean): number {
+    return getServicePriceByName(name, insidePack);
+  }
+
+  private buildExtraTreatmentLine(
+    treatment: TratamientoItem,
+    insidePack: boolean,
+  ): ReservationServiceLineItem {
+    return {
+      id: `svc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type: 'treatment',
+      name: treatment.nombre,
+      quantity: 1,
+      durationMinutes: treatment.duracionMinutos,
+      unitPriceEuro: this.getServicePriceByName(treatment.nombre, insidePack),
+      requiresReservationSignal: false,
+    };
+  }
+
+  // Re-sincroniza el precio de las líneas no editadas a mano según haya o no pack principal.
+  private syncExtraTreatmentPrices(
+    lines: ReservationServiceLineItem[],
+    insidePack: boolean,
+  ): ReservationServiceLineItem[] {
+    return lines.map((line) =>
+      line.priceOverridden
+        ? line
+        : { ...line, unitPriceEuro: this.getServicePriceByName(line.name, insidePack) },
+    );
+  }
+
+  private parseEditablePrice(raw: string): number | null {
+    const parsed = Number(`${raw}`.replace(',', '.'));
+    return Number.isFinite(parsed) && parsed >= 0 ? Number(parsed.toFixed(2)) : null;
+  }
+
+  private roundUpToHalfHour(minutes: number): number {
+    return Math.max(30, Math.ceil(minutes / 30) * 30);
+  }
+
+  protected getExtraTreatmentOptions(): TratamientoItem[] {
+    return this.agendaTreatmentCatalog;
+  }
+
+  protected getExtraTreatmentOptionLabel(treatment: TratamientoItem, insidePack: boolean): string {
+    const price = this.getServicePriceByName(treatment.nombre, insidePack);
+    const suffix = insidePack && this.hasTreatmentInPackPrice(treatment.nombre) ? ' (en pack)' : '';
+    return price > 0 ? `${treatment.nombre} · ${price} €${suffix}` : treatment.nombre;
+  }
+
+  private findClientCardIdForCustomer(
+    email: string | null | undefined,
+    phone: string | null | undefined,
+    linkedClientId?: string | null,
+  ): string {
+    if (linkedClientId && this.clientCards().some((card) => card.id === linkedClientId)) {
+      return linkedClientId;
+    }
+
+    const normalizedEmail = `${email ?? ''}`.trim().toLowerCase();
+    const normalizedPhone = this.normalizePhoneForMatch(phone ?? '');
+
+    const match = this.clientCards().find((card) => {
+      const cardEmail = `${card.email ?? ''}`.trim().toLowerCase();
+      const cardPhone = this.normalizePhoneForMatch(card.phone ?? '');
+
+      return (
+        (normalizedEmail && cardEmail && cardEmail === normalizedEmail) ||
+        (normalizedPhone && cardPhone && cardPhone === normalizedPhone)
+      );
+    });
+
+    return match?.id ?? '';
+  }
+
+  private saveClientAppointmentComment(
+    clientId: string,
+    text: string,
+    appointment: {
+      reservationId?: string;
+      dateIso: string;
+      startTime: string;
+      appointmentTypeName: string;
+    },
+    onError?: (message: string) => void,
+  ): void {
+    const trimmed = text.trim();
+
+    if (!clientId || !trimmed) {
+      return;
+    }
+
+    this.http
+      .post<{ ok: boolean; error?: string }>(
+        `/api/admin/clientes/${encodeURIComponent(clientId)}/comentarios`,
+        {
+          text: trimmed,
+          dateIso: appointment.dateIso,
+          startTime: appointment.startTime,
+          appointmentTypeName: appointment.appointmentTypeName,
+          reservationId: appointment.reservationId ?? '',
+        },
+      )
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            onError?.(response.error ?? 'No se pudo guardar el comentario en la ficha.');
+            return;
+          }
+
+          this.loadClientCards();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          onError?.(
+            typeof apiError === 'string' && apiError
+              ? apiError
+              : 'No se pudo guardar el comentario en la ficha.',
+          );
+        },
+      });
+  }
+
+  protected getClientAppointmentNotes(card: ClientCardItem): ClientAppointmentNote[] {
+    return card.appointmentNotes ?? [];
+  }
+
+  protected getClientAppointmentNoteLabel(note: ClientAppointmentNote): string {
+    const parts = [
+      note.dateIso ? this.formatDate(note.dateIso) : '',
+      note.startTime,
+      note.appointmentTypeName,
+    ].filter(Boolean);
+
+    return parts.join(' · ');
+  }
+
   protected getRoleLabel(role: AdminUserRole): string {
     return this.employeeAdminService.getRoleLabel(role);
   }
@@ -6157,7 +6386,7 @@ export class AdminPanelComponent implements OnDestroy {
     }
 
     if (reservation.clientConfirmationSource === 'salon') {
-      return 'Confirmada en pelu';
+      return 'Confirmada en peluqueria';
     }
 
     return 'Confirmada';
@@ -6505,6 +6734,10 @@ export class AdminPanelComponent implements OnDestroy {
     this.paymentSplitCustomAmount.set('');
     this.cobroReservationStockError.set('');
     this.cobroReservationStockLoading.set(false);
+    this.cobroReservationTreatmentLoading.set(false);
+    this.cobroReservationClientComment.set('');
+    this.cobroReservationTreatmentId.set(this.agendaTreatmentCatalog[0]?.id ?? 0);
+    this.syncCobroReservationTreatmentPrice();
 
     const reservation = this.reservations().find((item) => item.id === reservationId) ?? null;
 
@@ -7042,6 +7275,8 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
+    const clientComment = this.cobroReservationClientComment().trim().slice(0, 500);
+
     this.actionError.set('');
     this.actionLoadingId.set(reservationId);
     this.showPaymentMethodModal.set(false);
@@ -7061,6 +7296,33 @@ export class AdminPanelComponent implements OnDestroy {
             return;
           }
 
+          if (clientComment && reservation) {
+            const clientCardId = this.findClientCardIdForCustomer(
+              reservation.customerEmail,
+              reservation.customerPhone,
+              reservation.linkedClientId,
+            );
+
+            if (clientCardId) {
+              this.saveClientAppointmentComment(
+                clientCardId,
+                clientComment,
+                {
+                  reservationId: reservation.id,
+                  dateIso: reservation.dateIso,
+                  startTime: reservation.startTime,
+                  appointmentTypeName: reservation.appointmentTypeName,
+                },
+                (message) => this.actionError.set(message),
+              );
+            } else {
+              this.actionError.set(
+                'Cobro registrado, pero no se encontró ficha de clienta para guardar el comentario.',
+              );
+            }
+          }
+
+          this.cobroReservationClientComment.set('');
           this.agendaDetailReservation.update((current) =>
             current && current.id === reservationId
               ? {
@@ -7100,6 +7362,188 @@ export class AdminPanelComponent implements OnDestroy {
     this.cobroReservationStockUnits.set('1');
     this.cobroReservationStockLoading.set(false);
     this.cobroReservationStockError.set('');
+    this.cobroReservationTreatmentLoading.set(false);
+    this.cobroReservationTreatmentPrice.set('');
+    this.cobroReservationClientComment.set('');
+  }
+
+  protected isCobroReservationInsidePack(): boolean {
+    const reservation = this.paymentMethodReservation();
+
+    if (!reservation) {
+      return false;
+    }
+
+    const services = reservation.reservationServiceItems ?? [];
+
+    if (services.length > 0) {
+      return services.some((item) => item.type === 'pack');
+    }
+
+    const mainName = `${reservation.appointmentTypeName ?? ''}`.trim().toLowerCase();
+    return this.agendaPackOptions.some((item) => item.nombre.trim().toLowerCase() === mainName);
+  }
+
+  private syncCobroReservationTreatmentPrice(): void {
+    const treatment =
+      this.agendaTreatmentCatalog.find((item) => item.id === this.cobroReservationTreatmentId()) ??
+      null;
+
+    if (!treatment) {
+      this.cobroReservationTreatmentPrice.set('');
+      return;
+    }
+
+    const price = this.getServicePriceByName(
+      treatment.nombre,
+      this.isCobroReservationInsidePack(),
+    );
+    this.cobroReservationTreatmentPrice.set(price.toFixed(2));
+  }
+
+  protected onCobroReservationTreatmentChange(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    const nextId = Number(target.value);
+
+    if (Number.isFinite(nextId) && nextId > 0) {
+      this.cobroReservationTreatmentId.set(nextId);
+      this.syncCobroReservationTreatmentPrice();
+    }
+  }
+
+  protected onCobroReservationTreatmentPriceInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.cobroReservationTreatmentPrice.set(target.value);
+  }
+
+  protected onCobroReservationClientCommentInput(event: Event): void {
+    const target = event.target as HTMLTextAreaElement;
+    this.cobroReservationClientComment.set(target.value);
+  }
+
+  protected getCobroReservationExtraTreatmentLines(
+    reservation: AdminReservationItem,
+  ): ReservationServiceLineItem[] {
+    return (reservation.reservationServiceItems ?? []).slice(1);
+  }
+
+  protected addTreatmentToPaymentReservation(): void {
+    const reservation = this.paymentMethodReservation();
+    const treatment =
+      this.agendaTreatmentCatalog.find((item) => item.id === this.cobroReservationTreatmentId()) ??
+      null;
+    const price = this.parseEditablePrice(this.cobroReservationTreatmentPrice());
+
+    if (!reservation) {
+      this.cobroReservationStockError.set('Selecciona una cita válida.');
+      return;
+    }
+
+    if (!treatment) {
+      this.cobroReservationStockError.set('Selecciona un tratamiento válido.');
+      return;
+    }
+
+    if (price === null) {
+      this.cobroReservationStockError.set('Introduce un precio válido para el tratamiento.');
+      return;
+    }
+
+    this.cobroReservationTreatmentLoading.set(true);
+    this.cobroReservationStockError.set('');
+
+    this.http
+      .patch<{ ok: boolean; error?: string }>(
+        `/api/admin/reservas/${reservation.id}/service-line`,
+        {
+          name: treatment.nombre,
+          durationMinutes: treatment.duracionMinutos,
+          unitPriceEuro: price,
+        },
+      )
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.cobroReservationStockError.set(
+              response.error ?? 'No se pudo añadir el tratamiento a la cita.',
+            );
+            return;
+          }
+
+          this.refreshPaymentReservationAfterLineChange(reservation.id);
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.cobroReservationStockError.set(
+            typeof apiError === 'string' && apiError
+              ? apiError
+              : 'No se pudo añadir el tratamiento a la cita.',
+          );
+          this.cobroReservationTreatmentLoading.set(false);
+        },
+        complete: () => {
+          this.cobroReservationTreatmentLoading.set(false);
+        },
+      });
+  }
+
+  protected removeTreatmentFromPaymentReservation(lineId: string): void {
+    const reservation = this.paymentMethodReservation();
+
+    if (!reservation || !lineId) {
+      return;
+    }
+
+    this.cobroReservationTreatmentLoading.set(true);
+    this.cobroReservationStockError.set('');
+
+    this.http
+      .delete<{ ok: boolean; error?: string }>(
+        `/api/admin/reservas/${reservation.id}/service-line/${encodeURIComponent(lineId)}`,
+      )
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.cobroReservationStockError.set(
+              response.error ?? 'No se pudo quitar el tratamiento de la cita.',
+            );
+            return;
+          }
+
+          this.refreshPaymentReservationAfterLineChange(reservation.id);
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.cobroReservationStockError.set(
+            typeof apiError === 'string' && apiError
+              ? apiError
+              : 'No se pudo quitar el tratamiento de la cita.',
+          );
+          this.cobroReservationTreatmentLoading.set(false);
+        },
+        complete: () => {
+          this.cobroReservationTreatmentLoading.set(false);
+        },
+      });
+  }
+
+  // Tras cambiar líneas en servidor, recarga la cita y vuelve a seleccionar los conceptos por defecto.
+  private refreshPaymentReservationAfterLineChange(reservationId: string): void {
+    this.loadReservations((reservations) => {
+      const refreshed = reservations.find((item) => item.id === reservationId);
+
+      if (!refreshed) {
+        return;
+      }
+
+      this.selectedReservationPaymentLineIds.set(
+        this.getDefaultReservationPaymentLineIds(refreshed),
+      );
+      this.paymentSplitEntries.set([]);
+      const defaultAmount = this.paymentSplitRemainingEuro();
+      this.paymentSplitCustomAmount.set(defaultAmount > 0 ? defaultAmount.toFixed(2) : '');
+      this.syncCobroReservationTreatmentPrice();
+    });
   }
 
   protected setReservationStatus(
@@ -7366,7 +7810,7 @@ export class AdminPanelComponent implements OnDestroy {
     });
   }
 
-  private loadReservations(): void {
+  private loadReservations(onLoaded?: (reservations: AdminReservationItem[]) => void): void {
     this.isLoadingReservations.set(true);
     this.listError.set('');
 
@@ -7387,6 +7831,7 @@ export class AdminPanelComponent implements OnDestroy {
             this.normalizeReservationTimeFields(reservation),
           );
           this.reservations.set(normalizedReservations);
+          onLoaded?.(normalizedReservations);
 
           const infoReservation = this.agendaReservationInfoModalReservation();
           if (infoReservation) {
@@ -8350,6 +8795,268 @@ export class AdminPanelComponent implements OnDestroy {
     return cierre.total;
   }
 
+  // ── Comparativa de caja ─────────────────────────────────────────────────
+
+  private buildDefaultCierreCompareAnchor(yearOffset: number): CierreComparePeriodAnchor {
+    const today = new Date();
+    const anchor = new Date(today.getFullYear() + yearOffset, today.getMonth(), today.getDate());
+    const dateIso = this.toDateIso(anchor);
+
+    return {
+      dateIso,
+      monthIso: dateIso.slice(0, 7),
+      year: `${anchor.getFullYear()}`,
+      startIso: this.toDateIso(new Date(anchor.getFullYear(), anchor.getMonth(), 1)),
+      endIso: dateIso,
+    };
+  }
+
+  protected onCierreCompareModeChange(event: Event): void {
+    this.cierreCompareMode.set((event.target as HTMLSelectElement).value as CierreCompareMode);
+  }
+
+  protected onCierreCompareTargetChange(event: Event): void {
+    this.cierreCompareTarget.set(
+      (event.target as HTMLSelectElement).value as CierreCompareTarget,
+    );
+  }
+
+  protected onCierreCompareAnchorInput(
+    which: 'base' | 'other',
+    field: keyof CierreComparePeriodAnchor,
+    event: Event,
+  ): void {
+    const value = (event.target as HTMLInputElement).value;
+    const anchor = which === 'base' ? this.cierreCompareBase : this.cierreCompareOther;
+    anchor.update((current) => ({ ...current, [field]: value }));
+  }
+
+  protected getCierreCompareModeLabel(): string {
+    switch (this.cierreCompareMode()) {
+      case 'dia':
+        return 'Día suelto';
+      case 'semana':
+        return 'Semana';
+      case 'mes':
+        return 'Mes';
+      case 'anio':
+        return 'Año';
+      default:
+        return 'Rango personalizado';
+    }
+  }
+
+  protected getCierreCompareTargetLabel(): string {
+    const target = this.cierreCompareTarget();
+
+    if (target === 'personalizado') {
+      return 'Otro periodo elegido';
+    }
+
+    if (target === 'anio_anterior') {
+      return 'Mismo periodo del año anterior';
+    }
+
+    switch (this.cierreCompareMode()) {
+      case 'dia':
+        return 'Día anterior';
+      case 'semana':
+        return 'Semana anterior';
+      case 'mes':
+        return 'Mes anterior';
+      case 'anio':
+        return 'Año anterior';
+      default:
+        return 'Rango inmediatamente anterior';
+    }
+  }
+
+  protected getCierreComparePeriods(): {
+    base: CierreComparePeriodSummary | null;
+    other: CierreComparePeriodSummary | null;
+  } {
+    const mode = this.cierreCompareMode();
+    const target = this.cierreCompareTarget();
+    const basePeriod = this.resolveCierreComparePeriod(this.cierreCompareBase(), mode);
+    const otherPeriod = !basePeriod
+      ? null
+      : target === 'personalizado'
+        ? this.resolveCierreComparePeriod(this.cierreCompareOther(), mode)
+        : this.shiftCierreComparePeriod(basePeriod, mode, target);
+
+    return {
+      base: basePeriod ? this.summarizeCierrePeriod(basePeriod) : null,
+      other: otherPeriod ? this.summarizeCierrePeriod(otherPeriod) : null,
+    };
+  }
+
+  protected getCierreCompareRows(
+    base: CierreComparePeriodSummary | null,
+    other: CierreComparePeriodSummary | null,
+  ): CierreCompareRow[] {
+    if (!base || !other) {
+      return [];
+    }
+
+    const labels: Record<'efectivo' | 'tarjeta' | 'bizum' | 'total', string> = {
+      efectivo: 'Efectivo',
+      tarjeta: 'Tarjeta',
+      bizum: 'Bizum',
+      total: 'Total',
+    };
+
+    return (['efectivo', 'tarjeta', 'bizum', 'total'] as const).map((key) => {
+      const baseAmount = base[key];
+      const otherAmount = other[key];
+      const diffAmount = baseAmount - otherAmount;
+
+      return {
+        name: labels[key],
+        baseAmount,
+        otherAmount,
+        diffAmount,
+        diffPercent: otherAmount === 0 ? null : Math.round((diffAmount / otherAmount) * 1000) / 10,
+      };
+    });
+  }
+
+  protected getCierreCompareBarPercent(amount: number, base: number, other: number): number {
+    const max = Math.max(base, other);
+    return max <= 0 ? 0 : Math.max(2, Math.round((amount / max) * 100));
+  }
+
+  private resolveCierreComparePeriod(
+    anchor: CierreComparePeriodAnchor,
+    mode: CierreCompareMode,
+  ): { startDate: Date; endDate: Date } | null {
+    const parseIso = (iso: string): Date | null => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+        return null;
+      }
+
+      const date = new Date(`${iso}T00:00:00`);
+      return Number.isNaN(date.getTime()) ? null : date;
+    };
+
+    if (mode === 'dia') {
+      const date = parseIso(anchor.dateIso);
+      return date ? { startDate: date, endDate: new Date(date) } : null;
+    }
+
+    if (mode === 'semana') {
+      const date = parseIso(anchor.dateIso);
+
+      if (!date) {
+        return null;
+      }
+
+      const weekDay = date.getDay();
+      const startDate = new Date(date);
+      startDate.setDate(date.getDate() + (weekDay === 0 ? -6 : 1 - weekDay));
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + 6);
+      return { startDate, endDate };
+    }
+
+    if (mode === 'mes') {
+      if (!/^\d{4}-\d{2}$/.test(anchor.monthIso)) {
+        return null;
+      }
+
+      const [year, month] = anchor.monthIso.split('-').map(Number);
+      return { startDate: new Date(year, month - 1, 1), endDate: new Date(year, month, 0) };
+    }
+
+    if (mode === 'anio') {
+      const year = Number(anchor.year);
+
+      if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+        return null;
+      }
+
+      return { startDate: new Date(year, 0, 1), endDate: new Date(year, 11, 31) };
+    }
+
+    const startDate = parseIso(anchor.startIso);
+    const endDate = parseIso(anchor.endIso);
+
+    if (!startDate || !endDate || startDate > endDate) {
+      return null;
+    }
+
+    return { startDate, endDate };
+  }
+
+  private shiftCierreComparePeriod(
+    period: { startDate: Date; endDate: Date },
+    mode: CierreCompareMode,
+    target: Exclude<CierreCompareTarget, 'personalizado'>,
+  ): { startDate: Date; endDate: Date } {
+    const startDate = new Date(period.startDate);
+    const endDate = new Date(period.endDate);
+
+    if (target === 'anio_anterior') {
+      startDate.setFullYear(startDate.getFullYear() - 1);
+      endDate.setFullYear(endDate.getFullYear() - 1);
+    } else if (mode === 'dia') {
+      startDate.setDate(startDate.getDate() - 1);
+      endDate.setDate(endDate.getDate() - 1);
+    } else if (mode === 'semana') {
+      startDate.setDate(startDate.getDate() - 7);
+      endDate.setDate(endDate.getDate() - 7);
+    } else if (mode === 'mes') {
+      startDate.setMonth(startDate.getMonth() - 1, 1);
+    } else if (mode === 'anio') {
+      startDate.setFullYear(startDate.getFullYear() - 1, 0, 1);
+      endDate.setFullYear(endDate.getFullYear() - 1, 11, 31);
+    } else {
+      const dayMs = 24 * 60 * 60 * 1000;
+      const lengthDays = Math.round((period.endDate.getTime() - period.startDate.getTime()) / dayMs) + 1;
+      endDate.setTime(period.startDate.getTime());
+      endDate.setDate(endDate.getDate() - 1);
+      startDate.setTime(endDate.getTime());
+      startDate.setDate(endDate.getDate() - lengthDays + 1);
+    }
+
+    // Meses completos: el fin siempre es el último día del mes (evita saltos por 29/30/31).
+    if (mode === 'mes') {
+      endDate.setTime(new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0).getTime());
+    }
+
+    return { startDate, endDate };
+  }
+
+  private summarizeCierrePeriod(period: {
+    startDate: Date;
+    endDate: Date;
+  }): CierreComparePeriodSummary {
+    const startTime = period.startDate.getTime();
+    const endTime = period.endDate.getTime();
+    const cierres = this.cierreHistorial().filter((cierre) => {
+      const time = new Date(`${cierre.fechaIso}T00:00:00`).getTime();
+      return Number.isFinite(time) && time >= startTime && time <= endTime;
+    });
+    const efectivo = cierres.reduce((sum, cierre) => sum + cierre.efectivo, 0);
+    const tarjeta = cierres.reduce((sum, cierre) => sum + cierre.tarjeta, 0);
+    const bizum = cierres.reduce((sum, cierre) => sum + cierre.bizum, 0);
+    const startIso = this.toDateIso(period.startDate);
+    const endIso = this.toDateIso(period.endDate);
+
+    return {
+      label:
+        startIso === endIso
+          ? this.formatDate(startIso)
+          : `${this.formatDate(startIso)} – ${this.formatDate(endIso)}`,
+      startIso,
+      endIso,
+      cierresCount: cierres.length,
+      efectivo,
+      tarjeta,
+      bizum,
+      total: cierres.reduce((sum, cierre) => sum + cierre.total, 0),
+    };
+  }
+
   private buildRevenuePieData(rows: RevenueCategoryRow[]): RevenuePieData {
     const total = rows.reduce((sum, row) => sum + row.amount, 0);
 
@@ -8597,7 +9304,7 @@ export class AdminPanelComponent implements OnDestroy {
       case 'almacen':
         return this.hasPermission('almacen_gestionar');
       case 'cierre':
-        return this.hasPermission('cierre_registrar');
+        return this.hasPermission('cierre_registrar') || this.hasPermission('caja_comparar');
       default:
         return false;
     }
@@ -8623,11 +9330,41 @@ export class AdminPanelComponent implements OnDestroy {
       case 'almacen':
         return this.hasPermission('almacen_gestionar');
       case 'cierre':
-        return this.hasPermission('cierre_registrar');
+        return this.hasPermission('cierre_registrar') || this.hasPermission('caja_comparar');
       case 'empleados':
         return false;
       default:
         return false;
+    }
+  }
+
+  // Estadísticas de caja: solo superadmin. Comparativa: superadmin o permiso caja_comparar.
+  protected canAccessCierreManagementTab(tab: CierreManagementTab): boolean {
+    switch (tab) {
+      case 'registro':
+      case 'historial':
+        return this.hasPermission('cierre_registrar');
+      case 'estadisticas':
+        return this.isSuperadmin();
+      case 'comparativa':
+        return this.hasPermission('caja_comparar');
+      default:
+        return false;
+    }
+  }
+
+  protected getCierreManagementTabLabel(tab: CierreManagementTab): string {
+    switch (tab) {
+      case 'registro':
+        return 'Registrar cierre de caja';
+      case 'historial':
+        return 'Ver historial de cierres';
+      case 'estadisticas':
+        return 'Ver estadísticas de caja';
+      case 'comparativa':
+        return 'Comparar caja entre periodos';
+      default:
+        return 'Acceder a esta sección';
     }
   }
 
@@ -9059,17 +9796,28 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   private getPreferredCierreManagementTab(): CierreManagementTab {
+    const fallback = (['registro', 'historial', 'comparativa', 'estadisticas'] as const).find(
+      (tab) => this.canAccessCierreManagementTab(tab),
+    );
+    const defaultTab: CierreManagementTab = fallback ?? 'registro';
+
     if (!this.canUseLocalStorage()) {
-      return 'registro';
+      return defaultTab;
     }
 
     const rawValue = window.localStorage.getItem(this.cierreManagementTabStorageKey);
 
-    if (rawValue === 'historial' || rawValue === 'estadisticas') {
+    if (
+      (rawValue === 'registro' ||
+        rawValue === 'historial' ||
+        rawValue === 'estadisticas' ||
+        rawValue === 'comparativa') &&
+      this.canAccessCierreManagementTab(rawValue)
+    ) {
       return rawValue;
     }
 
-    return 'registro';
+    return defaultTab;
   }
 
   private shiftAgendaCalendarMonth(offset: number): void {
@@ -9240,6 +9988,10 @@ export class AdminPanelComponent implements OnDestroy {
     this.calendarMonthIso.set(`${targetYear}-${targetMonth}`);
   }
 
+  protected closeAgendaFormErrorPopup(): void {
+    this.agendaFormErrorPopup.set('');
+  }
+
   protected showAgendaDropToast(message: string): void {
     this.agendaDropToast.set(message);
 
@@ -9401,7 +10153,16 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
+    // Cita ya confirmada: permite registrar la señal a posteriori sin volver a confirmar.
     if (reservation.adminStatus === 'accepted') {
+      if (this.hasReservationSignal(reservation)) {
+        return;
+      }
+
+      this.agendaDetailError.set('');
+      this.senalPaymentMethod.set('');
+      this.senalError.set('');
+      this.showSenalModal.set(true);
       return;
     }
 
@@ -9444,6 +10205,14 @@ export class AdminPanelComponent implements OnDestroy {
     this.senalLoading.set(false);
   }
 
+  protected canAddSignalToConfirmedAgendaReservation(reservation: AdminReservationItem): boolean {
+    return reservation.adminStatus === 'accepted' && !this.hasReservationSignal(reservation);
+  }
+
+  protected isSenalModalForConfirmedReservation(): boolean {
+    return this.agendaDetailReservation()?.adminStatus === 'accepted';
+  }
+
   protected submitSenalAndConfirm(): void {
     const method = this.senalPaymentMethod();
 
@@ -9452,9 +10221,15 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
+    const alreadyAccepted = this.isSenalModalForConfirmedReservation();
+
     if (method === 'sin_senal') {
       this.closeSenalModal();
-      this.confirmAgendaDetailSignal();
+
+      if (!alreadyAccepted) {
+        this.confirmAgendaDetailSignal();
+      }
+
       return;
     }
 
@@ -9483,6 +10258,12 @@ export class AdminPanelComponent implements OnDestroy {
 
           this.closeSenalModal();
           this.loadCierreAutoDiario();
+
+          if (alreadyAccepted) {
+            this.loadReservations();
+            return;
+          }
+
           this.confirmAgendaDetailSignal();
         },
         error: (error) => {
@@ -9567,6 +10348,7 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected closeAgendaReservationDetail(): void {
+    this.agendaFormErrorPopup.set('');
     this.agendaDetailReservation.set(null);
     this.agendaDetailMode.set('view');
     this.agendaEditTarget.set('duration');
@@ -9576,6 +10358,8 @@ export class AdminPanelComponent implements OnDestroy {
     this.agendaEditDraftWorkerEmail.set('');
     this.agendaEditCalendarMonthIso.set('');
     this.agendaEditDraftAdditionalComments.set('');
+    this.agendaEditDraftClientComment.set('');
+    this.agendaEditDraftExtraServiceLines.set([]);
     this.agendaEditDraftStockLines.set([]);
     this.agendaEditDraftStockProductId.set('');
     this.agendaEditDraftStockUnits.set('1');
@@ -9618,6 +10402,11 @@ export class AdminPanelComponent implements OnDestroy {
     this.agendaEditNameTouched.set(false);
     this.agendaEditDurationTouched.set(false);
     this.agendaEditDraftAdditionalComments.set(r.additionalComments ?? '');
+    this.agendaEditDraftClientComment.set('');
+    this.agendaEditDraftExtraServiceLines.set(
+      (r.reservationServiceItems ?? []).slice(1).map((item) => ({ ...item })),
+    );
+    this.agendaEditDraftExtraTreatmentId.set(this.agendaTreatmentCatalog[0]?.id ?? 0);
     this.agendaEditDraftStockLines.set(
       (r.reservationStockItems ?? []).map((item) => ({ ...item })),
     );
@@ -9990,6 +10779,10 @@ export class AdminPanelComponent implements OnDestroy {
       this.agendaEditDraftDuration.set(selectedService.duracionMinutos);
       this.agendaEditDurationTouched.set(true);
     }
+
+    this.agendaEditDraftExtraServiceLines.update((lines) =>
+      this.syncExtraTreatmentPrices(lines, this.isAgendaEditInsidePack()),
+    );
   }
 
   protected onAgendaEditDraftDurationChange(event: Event): void {
@@ -10014,6 +10807,98 @@ export class AdminPanelComponent implements OnDestroy {
   protected onAgendaEditDraftAdditionalCommentsInput(event: Event): void {
     const target = event.target as HTMLTextAreaElement;
     this.agendaEditDraftAdditionalComments.set(target.value);
+  }
+
+  protected onAgendaEditDraftClientCommentInput(event: Event): void {
+    const target = event.target as HTMLTextAreaElement;
+    this.agendaEditDraftClientComment.set(target.value);
+  }
+
+  protected isAgendaEditInsidePack(): boolean {
+    const mainName = this.agendaEditDraftName().trim().toLowerCase();
+    const r = this.agendaDetailReservation();
+
+    if (mainName) {
+      return this.agendaPackOptions.some((item) => item.nombre.trim().toLowerCase() === mainName);
+    }
+
+    return (r?.reservationServiceItems?.[0]?.type ?? 'pack') === 'pack';
+  }
+
+  protected onAgendaEditDraftExtraTreatmentChange(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    const nextId = Number(target.value);
+
+    if (Number.isFinite(nextId) && nextId > 0) {
+      this.agendaEditDraftExtraTreatmentId.set(nextId);
+    }
+  }
+
+  protected addAgendaEditDraftExtraTreatment(): void {
+    const treatment =
+      this.agendaTreatmentCatalog.find(
+        (item) => item.id === this.agendaEditDraftExtraTreatmentId(),
+      ) ?? null;
+
+    if (!treatment) {
+      this.agendaDetailError.set('Selecciona un tratamiento válido para añadirlo.');
+      return;
+    }
+
+    const nextLine = this.buildExtraTreatmentLine(treatment, this.isAgendaEditInsidePack());
+    this.agendaEditDraftExtraServiceLines.update((items) => [...items, nextLine]);
+    this.agendaEditDurationTouched.set(true);
+    this.agendaEditDraftDuration.set(
+      this.roundUpToHalfHour(
+        Math.max(0, Number(this.agendaEditDraftDuration()) || 0) + treatment.duracionMinutos,
+      ),
+    );
+    this.agendaDetailError.set('');
+  }
+
+  protected updateAgendaEditDraftExtraTreatmentPrice(lineId: string, raw: string): void {
+    const price = this.parseEditablePrice(raw);
+
+    if (price === null) {
+      return;
+    }
+
+    this.agendaEditDraftExtraServiceLines.update((items) =>
+      items.map((item) =>
+        item.id === lineId ? { ...item, unitPriceEuro: price, priceOverridden: true } : item,
+      ),
+    );
+  }
+
+  protected removeAgendaEditDraftExtraTreatment(lineId: string): void {
+    const removed = this.agendaEditDraftExtraServiceLines().find((item) => item.id === lineId);
+
+    this.agendaEditDraftExtraServiceLines.update((items) =>
+      items.filter((item) => item.id !== lineId),
+    );
+
+    if (removed) {
+      this.agendaEditDurationTouched.set(true);
+      this.agendaEditDraftDuration.set(
+        this.roundUpToHalfHour(
+          Math.max(0, Number(this.agendaEditDraftDuration()) || 0) - removed.durationMinutes,
+        ),
+      );
+    }
+  }
+
+  protected getAgendaEditServicesTotal(): number {
+    const mainName = this.agendaEditDraftName().trim() || this.agendaEditOriginalName();
+    const r = this.agendaDetailReservation();
+    const mainPrice = this.agendaEditNameTouched()
+      ? this.getServicePriceByName(mainName, false)
+      : Number(r?.reservationServiceItems?.[0]?.unitPriceEuro ?? this.getServicePriceByName(mainName, false));
+    const extras = this.agendaEditDraftExtraServiceLines().reduce(
+      (acc, item) => acc + item.unitPriceEuro * Math.max(1, item.quantity),
+      0,
+    );
+
+    return Number((mainPrice + extras).toFixed(2));
   }
 
   private getAgendaEditSelectedService(
@@ -10106,19 +10991,26 @@ export class AdminPanelComponent implements OnDestroy {
           ];
     const selectedServiceLine = this.buildReservationServiceLineFromName(nextName);
     const nextDurationMinutes = nextDuration;
-    const nextAppointmentTypeName = selectedServiceLine?.name || nextName || r.appointmentTypeName;
-    const nextServiceItems = selectedServiceLine
-      ? [{ ...selectedServiceLine, durationMinutes: nextDurationMinutes }]
-      : currentServiceItems.map((item, index) =>
-          index === 0
-            ? {
-                ...item,
-                name: nextAppointmentTypeName,
-                durationMinutes: nextDurationMinutes,
-              }
-            : item,
-        );
+    const extraServiceItems = this.agendaEditDraftExtraServiceLines().map(
+      ({ priceOverridden: _ignored, ...item }) => item,
+    );
+    const extrasDurationMinutes = extraServiceItems.reduce(
+      (acc, item) => acc + item.durationMinutes * Math.max(1, item.quantity),
+      0,
+    );
+    // El servidor suma las duraciones de las líneas: la principal absorbe el resto del total elegido.
+    const mainDurationMinutes = Math.max(0, nextDurationMinutes - extrasDurationMinutes);
+    const mainServiceItem = selectedServiceLine
+      ? { ...selectedServiceLine, durationMinutes: mainDurationMinutes }
+      : {
+          ...currentServiceItems[0],
+          name: nextName || currentServiceItems[0].name,
+          durationMinutes: mainDurationMinutes,
+        };
+    const nextServiceItems = [mainServiceItem, ...extraServiceItems];
+    const nextAppointmentTypeName = nextServiceItems.map((item) => item.name).join(' + ');
     const nextStockItems = this.agendaEditDraftStockLines();
+    const nextClientComment = this.agendaEditDraftClientComment().trim().slice(0, 500);
     const nextDateIso = this.agendaEditDraftDateIso() || r.dateIso;
     const nextStartTime = this.agendaEditDraftStartTime() || r.startTime;
     const nextWorkerEmail =
@@ -10174,6 +11066,28 @@ export class AdminPanelComponent implements OnDestroy {
             this.agendaDetailError.set(response.error ?? 'No se pudo guardar los cambios.');
             this.agendaDetailSaving.set(false);
             return;
+          }
+
+          if (nextClientComment) {
+            const clientCardId = this.findClientCardIdForCustomer(
+              r.customerEmail,
+              r.customerPhone,
+              r.linkedClientId,
+            );
+
+            if (clientCardId) {
+              this.saveClientAppointmentComment(clientCardId, nextClientComment, {
+                reservationId: r.id,
+                dateIso: nextDateIso,
+                startTime: nextStartTime,
+                appointmentTypeName: nextAppointmentTypeName,
+              });
+              this.agendaEditDraftClientComment.set('');
+            } else {
+              this.actionError.set(
+                'La cita se guardó, pero no se encontró ficha de clienta para guardar el comentario.',
+              );
+            }
           }
 
           const nextEndTime = this.formatMinutesToTime(
@@ -10338,6 +11252,8 @@ export class AdminPanelComponent implements OnDestroy {
     this.agendaManualReserveServiceId.set(defaultPack?.id ?? 1);
     this.agendaManualReserveDuration.set(defaultPack?.duracionMinutos ?? 60);
     this.agendaManualReserveServiceLines.set([]);
+    this.agendaManualReserveExtraTreatmentId.set(this.agendaTreatmentCatalog[0]?.id ?? 0);
+    this.agendaManualReserveClientComment.set('');
     this.agendaManualReserveStockLines.set([]);
     this.agendaManualReserveStockUnits.set('1');
     if (this.getAvailableSellableStockProducts().length === 0) {
@@ -10346,7 +11262,6 @@ export class AdminPanelComponent implements OnDestroy {
     this.agendaManualReserveStockProductId.set(
       this.getAvailableSellableStockProducts()[0]?.id ?? '',
     );
-    this.addAgendaManualReserveServiceLine();
     this.showAgendaManualReserveModal.set(true);
   }
 
@@ -10354,6 +11269,7 @@ export class AdminPanelComponent implements OnDestroy {
     this.showAgendaManualReserveModal.set(false);
     this.agendaManualReserveLoading.set(false);
     this.agendaManualReserveError.set('');
+    this.agendaFormErrorPopup.set('');
   }
 
   protected onAgendaManualReserveServiceTypeChange(event: Event): void {
@@ -10364,6 +11280,9 @@ export class AdminPanelComponent implements OnDestroy {
 
     this.agendaManualReserveServiceType.set(nextType);
     this.agendaManualReserveServiceId.set(nextDefault?.id ?? 1);
+    this.agendaManualReserveServiceLines.update((lines) =>
+      this.syncExtraTreatmentPrices(lines, nextType === 'pack'),
+    );
     this.syncAgendaManualReserveDurationFromSelectedService();
   }
 
@@ -10429,29 +11348,52 @@ export class AdminPanelComponent implements OnDestroy {
     this.agendaManualReserveCustomerEmail.set(client.email);
   }
 
-  protected addAgendaManualReserveServiceLine(): void {
-    const selectedService = this.getAgendaManualReserveSelectedService();
+  protected isAgendaManualReserveInsidePack(): boolean {
+    return this.agendaManualReserveServiceType() === 'pack';
+  }
 
-    if (!selectedService) {
-      this.agendaManualReserveError.set('Selecciona un servicio válido para añadirlo.');
+  protected onAgendaManualReserveExtraTreatmentChange(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    const nextId = Number(target.value);
+
+    if (Number.isFinite(nextId) && nextId > 0) {
+      this.agendaManualReserveExtraTreatmentId.set(nextId);
+    }
+  }
+
+  protected addAgendaManualReserveServiceLine(): void {
+    const treatment =
+      this.agendaTreatmentCatalog.find(
+        (item) => item.id === this.agendaManualReserveExtraTreatmentId(),
+      ) ?? null;
+
+    if (!treatment) {
+      this.agendaManualReserveError.set('Selecciona un tratamiento válido para añadirlo.');
       return;
     }
 
-    const nextLine: ReservationServiceLineItem = {
-      id: `svc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      type: this.agendaManualReserveServiceType(),
-      name: selectedService.nombre,
-      quantity: 1,
-      durationMinutes: selectedService.duracionMinutos,
-      unitPriceEuro: this.getPackPriceByName(selectedService.nombre),
-      requiresReservationSignal: Boolean(
-        this.agendaManualReserveServiceType() === 'pack' &&
-        (selectedService as AppointmentType).requiresReservationSignal,
-      ),
-    };
+    const nextLine = this.buildExtraTreatmentLine(
+      treatment,
+      this.isAgendaManualReserveInsidePack(),
+    );
 
     this.agendaManualReserveServiceLines.update((items) => [...items, nextLine]);
     this.agendaManualReserveDuration.set(this.getAgendaManualReserveTotalDuration());
+    this.agendaManualReserveError.set('');
+  }
+
+  protected updateAgendaManualReserveServiceLinePrice(lineId: string, raw: string): void {
+    const price = this.parseEditablePrice(raw);
+
+    if (price === null) {
+      return;
+    }
+
+    this.agendaManualReserveServiceLines.update((items) =>
+      items.map((item) =>
+        item.id === lineId ? { ...item, unitPriceEuro: price, priceOverridden: true } : item,
+      ),
+    );
   }
 
   protected removeAgendaManualReserveServiceLine(lineId: string): void {
@@ -10462,12 +11404,26 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected getAgendaManualReserveTotalDuration(): number {
-    const totalDuration = this.agendaManualReserveServiceLines().reduce(
+    const mainDuration = this.getAgendaManualReserveSelectedService()?.duracionMinutos ?? 0;
+    const extrasDuration = this.agendaManualReserveServiceLines().reduce(
       (acc, item) => acc + item.durationMinutes * Math.max(1, item.quantity),
       0,
     );
 
-    return Math.max(30, totalDuration || this.agendaManualReserveDuration());
+    return this.roundUpToHalfHour(
+      mainDuration + extrasDuration || this.agendaManualReserveDuration(),
+    );
+  }
+
+  protected getAgendaManualReserveServicesTotal(): number {
+    const mainService = this.getAgendaManualReserveSelectedService();
+    const mainPrice = mainService ? this.getServicePriceByName(mainService.nombre, false) : 0;
+    const extras = this.agendaManualReserveServiceLines().reduce(
+      (acc, item) => acc + item.unitPriceEuro * Math.max(1, item.quantity),
+      0,
+    );
+
+    return Number((mainPrice + extras).toFixed(2));
   }
 
   protected addAgendaManualReserveStockLine(): void {
@@ -10570,26 +11526,31 @@ export class AdminPanelComponent implements OnDestroy {
       30,
       Number(this.agendaManualReserveDuration() || selectedService.duracionMinutos || 60),
     );
+    const extraServiceLines = this.agendaManualReserveServiceLines().map(
+      ({ priceOverridden: _ignored, ...line }) => line,
+    );
+    const extrasDurationMinutes = extraServiceLines.reduce(
+      (acc, line) => acc + line.durationMinutes * Math.max(1, line.quantity),
+      0,
+    );
     const selectedServiceLine: ReservationServiceLineItem = {
       id: `svc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       type: this.agendaManualReserveServiceType(),
       name: selectedService.nombre,
       quantity: 1,
-      durationMinutes: selectedDurationMinutes,
-      unitPriceEuro: this.getPackPriceByName(selectedService.nombre),
+      // El servidor suma las duraciones de las líneas: la principal absorbe el resto del total elegido.
+      durationMinutes: Math.max(0, selectedDurationMinutes - extrasDurationMinutes),
+      unitPriceEuro: this.getServicePriceByName(selectedService.nombre, false),
       requiresReservationSignal: Boolean(
         this.agendaManualReserveServiceType() === 'pack' &&
         'requiresReservationSignal' in selectedService &&
         selectedService.requiresReservationSignal,
       ),
     };
-    const draftServiceLines = this.agendaManualReserveServiceLines();
-    const serviceLines =
-      draftServiceLines.length > 0
-        ? [selectedServiceLine, ...draftServiceLines.slice(1)]
-        : [selectedServiceLine];
+    const serviceLines = [selectedServiceLine, ...extraServiceLines];
     const stockLines = this.agendaManualReserveStockLines();
     const dateIso = this.agendaManualReserveDateIso().trim();
+    const clientComment = this.agendaManualReserveClientComment().trim().slice(0, 500);
 
     if (this.isAgendaDateInPast(dateIso)) {
       this.agendaManualReserveError.set('No se pueden crear reservas en días pasados.');
@@ -10610,10 +11571,8 @@ export class AdminPanelComponent implements OnDestroy {
     const customerEmail = `${selectedClient?.email ?? this.agendaManualReserveCustomerEmail()}`
       .trim()
       .toLowerCase();
-    const durationMinutes = serviceLines.reduce(
-      (acc, line) => acc + line.durationMinutes * Math.max(1, line.quantity),
-      0,
-    );
+    // La duración elegida en el desplegable manda; los tratamientos extra solo la proponen.
+    const durationMinutes = selectedDurationMinutes;
     const canAssignReservation = this.canAssignReservationToWorker();
     const currentUserEmail = this.ownerEmail().trim().toLowerCase();
     const selectedWorkerEmail = this.normalizeAgendaWorkerEmail(
@@ -10639,6 +11598,17 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
+    if (
+      !this.isSuperadmin() &&
+      this.hasReservationConflict(dateIso, time, durationMinutes, '', createdByEmail)
+    ) {
+      const endLabel = this.formatMinutesToTime(this.parseTimeToMinutes(time) + durationMinutes);
+      this.agendaManualReserveError.set(
+        `La cita (${time}–${endLabel}) se solapa con otra cita de la trabajadora seleccionada. Cambia la hora, la duración o la trabajadora.`,
+      );
+      return;
+    }
+
     this.agendaManualReserveLoading.set(true);
     this.agendaManualReserveError.set('');
 
@@ -10654,6 +11624,7 @@ export class AdminPanelComponent implements OnDestroy {
         clientCardId: selectedClient?.id ?? '',
         appointmentTypeName: serviceLines.map((line) => line.name).join(' + '),
         requiresReservationSignal: serviceLines.some((line) => line.requiresReservationSignal),
+        additionalComments: clientComment,
         reservationMeta: {
           version: 1,
           linkedClientId: selectedClient?.id ?? undefined,
@@ -10666,6 +11637,21 @@ export class AdminPanelComponent implements OnDestroy {
           if (!response.ok) {
             this.agendaManualReserveError.set(response.error ?? 'No se pudo crear la reserva.');
             return;
+          }
+
+          const clientCardId = this.findClientCardIdForCustomer(
+            customerEmail,
+            customerPhone,
+            selectedClient?.id,
+          );
+
+          if (clientComment && clientCardId) {
+            this.saveClientAppointmentComment(clientCardId, clientComment, {
+              reservationId: response.reservationId,
+              dateIso,
+              startTime: time,
+              appointmentTypeName: serviceLines.map((line) => line.name).join(' + '),
+            });
           }
 
           this.closeAgendaManualReserveModal();
@@ -11231,7 +12217,7 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
-    this.agendaManualReserveDuration.set(selectedService.duracionMinutos);
+    this.agendaManualReserveDuration.set(this.getAgendaManualReserveTotalDuration());
   }
 
   private getDefaultAgendaManualReserveTime(_dateIso: string): string {

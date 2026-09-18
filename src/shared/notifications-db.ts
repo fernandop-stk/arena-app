@@ -15,9 +15,12 @@ export type NotificationType =
   | 'aviso_importante'
   | 'otra';
 
+// Tipos visibles en el panel; el resto se guardan pero no se muestran.
 const ALLOWED_NOTIFICATION_TYPES: NotificationType[] = [
   'cumpleanos_cliente',
   'senal_pago_pendiente',
+  'nueva_reserva',
+  'reserva_confirmada',
   'cancelacion_reserva',
   'aviso_importante',
   'otra',

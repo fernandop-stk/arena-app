@@ -11,6 +11,7 @@ export type EmployeePermission =
   | 'reservas_gestionar'
   | 'reservas_borrar'
   | 'cierre_registrar'
+  | 'caja_comparar'
   | 'estadisticas_ver'
   | 'clientes_gestionar'
   | 'almacen_gestionar'
@@ -25,6 +26,7 @@ export const PERMISSION_LABELS: Record<EmployeePermission, string> = {
   reservas_gestionar: 'Aceptar / rechazar reservas',
   reservas_borrar: 'Borrar reservas manualmente',
   cierre_registrar: 'Registrar cierre de caja',
+  caja_comparar: 'Comparar caja entre periodos',
   estadisticas_ver: 'Ver estadísticas',
   clientes_gestionar: 'Gestionar fichas de clientes',
   almacen_gestionar: 'Gestionar almacén',
