@@ -14,7 +14,13 @@ export interface ReservaPersistRequest {
   additionalComments?: string;
   requiresReservationSignal?: boolean;
   createdByEmail?: string;
+  // 'online' = la clienta desde la web; 'salon' = una trabajadora desde la agenda.
+  bookingSource?: ReservationBookingSource;
+  // Email de la trabajadora que registró la cita (solo reservas hechas en el salón).
+  bookedByEmail?: string | null;
 }
+
+export type ReservationBookingSource = 'online' | 'salon';
 
 export type AdminReservationStatus = 'pending' | 'accepted' | 'rejected';
 export type ClientConfirmationStatus = 'pending' | 'confirmed';
@@ -48,6 +54,8 @@ export interface AdminReservationItem {
   createdByEmail?: string | null;
   createdAtIso: string;
   expiresAtIso?: string | null;
+  bookingSource?: ReservationBookingSource | null;
+  bookedByEmail?: string | null;
 }
 
 export interface AdminBlockedPeriodItem {
@@ -185,6 +193,8 @@ interface MemoryReservation {
   createdByEmail?: string | null;
   createdAtIso: string;
   expiresAtIso?: string | null;
+  bookingSource?: ReservationBookingSource | null;
+  bookedByEmail?: string | null;
   slots: string[];
 }
 
@@ -703,6 +713,16 @@ const ensureSchema = async (): Promise<void> => {
     `);
 
     await db.query(`
+      ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS booking_source TEXT NULL;
+    `);
+
+    await db.query(`
+      ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS booked_by_email TEXT NULL;
+    `);
+
+    await db.query(`
       CREATE TABLE IF NOT EXISTS reservation_slots (
         date_iso TEXT NOT NULL,
         slot_time TEXT NOT NULL,
@@ -1177,6 +1197,8 @@ const createReservationWithSlotsInMemory = (
       createdAtIso,
       requiresReservationSignal: payload.requiresReservationSignal,
     }),
+    bookingSource: payload.bookingSource ?? null,
+    bookedByEmail: payload.bookedByEmail?.trim().toLowerCase() || null,
     slots: slotTimes,
   });
 
@@ -1626,9 +1648,11 @@ export const createReservationWithSlots = async (
         signal_registered_by_email,
         client_confirmation_status,
         created_by_email,
-        expires_at
+        expires_at,
+        booking_source,
+        booked_by_email
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
       `,
       [
         reservationId,
@@ -1648,6 +1672,8 @@ export const createReservationWithSlots = async (
         'pending',
         payload.createdByEmail?.trim().toLowerCase() || null,
         expiresAtIso,
+        payload.bookingSource ?? null,
+        payload.bookedByEmail?.trim().toLowerCase() || null,
       ],
     );
 
@@ -1730,6 +1756,8 @@ export const createWaitlistReservation = async (
       createdByEmail: null,
       createdAtIso,
       expiresAtIso: null,
+      bookingSource: 'online',
+      bookedByEmail: null,
       slots: [],
     });
 
@@ -1749,9 +1777,9 @@ export const createWaitlistReservation = async (
         customer_email, customer_name, customer_phone, appointment_type_name,
         additional_comments, signal_amount_euro, signal_payment_method,
         signal_received_at, signal_registered_by_email, client_confirmation_status,
-        created_by_email, expires_at
+        created_by_email, expires_at, booking_source
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
       `,
       [
         reservationId,
@@ -1771,6 +1799,7 @@ export const createWaitlistReservation = async (
         'pending',
         null,
         null,
+        'online',
       ],
     );
 
@@ -1845,6 +1874,8 @@ const mapMemoryReservationToAdminItem = (reservation: MemoryReservation): AdminR
   signalPaymentReminderSentAtIso: reservation.signalPaymentReminderSentAtIso ?? null,
   createdByEmail: reservation.createdByEmail ?? null,
   createdAtIso: reservation.createdAtIso,
+  bookingSource: reservation.bookingSource ?? null,
+  bookedByEmail: reservation.bookedByEmail ?? null,
 });
 
 export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]> => {
@@ -1888,6 +1919,8 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
       created_by_email: string | null;
       expires_at: string | null;
       created_at: string;
+      booking_source: string | null;
+      booked_by_email: string | null;
     }>(`
       SELECT
         id,
@@ -1914,7 +1947,9 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
         signal_payment_reminder_sent_at,
         created_by_email,
         expires_at,
-        created_at
+        created_at,
+        booking_source,
+        booked_by_email
       FROM reservations
       ORDER BY date_iso ASC, start_time ASC, created_at DESC
     `);
@@ -1958,6 +1993,11 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
       createdByEmail: row.created_by_email,
       expiresAtIso: row.expires_at,
       createdAtIso: new Date(row.created_at).toISOString(),
+      bookingSource:
+        row.booking_source === 'online' || row.booking_source === 'salon'
+          ? row.booking_source
+          : null,
+      bookedByEmail: row.booked_by_email,
     }));
   } catch (error) {
     if (enableRuntimeMemoryMode(error)) {

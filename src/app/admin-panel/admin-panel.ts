@@ -140,6 +140,8 @@ interface AdminReservationItem {
   clientConfirmationReminderSentAtIso?: string | null;
   createdByEmail?: string | null;
   createdAtIso: string;
+  bookingSource?: 'online' | 'salon' | null;
+  bookedByEmail?: string | null;
   linkedClientId?: string;
   reservationServiceItems?: ReservationServiceLineItem[];
   reservationStockItems?: ReservationStockLineItem[];
@@ -725,9 +727,8 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly agendaManualReserveServiceId = signal<number>(
     this.agendaPackOptions[0]?.id ?? 1,
   );
-  protected readonly agendaManualReserveDuration = signal<number>(
-    this.agendaPackOptions[0]?.duracionMinutos ?? 60,
-  );
+  // null = sin modificar: al reservar se usa la duración original del pack/tratamiento (+ extras).
+  protected readonly agendaManualReserveDuration = signal<number | null>(null);
   protected readonly agendaManualReserveServiceLines = signal<ReservationServiceLineItem[]>([]);
   protected readonly agendaManualReserveExtraTreatmentId = signal<number>(0);
   protected readonly agendaManualReserveClientComment = signal('');
@@ -929,6 +930,9 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly cobroReservationStockLoading = signal(false);
   protected readonly cobroReservationStockError = signal('');
   protected readonly cobroReservationTreatmentId = signal<number>(0);
+  protected readonly cobroCatalogTab = signal<'packs' | 'treatments' | 'treatmentsInPack' | 'products'>(
+    'packs',
+  );
   protected readonly cobroReservationTreatmentPrice = signal('');
   protected readonly cobroReservationTreatmentLoading = signal(false);
   protected readonly cobroReservationClientComment = signal('');
@@ -6453,6 +6457,41 @@ export class AdminPanelComponent implements OnDestroy {
     return Number(reservation.signalAmountEuro ?? 0) > 0;
   }
 
+  /** Origen de la reserva para la tarjeta: dónde se pidió, cuándo y quién la registró. */
+  protected getAgendaCardBookingOriginLabel(reservation: AdminReservationItem): string {
+    const when = reservation.createdAtIso ? this.formatDateTime(reservation.createdAtIso) : '';
+    const source = this.resolveReservationBookingSource(reservation);
+
+    if (source === 'online') {
+      return when ? `Pedida a través de la web · ${when}` : 'Pedida a través de la web';
+    }
+
+    if (source === 'salon') {
+      const workerEmail = `${reservation.bookedByEmail ?? ''}`.trim();
+      const worker = workerEmail ? this.getWorkerDisplayName(workerEmail) : '';
+      return ['Pedida en la peluquería', when, worker ? `por ${worker}` : '']
+        .filter(Boolean)
+        .join(' · ');
+    }
+
+    return when ? `Reservada el ${when}` : '';
+  }
+
+  protected isReservationBookedOnline(reservation: AdminReservationItem): boolean {
+    return this.resolveReservationBookingSource(reservation) === 'online';
+  }
+
+  // Reservas anteriores al campo bookingSource: la lista de espera siempre es web.
+  private resolveReservationBookingSource(
+    reservation: AdminReservationItem,
+  ): 'online' | 'salon' | null {
+    if (reservation.bookingSource === 'online' || reservation.bookingSource === 'salon') {
+      return reservation.bookingSource;
+    }
+
+    return this.isWaitlistReservation(reservation) ? 'online' : null;
+  }
+
   /** Etiqueta corta para la tarjeta de la agenda: cómo se confirmó la cita. */
   protected getAgendaCardConfirmationLabel(reservation: AdminReservationItem): string {
     if (reservation.adminStatus === 'rejected') {
@@ -6810,6 +6849,7 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected markPaymentReceivedDirect(reservationId: string): void {
     this.paymentMethodReservationId.set(reservationId);
+    this.cobroCatalogTab.set('packs');
     this.selectedPaymentMethod.set('efectivo');
     this.paymentSplitEntries.set([]);
     this.paymentSplitEditorMethod.set('efectivo');
@@ -7626,6 +7666,249 @@ export class AdminPanelComponent implements OnDestroy {
       this.paymentSplitCustomAmount.set(defaultAmount > 0 ? defaultAmount.toFixed(2) : '');
       this.syncCobroReservationTreatmentPrice();
     });
+  }
+
+  protected setCobroCatalogTab(tab: 'packs' | 'treatments' | 'treatmentsInPack' | 'products'): void {
+    this.cobroCatalogTab.set(tab);
+    this.cobroReservationStockError.set('');
+  }
+
+  protected getCobroReservationServiceLines(
+    reservation: AdminReservationItem,
+  ): ReservationServiceLineItem[] {
+    return this.getReservationDisplayServiceItems(reservation);
+  }
+
+  protected isCobroReservationServiceLinePaid(
+    reservation: AdminReservationItem,
+    index: number,
+  ): boolean {
+    return this.isReservationPaymentLinePaid(reservation, `svc-${index}`);
+  }
+
+  protected isCobroReservationStockLinePaid(
+    reservation: AdminReservationItem,
+    index: number,
+  ): boolean {
+    return this.isReservationPaymentLinePaid(reservation, `stk-${index}`);
+  }
+
+  protected isCobroReservationBusy(): boolean {
+    return this.cobroReservationTreatmentLoading() || this.cobroReservationStockLoading();
+  }
+
+  // Añade un pack o tratamiento del catálogo a la cita con su precio suelto.
+  protected addCatalogServiceToPaymentReservation(
+    service: { nombre: string; duracionMinutos: number },
+    type: 'pack' | 'treatment',
+  ): void {
+    const reservation = this.paymentMethodReservation();
+
+    if (!reservation || reservation.paymentReceived) {
+      return;
+    }
+
+    this.cobroReservationTreatmentLoading.set(true);
+    this.cobroReservationStockError.set('');
+
+    this.http
+      .patch<{ ok: boolean; error?: string }>(
+        `/api/admin/reservas/${reservation.id}/service-line`,
+        {
+          name: service.nombre,
+          durationMinutes: service.duracionMinutos,
+          unitPriceEuro: this.getServicePriceByName(service.nombre, false),
+          type,
+        },
+      )
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.cobroReservationStockError.set(
+              response.error ?? 'No se pudo añadir el servicio a la cita.',
+            );
+            return;
+          }
+
+          this.refreshPaymentReservationAfterLineChange(reservation.id);
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.cobroReservationStockError.set(
+            typeof apiError === 'string' && apiError
+              ? apiError
+              : 'No se pudo añadir el servicio a la cita.',
+          );
+          this.cobroReservationTreatmentLoading.set(false);
+        },
+        complete: () => {
+          this.cobroReservationTreatmentLoading.set(false);
+        },
+      });
+  }
+
+  protected updatePaymentReservationServiceLinePrice(
+    lineId: string,
+    raw: string,
+    inputElement?: HTMLInputElement | null,
+  ): void {
+    const reservation = this.paymentMethodReservation();
+    const price = this.parseEditablePrice(raw);
+    const currentLine = reservation
+      ? (this.getCobroReservationServiceLines(reservation).find((line) => line.id === lineId) ??
+        null)
+      : null;
+    const restoreInput = (): void => {
+      if (inputElement && currentLine) {
+        inputElement.value = `${currentLine.unitPriceEuro}`;
+      }
+    };
+
+    if (!reservation || reservation.paymentReceived) {
+      restoreInput();
+      return;
+    }
+
+    if (price === null) {
+      this.cobroReservationStockError.set('Introduce un precio válido.');
+      restoreInput();
+      return;
+    }
+
+    this.cobroReservationTreatmentLoading.set(true);
+    this.cobroReservationStockError.set('');
+
+    this.http
+      .patch<{ ok: boolean; error?: string }>(
+        `/api/admin/reservas/${reservation.id}/service-line/${encodeURIComponent(lineId)}`,
+        { unitPriceEuro: price },
+      )
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.cobroReservationStockError.set(response.error ?? 'No se pudo cambiar el precio.');
+            restoreInput();
+            return;
+          }
+
+          // Actualización local inmediata para que el total reaccione sin esperar la recarga.
+          this.reservations.update((items) =>
+            items.map((item) =>
+              item.id === reservation.id
+                ? {
+                    ...item,
+                    reservationServiceItems: (item.reservationServiceItems ?? []).map((line) =>
+                      line.id === lineId ? { ...line, unitPriceEuro: price } : line,
+                    ),
+                  }
+                : item,
+            ),
+          );
+          this.refreshPaymentReservationAfterLineChange(reservation.id);
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.cobroReservationStockError.set(
+            typeof apiError === 'string' && apiError ? apiError : 'No se pudo cambiar el precio.',
+          );
+          restoreInput();
+          this.cobroReservationTreatmentLoading.set(false);
+        },
+        complete: () => {
+          this.cobroReservationTreatmentLoading.set(false);
+        },
+      });
+  }
+
+  protected updatePaymentReservationStockLinePrice(
+    productId: string,
+    raw: string,
+    inputElement?: HTMLInputElement | null,
+  ): void {
+    const reservation = this.paymentMethodReservation();
+    const price = this.parseEditablePrice(raw);
+    const currentLine =
+      (reservation?.reservationStockItems ?? []).find((line) => line.productId === productId) ??
+      null;
+    const restoreInput = (): void => {
+      if (inputElement && currentLine) {
+        inputElement.value = `${currentLine.unitPriceEuro}`;
+      }
+    };
+
+    if (!reservation || reservation.paymentReceived) {
+      restoreInput();
+      return;
+    }
+
+    if (price === null) {
+      this.cobroReservationStockError.set('Introduce un precio válido.');
+      restoreInput();
+      return;
+    }
+
+    this.cobroReservationStockLoading.set(true);
+    this.cobroReservationStockError.set('');
+
+    this.http
+      .patch<{ ok: boolean; error?: string }>(
+        `/api/admin/reservas/${reservation.id}/stock-line/${encodeURIComponent(productId)}`,
+        { unitPriceEuro: price },
+      )
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.cobroReservationStockError.set(response.error ?? 'No se pudo cambiar el precio.');
+            restoreInput();
+            return;
+          }
+
+          this.reservations.update((items) =>
+            items.map((item) =>
+              item.id === reservation.id
+                ? {
+                    ...item,
+                    reservationStockItems: (item.reservationStockItems ?? []).map((line) =>
+                      line.productId === productId ? { ...line, unitPriceEuro: price } : line,
+                    ),
+                  }
+                : item,
+            ),
+          );
+          this.refreshPaymentReservationAfterLineChange(reservation.id);
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.cobroReservationStockError.set(
+            typeof apiError === 'string' && apiError ? apiError : 'No se pudo cambiar el precio.',
+          );
+          restoreInput();
+          this.cobroReservationStockLoading.set(false);
+        },
+        complete: () => {
+          this.cobroReservationStockLoading.set(false);
+        },
+      });
+  }
+
+  protected getCobroReservationSignalLabel(reservation: AdminReservationItem): string {
+    const amount = Math.max(0, Number(reservation.signalAmountEuro ?? 0));
+
+    if (amount <= 0) {
+      return '';
+    }
+
+    const parts = [`${amount.toFixed(2)} €`];
+
+    if (reservation.signalPaymentMethod) {
+      parts.push(this.getReservationPaymentMethodLabel(reservation.signalPaymentMethod));
+    }
+
+    if (reservation.signalReceivedAtIso) {
+      parts.push(this.formatDateTime(reservation.signalReceivedAtIso));
+    }
+
+    return parts.join(' · ');
   }
 
   protected setReservationStatus(
@@ -11336,7 +11619,7 @@ export class AdminPanelComponent implements OnDestroy {
     this.agendaManualReserveCustomerEmail.set('');
     this.agendaManualReserveServiceType.set('pack');
     this.agendaManualReserveServiceId.set(defaultPack?.id ?? 1);
-    this.agendaManualReserveDuration.set(defaultPack?.duracionMinutos ?? 60);
+    this.agendaManualReserveDuration.set(null);
     this.agendaManualReserveServiceLines.set([]);
     this.agendaManualReserveExtraTreatmentId.set(this.agendaTreatmentCatalog[0]?.id ?? 0);
     this.agendaManualReserveClientComment.set('');
@@ -11464,7 +11747,6 @@ export class AdminPanelComponent implements OnDestroy {
     );
 
     this.agendaManualReserveServiceLines.update((items) => [...items, nextLine]);
-    this.agendaManualReserveDuration.set(this.getAgendaManualReserveTotalDuration());
     this.agendaManualReserveError.set('');
   }
 
@@ -11486,9 +11768,9 @@ export class AdminPanelComponent implements OnDestroy {
     this.agendaManualReserveServiceLines.update((items) =>
       items.filter((item) => item.id !== lineId),
     );
-    this.agendaManualReserveDuration.set(this.getAgendaManualReserveTotalDuration());
   }
 
+  // Duración original: la del pack/tratamiento elegido más los tratamientos añadidos.
   protected getAgendaManualReserveTotalDuration(): number {
     const mainDuration = this.getAgendaManualReserveSelectedService()?.duracionMinutos ?? 0;
     const extrasDuration = this.agendaManualReserveServiceLines().reduce(
@@ -11496,9 +11778,11 @@ export class AdminPanelComponent implements OnDestroy {
       0,
     );
 
-    return this.roundUpToHalfHour(
-      mainDuration + extrasDuration || this.agendaManualReserveDuration(),
-    );
+    return this.roundUpToHalfHour(mainDuration + extrasDuration || 60);
+  }
+
+  protected getAgendaManualReserveEffectiveDuration(): number {
+    return this.agendaManualReserveDuration() ?? this.getAgendaManualReserveTotalDuration();
   }
 
   protected getAgendaManualReserveServicesTotal(): number {
@@ -11587,6 +11871,12 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected onAgendaManualReserveDurationChange(event: Event): void {
     const target = event.target as HTMLSelectElement;
+
+    if (target.value === '') {
+      this.agendaManualReserveDuration.set(null);
+      return;
+    }
+
     const nextDuration = Number(target.value);
 
     if (!Number.isFinite(nextDuration) || nextDuration <= 0) {
@@ -11608,10 +11898,7 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
-    const selectedDurationMinutes = Math.max(
-      30,
-      Number(this.agendaManualReserveDuration() || selectedService.duracionMinutos || 60),
-    );
+    const selectedDurationMinutes = Math.max(30, this.getAgendaManualReserveEffectiveDuration());
     const extraServiceLines = this.agendaManualReserveServiceLines().map(
       ({ priceOverridden: _ignored, ...line }) => line,
     );
@@ -12296,14 +12583,9 @@ export class AdminPanelComponent implements OnDestroy {
     );
   }
 
+  // Al cambiar de servicio se vuelve a la duración original (el desplegable queda en blanco).
   private syncAgendaManualReserveDurationFromSelectedService(): void {
-    const selectedService = this.getAgendaManualReserveSelectedService();
-
-    if (!selectedService) {
-      return;
-    }
-
-    this.agendaManualReserveDuration.set(this.getAgendaManualReserveTotalDuration());
+    this.agendaManualReserveDuration.set(null);
   }
 
   private getDefaultAgendaManualReserveTime(_dateIso: string): string {

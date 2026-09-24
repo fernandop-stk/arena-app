@@ -6713,14 +6713,21 @@ app.patch('/api/admin/reservas/:id/stock-line/:productId', async (req, res) => {
 
   const reservationId = `${req.params['id'] ?? ''}`.trim();
   const productId = `${req.params['productId'] ?? ''}`.trim();
-  const nextQuantity = Math.max(1, Math.floor(Number(req.body?.quantity ?? NaN)));
+  const hasQuantity = req.body?.quantity !== undefined && req.body?.quantity !== null;
+  const nextQuantityRaw = Math.floor(Number(req.body?.quantity ?? NaN));
+  const rawPrice = Number(req.body?.unitPriceEuro ?? NaN);
+  const hasPrice = Number.isFinite(rawPrice) && rawPrice >= 0;
 
   if (!reservationId || !productId) {
     return res.status(400).json({ ok: false, error: 'Datos inválidos.' });
   }
 
-  if (!Number.isFinite(nextQuantity) || nextQuantity <= 0) {
+  if (hasQuantity && (!Number.isFinite(nextQuantityRaw) || nextQuantityRaw <= 0)) {
     return res.status(400).json({ ok: false, error: 'Cantidad inválida.' });
+  }
+
+  if (!hasQuantity && !hasPrice) {
+    return res.status(400).json({ ok: false, error: 'Indica cantidad o precio.' });
   }
 
   try {
@@ -6745,6 +6752,7 @@ app.patch('/api/admin/reservas/:id/stock-line/:productId', async (req, res) => {
     }
 
     const currentLine = baseMeta.stock[stockIndex];
+    const nextQuantity = hasQuantity ? nextQuantityRaw : currentLine.quantity;
     const deltaQuantity = nextQuantity - currentLine.quantity;
     const product = stockProductsById.get(productId);
 
@@ -6761,7 +6769,7 @@ app.patch('/api/admin/reservas/:id/stock-line/:productId', async (req, res) => {
       }
     }
 
-    if (product) {
+    if (product && deltaQuantity !== 0) {
       const updatedProduct = normalizeStockProduct({
         ...product,
         quantity: product.quantity - deltaQuantity,
@@ -6782,7 +6790,11 @@ app.patch('/api/admin/reservas/:id/stock-line/:productId', async (req, res) => {
     }
 
     const nextStock = [...baseMeta.stock];
-    nextStock[stockIndex] = { ...currentLine, quantity: nextQuantity };
+    nextStock[stockIndex] = {
+      ...currentLine,
+      quantity: nextQuantity,
+      unitPriceEuro: hasPrice ? Number(rawPrice.toFixed(2)) : currentLine.unitPriceEuro,
+    };
 
     const updatedMeta: ReservationMetaPayload = {
       ...baseMeta,
@@ -6916,6 +6928,7 @@ app.patch('/api/admin/reservas/:id/service-line', async (req, res) => {
   const name = `${req.body?.name ?? ''}`.trim().slice(0, 80);
   const durationMinutes = Math.max(0, Math.floor(Number(req.body?.durationMinutes ?? 0) || 0));
   const rawPrice = Number(req.body?.unitPriceEuro ?? NaN);
+  const lineType: 'pack' | 'treatment' = req.body?.type === 'pack' ? 'pack' : 'treatment';
 
   if (!reservationId || !name) {
     return res.status(400).json({ ok: false, error: 'Selecciona un tratamiento válido.' });
@@ -6948,7 +6961,7 @@ app.patch('/api/admin/reservas/:id/service-line', async (req, res) => {
     const insidePack = baseMeta.services.some((item) => item.type === 'pack');
     const unitPriceEuro = Number.isFinite(rawPrice)
       ? Math.max(0, Number(rawPrice.toFixed(2)))
-      : getServicePriceByName(name, insidePack);
+      : getServicePriceByName(name, lineType === 'treatment' && insidePack);
 
     const updatedMeta: ReservationMetaPayload = {
       ...baseMeta,
@@ -6956,7 +6969,7 @@ app.patch('/api/admin/reservas/:id/service-line', async (req, res) => {
         ...baseMeta.services,
         {
           id: `svc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          type: 'treatment',
+          type: lineType,
           name,
           quantity: 1,
           durationMinutes,
@@ -7000,6 +7013,91 @@ app.patch('/api/admin/reservas/:id/service-line', async (req, res) => {
   }
 });
 
+// Cambia el precio de una línea de servicio de la cita (incluida la principal) antes de cobrar.
+app.patch('/api/admin/reservas/:id/service-line/:lineId', async (req, res) => {
+  const session = getAuthSession(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const reservationId = `${req.params['id'] ?? ''}`.trim();
+  const lineId = `${req.params['lineId'] ?? ''}`.trim();
+  const rawPrice = Number(req.body?.unitPriceEuro ?? NaN);
+
+  if (!reservationId || !lineId) {
+    return res.status(400).json({ ok: false, error: 'Datos inválidos.' });
+  }
+
+  if (!Number.isFinite(rawPrice) || rawPrice < 0) {
+    return res.status(400).json({ ok: false, error: 'Precio inválido.' });
+  }
+
+  try {
+    const reservations = await listReservationsForAdmin();
+    const reservation = reservations.find((item) => item.id === reservationId);
+
+    if (!reservation) {
+      return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+    }
+
+    if (reservation.paymentReceived) {
+      return res
+        .status(409)
+        .json({ ok: false, error: 'La cita ya está cobrada; no se puede cambiar el precio.' });
+    }
+
+    const parsed = parseReservationMetaFromComments(reservation.additionalComments);
+    const baseMeta =
+      parsed.meta ??
+      buildDefaultReservationMeta({
+        appointmentTypeName: reservation.appointmentTypeName,
+        durationMinutes: reservation.durationMinutes,
+        requiresReservationSignal: requiresReservationSignalByName(
+          reservation.appointmentTypeName,
+        ),
+      });
+    let lineIndex = baseMeta.services.findIndex((item) => item.id === lineId);
+
+    // Reservas antiguas sin meta: el cliente identifica la línea principal como svc-main-*.
+    if (lineIndex < 0 && lineId.startsWith('svc-main') && baseMeta.services.length > 0) {
+      lineIndex = 0;
+    }
+
+    if (lineIndex < 0) {
+      return res.status(404).json({ ok: false, error: 'Servicio no encontrado en la reserva.' });
+    }
+
+    const nextServices = [...baseMeta.services];
+    nextServices[lineIndex] = {
+      ...nextServices[lineIndex],
+      unitPriceEuro: Number(rawPrice.toFixed(2)),
+    };
+    const updatedMeta: ReservationMetaPayload = { ...baseMeta, services: nextServices };
+    const additionalComments = composeReservationCommentsWithMeta(
+      parsed.plainComments,
+      updatedMeta,
+    );
+
+    const updated = await updateReservationDetailsByAdmin(reservationId, {
+      appointmentTypeName: reservation.appointmentTypeName,
+      customerName: reservation.customerName,
+      customerPhone: reservation.customerPhone,
+      customerEmail: reservation.customerEmail,
+      additionalComments,
+    });
+
+    if (!updated.ok) {
+      return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
+    }
+
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Error cambiando precio de servicio en reserva:', error);
+    return res.status(500).json({ ok: false, error: 'No se pudo cambiar el precio del servicio.' });
+  }
+});
+
 app.delete('/api/admin/reservas/:id/service-line/:lineId', async (req, res) => {
   const session = getAuthSession(req.headers.cookie);
 
@@ -7024,21 +7122,35 @@ app.delete('/api/admin/reservas/:id/service-line/:lineId', async (req, res) => {
 
     const parsed = parseReservationMetaFromComments(reservation.additionalComments);
     const baseMeta = parsed.meta;
-    const lineIndex = baseMeta?.services.findIndex((item) => item.id === lineId) ?? -1;
+    let lineIndex = baseMeta?.services.findIndex((item) => item.id === lineId) ?? -1;
 
-    if (!baseMeta || lineIndex < 0) {
-      return res.status(404).json({ ok: false, error: 'Tratamiento no encontrado en la reserva.' });
+    // Reservas antiguas sin id de línea: el cliente identifica la principal como svc-main-*.
+    if (baseMeta && lineIndex < 0 && lineId.startsWith('svc-main') && baseMeta.services.length > 0) {
+      lineIndex = 0;
     }
 
-    if (lineIndex === 0) {
+    if (!baseMeta || lineIndex < 0) {
+      return res.status(404).json({ ok: false, error: 'Servicio no encontrado en la reserva.' });
+    }
+
+    if (reservation.paymentReceived) {
       return res
         .status(409)
-        .json({ ok: false, error: 'No se puede quitar el servicio principal de la cita.' });
+        .json({ ok: false, error: 'La cita ya está cobrada; no se pueden quitar servicios.' });
+    }
+
+    // Se puede quitar el servicio principal (elegido por error) siempre que quede otro en la cita.
+    if (baseMeta.services.length <= 1) {
+      return res.status(409).json({
+        ok: false,
+        error:
+          'La cita debe tener al menos un servicio. Añade primero el pack o tratamiento correcto y después quita este.',
+      });
     }
 
     const updatedMeta: ReservationMetaPayload = {
       ...baseMeta,
-      services: baseMeta.services.filter((item) => item.id !== lineId),
+      services: baseMeta.services.filter((_item, index) => index !== lineIndex),
     };
     const summary = getReservationMetaSummary(updatedMeta);
     const additionalComments = composeReservationCommentsWithMeta(
@@ -7408,6 +7520,8 @@ app.post('/api/admin/reservas', async (req, res) => {
         additionalComments,
         createdByEmail,
         requiresReservationSignal: shouldRequireReservationSignal,
+        bookingSource: 'salon',
+        bookedByEmail: session.email,
       },
       {
         allowClosedSchedule: isSuperadmin,
@@ -8060,6 +8174,8 @@ app.post('/api/reservas/email', async (req, res) => {
         appointmentTypeName,
         requiresReservationSignal: shouldRequireReservationSignal,
         createdByEmail: adminOwnerEmail,
+        bookingSource: 'online',
+        bookedByEmail: null,
       },
       {
         maxConcurrentReservations: 1,

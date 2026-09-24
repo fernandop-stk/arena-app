@@ -533,8 +533,11 @@
                                                 {{ getAgendaCardSignalLabel(reservation) }}
                                             </span>
                                         </div>
-
-                                        @if (isSuperadmin()) {
+                                        @if (getAgendaCardBookingOriginLabel(reservation)) {
+                                        <p class="admin-panel--container__agenda-reservation-origin">
+                                            <span class="admin-panel--container__agenda-reservation-badge" [class.admin-panel--container__agenda-reservation-badge--web]="isReservationBookedOnline(reservation)" [class.admin-panel--container__agenda-reservation-badge--salon]="!isReservationBookedOnline(reservation)">{{ isReservationBookedOnline(reservation) ? 'Web' : 'Peluquería' }}</span>                                            {{ getAgendaCardBookingOriginLabel(reservation) }}
+                                        </p>
+                                        } @if (isSuperadmin()) {
                                         <div class="admin-panel--container__agenda-reservation-actions-inline">
                                             <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--soft" style="
                                             min-height: 1.95rem;
@@ -726,7 +729,11 @@
                                                 {{ getAgendaCardSignalLabel(reservation) }}
                                             </span>
                                         </div>
-                                        @if (isSuperadmin()) {
+                                        @if (getAgendaCardBookingOriginLabel(reservation)) {
+                                        <p class="admin-panel--container__agenda-reservation-origin">
+                                            <span class="admin-panel--container__agenda-reservation-badge" [class.admin-panel--container__agenda-reservation-badge--web]="isReservationBookedOnline(reservation)" [class.admin-panel--container__agenda-reservation-badge--salon]="!isReservationBookedOnline(reservation)">{{ isReservationBookedOnline(reservation) ? 'Web' : 'Peluquería' }}</span>                                            {{ getAgendaCardBookingOriginLabel(reservation) }}
+                                        </p>
+                                        } @if (isSuperadmin()) {
                                         <div class="admin-panel--container__agenda-reservation-actions-inline">
                                             <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--soft" style="
                                           min-height: 1.95rem;
@@ -913,13 +920,21 @@
                   <span class="admin-panel--container__time-select-wrap">
                     <select
                       class="admin-panel--container__input admin-panel--container__time-select"
-                      [value]="agendaManualReserveDuration()"
+                      [value]="agendaManualReserveDuration() ?? ''"
                       (change)="onAgendaManualReserveDurationChange($event)"
                     >
+                      <option value="" [selected]="agendaManualReserveDuration() === null"></option>
                       @for (duration of agendaDurationOptions; track duration) {
-                        <option [value]="duration">{{ formatDuration(duration) }}</option>
+                        <option [value]="duration" [selected]="duration === agendaManualReserveDuration()">{{ formatDuration(duration) }}</option>
                       }
                     </select>
+                  </span>
+                  <span class="admin-panel--container__hint admin-panel--container__hint--compact">
+                    @if (agendaManualReserveDuration() === null) {
+                      En blanco: se reservará la duración original ({{ formatDuration(getAgendaManualReserveTotalDuration()) }}).
+                    } @else {
+                      Duración modificada a mano; la original sería {{ formatDuration(getAgendaManualReserveTotalDuration()) }}.
+                    }
                   </span>
                 </label>
 
@@ -1159,6 +1174,12 @@
                             <span class="admin-panel--container__agenda-detail-label">Estado</span>
                             <span>{{ getReservationAgendaStatusLabel(agendaDetailReservation()!) }}</span>
                         </p>
+                        @if (getAgendaCardBookingOriginLabel(agendaDetailReservation()!)) {
+                        <p class="admin-panel--container__agenda-detail-row">
+                            <span class="admin-panel--container__agenda-detail-label">Reserva</span>
+                            <span>{{ getAgendaCardBookingOriginLabel(agendaDetailReservation()!) }}</span>
+                        </p>
+                        }
                         <p class="admin-panel--container__agenda-detail-row">
                             <span class="admin-panel--container__agenda-detail-label">Pago final</span>
                             <span>
@@ -5523,136 +5544,131 @@
                                             <strong>{{ reservation.paymentAmountEuro | number: '1.2-2' }} €</strong> · {{ getReservationPaymentBreakdownLabel(reservation) }} } @else { Pendiente de cobro }
                                         </p>
 
-                                        <div class="admin-panel--container__payment-line-list">
-                                            <p class="admin-panel--container__hint" style="margin-bottom: 0.35rem">
-                                                Conceptos del cobro
-                                            </p>
-                                            @for (line of getReservationPaymentLineItems(reservation); track line.id) { @let lineIsPaid = isReservationPaymentLinePaid(reservation, line.id);
-                                            <label [style.opacity]="lineIsPaid ? 0.72 : 1" style="
-                  display: flex;
-                  align-items: center;
-                  gap: 0.6rem;
-                  padding: 0.3rem 0;
-                  cursor: pointer;
-                ">
-                <input
-                  type="checkbox"
-                  [checked]="isReservationPaymentLineSelected(line.id)"
-                  [disabled]="reservation.paymentReceived || lineIsPaid"
-                  (change)="toggleReservationPaymentLine(line.id)"
-                  style="width: 1rem; height: 1rem; accent-color: #c97b63; cursor: pointer"
-                />
-                <span style="flex: 1; color: #5a433a; font-size: 0.9rem; font-weight: 600">{{
-                  line.label
-                }}</span>
-                @if (lineIsPaid) {
-                  <span
-                    style="
-                      padding: 0.12rem 0.38rem;
-                      border-radius: 999px;
-                      background: rgba(124, 186, 133, 0.14);
-                      color: #2f6a48;
-                      font-size: 0.68rem;
-                      font-weight: 700;
-                      letter-spacing: 0.02em;
-                    "
-                  >
-                    Ya cobrado
-                  </span>
-                }
-                <strong>{{ line.amountEuro | number: '1.2-2' }} €</strong>
-              </label> }
-                                        </div>
-
-                                        @if ((reservation.reservationStockItems ?? []).length > 0) {
-                                        <div class="admin-panel--container__payment-line-list" style="margin-top: 0.5rem">
-                                            <p class="admin-panel--container__hint" style="margin-bottom: 0.35rem">
-                                                Productos añadidos
-                                            </p>
-                                            @for (stockLine of reservation.reservationStockItems; track stockLine.productId) {
-                                            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0">
-                                                <span style="flex: 1; color: #5a433a; font-size: 0.86rem; font-weight: 600">{{ stockLine.productName }}</span>
-                                                <button type="button" class="admin-panel--container__stock-qty-btn admin-panel--container__stock-qty-btn--minus" [disabled]="reservation.paymentReceived || cobroReservationStockLoading() || stockLine.quantity <= 1" (click)="updateReservationStockLineQuantity(reservation.id, stockLine.productId, stockLine.quantity - 1)"
-                                                    title="Restar 1">
-                                                &#8722;
-                                            </button>
-                                                <span class="admin-panel--container__stock-qty-value">{{ stockLine.quantity }}</span>
-                                                <button type="button" class="admin-panel--container__stock-qty-btn admin-panel--container__stock-qty-btn--plus" [disabled]="reservation.paymentReceived || cobroReservationStockLoading()" (click)="updateReservationStockLineQuantity(reservation.id, stockLine.productId, stockLine.quantity + 1)"
-                                                    title="Sumar 1">
-                                                +
-                                            </button>
-                                                <strong style="min-width: 4.4rem; text-align: right">{{ (stockLine.unitPriceEuro * stockLine.quantity) | number: '1.2-2' }} €</strong>
-                                                <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--reject" style="padding: 0.2rem 0.5rem" [disabled]="reservation.paymentReceived || cobroReservationStockLoading()" (click)="removeReservationStockLine(reservation.id, stockLine.productId)"
-                                                    title="Eliminar producto">
-                                                🗑️
-                                            </button>
+                                        @if (!reservation.paymentReceived) {
+                                        <div class="admin-panel--container__cobro-catalog">
+                                            <div class="admin-panel--container__cobro-tabs" role="tablist" aria-label="Añadir al cobro">
+                                                <button type="button" role="tab" class="admin-panel--container__cobro-tab" [class.admin-panel--container__cobro-tab--active]="cobroCatalogTab() === 'packs'" [attr.aria-selected]="cobroCatalogTab() === 'packs'" (click)="setCobroCatalogTab('packs')">Packs</button>
+                                                <button type="button" role="tab" class="admin-panel--container__cobro-tab" [class.admin-panel--container__cobro-tab--active]="cobroCatalogTab() === 'treatments'" [attr.aria-selected]="cobroCatalogTab() === 'treatments'" (click)="setCobroCatalogTab('treatments')">Tratamientos</button>
+                                                <button type="button" role="tab" class="admin-panel--container__cobro-tab" [class.admin-panel--container__cobro-tab--active]="cobroCatalogTab() === 'treatmentsInPack'" [attr.aria-selected]="cobroCatalogTab() === 'treatmentsInPack'" (click)="setCobroCatalogTab('treatmentsInPack')">Tratamientos en pack</button>
+                                                <button type="button" role="tab" class="admin-panel--container__cobro-tab" [class.admin-panel--container__cobro-tab--active]="cobroCatalogTab() === 'products'" [attr.aria-selected]="cobroCatalogTab() === 'products'" (click)="setCobroCatalogTab('products')">Productos</button>
                                             </div>
-                                            }
-                                        </div>
-                                        } @if (!reservation.paymentReceived) {
-                                        <div class="admin-panel--container__block-form admin-panel--container__block-form--compact" style="margin-top: 0.75rem">
-                                            <p class="admin-panel--container__hint">Añadir producto de almacén</p>
-                                            <div style="position: relative">
-                                                <input class="admin-panel--container__input" type="text" placeholder="Busca por nombre o marca..." [value]="cobroReservationStockSearch()" (input)="onCobroReservationStockSearchInput($event)" /> @if (cobroReservationStockSearch()
-                                                && !cobroReservationStockProductId() && getCobroReservationStockSearchResults().length > 0) {
-                                                <div style="position: absolute; z-index: 5; background: #fff; width: 100%; border: 1px solid rgba(201, 123, 99, 0.3); border-radius: 0.6rem; max-height: 11rem; overflow: auto; box-shadow: 0 8px 18px rgba(57, 39, 28, 0.14)">
-                                                    @for (product of getCobroReservationStockSearchResults(); track product.id) {
-                                                    <button type="button" style="width: 100%; text-align: left; padding: 0.5rem 0.7rem; border: none; background: #fff; border-bottom: 1px solid rgba(201, 123, 99, 0.14); cursor: pointer; font-size: 0.84rem; color: #5a433a" (click)="selectCobroReservationStockProduct(product)">
-                                                    {{ product.productName }} @if (product.brand) { · {{ product.brand }} } · {{ product.quantity }} uds · {{ product.price | number: '1.2-2' }} €
-                                                </button> }
+
+                                            <div class="admin-panel--container__cobro-tab-panel" role="tabpanel">
+                                                @switch (cobroCatalogTab()) { @case ('packs') {
+                                                <p class="admin-panel--container__hint">Pulsa un pack para añadirlo al cobro (precio editable después).</p>
+                                                <div class="admin-panel--container__cobro-catalog-grid">
+                                                    @for (pack of agendaPackOptions; track pack.id) {
+                                                    <button type="button" class="admin-panel--container__cobro-catalog-item" [disabled]="isCobroReservationBusy()" (click)="addCatalogServiceToPaymentReservation(pack, 'pack')">
+                                                        <span class="admin-panel--container__cobro-catalog-item-name">{{ pack.nombre }}</span>
+                                                        <span class="admin-panel--container__cobro-catalog-item-price">{{ getServicePriceByName(pack.nombre, false) | number: '1.2-2' }} €</span>
+                                                    </button> }
                                                 </div>
-                                                }
-                                            </div>
-
-                                            <label class="admin-panel--container__label">
-                                            Unidades
-                                            <input
-                                              class="admin-panel--container__input"
-                                              type="number"
-                                              min="1"
-                                              [value]="cobroReservationStockUnits()"
-                                              (input)="onCobroReservationStockUnitsInput($event)"
-                                            />
-                                        </label>
-
-                                            <button type="button" class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact" [disabled]="cobroReservationStockLoading() || !cobroReservationStockProductId()" (click)="addStockToPaymentReservation()">
-                                            {{ cobroReservationStockLoading() ? 'Añadiendo...' : 'Añadir producto' }}
-                                        </button> @if (cobroReservationStockError()) {
-                                            <p class="admin-panel--container__error">{{ cobroReservationStockError() }}</p>
-                                            }
-                                        </div>
-
-                                        <div class="admin-panel--container__block-form admin-panel--container__block-form--compact admin-panel--container__service-extras" style="margin-top: 0.75rem">
-                                            <p class="admin-panel--container__hint">
-                                                @if (isCobroReservationInsidePack()) { Añadir tratamiento dentro del pack (precio reducido, editable) } @else { Añadir tratamiento (precio editable) }
-                                            </p>
-                                            @if (getCobroReservationExtraTreatmentLines(reservation).length > 0) {
-                                            <div class="admin-panel--container__payment-line-list">
-                                                @for (line of getCobroReservationExtraTreatmentLines(reservation); track line.id) {
-                                                <div class="admin-panel--container__service-extra-line">
-                                                    <span class="admin-panel--container__service-extra-name">{{ line.name }}</span>
-                                                    <strong>{{ (line.unitPriceEuro * line.quantity) | number: '1.2-2' }} €</strong>
-                                                    <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--reject admin-panel--container__service-extra-remove" [disabled]="cobroReservationTreatmentLoading()" (click)="removeTreatmentFromPaymentReservation(line.id)"
-                                                        title="Quitar tratamiento">🗑️</button>
+                                                } @case ('treatments') {
+                                                <p class="admin-panel--container__hint">Pulsa un tratamiento para añadirlo al cobro con su precio suelto (editable después).</p>
+                                                <div class="admin-panel--container__cobro-catalog-grid">
+                                                    @for (treatment of agendaTreatmentCatalog; track treatment.id) {
+                                                    <button type="button" class="admin-panel--container__cobro-catalog-item" [disabled]="isCobroReservationBusy()" (click)="addCatalogServiceToPaymentReservation(treatment, 'treatment')">
+                                                        <span class="admin-panel--container__cobro-catalog-item-name">{{ treatment.nombre }}</span>
+                                                        <span class="admin-panel--container__cobro-catalog-item-price">{{ getServicePriceByName(treatment.nombre, false) | number: '1.2-2' }} €</span>
+                                                    </button> }
                                                 </div>
-                                                }
-                                            </div>
-                                            }
-                                            <div class="admin-panel--container__service-extras-add">
-                                                <select class="admin-panel--container__input" [value]="cobroReservationTreatmentId()" (change)="onCobroReservationTreatmentChange($event)">
-                                                  @for (treatment of getExtraTreatmentOptions(); track treatment.id) {
-                                                    <option [value]="treatment.id">{{ getExtraTreatmentOptionLabel(treatment, isCobroReservationInsidePack()) }}</option>
-                                                  }
-                                                </select>
-                                                <input class="admin-panel--container__input admin-panel--container__service-extra-price" type="number" min="0" step="0.01" [value]="cobroReservationTreatmentPrice()" (input)="onCobroReservationTreatmentPriceInput($event)" aria-label="Precio del tratamiento"
+                                                } @case ('treatmentsInPack') {
+                                                <p class="admin-panel--container__hint">
+                                                    @if (isCobroReservationInsidePack()) { Tratamiento dentro del pack (precio reducido, editable) } @else { Esta cita no tiene pack: se aplica el precio suelto (editable) }
+                                                </p>
+                                                <div class="admin-panel--container__service-extras-add">
+                                                    <select class="admin-panel--container__input" [value]="cobroReservationTreatmentId()" (change)="onCobroReservationTreatmentChange($event)">
+                                                      @for (treatment of getExtraTreatmentOptions(); track treatment.id) {
+                                                        <option [value]="treatment.id">{{ getExtraTreatmentOptionLabel(treatment, isCobroReservationInsidePack()) }}</option>
+                                                      }
+                                                    </select>
+                                                    <input class="admin-panel--container__input admin-panel--container__service-extra-price" type="number" min="0" step="0.01" [value]="cobroReservationTreatmentPrice()" (input)="onCobroReservationTreatmentPriceInput($event)" aria-label="Precio del tratamiento"
+                                                    />
+                                                    <span>€</span>
+                                                    <button type="button" class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact" [disabled]="isCobroReservationBusy()" (click)="addTreatmentToPaymentReservation()">
+                                                        {{ cobroReservationTreatmentLoading() ? 'Guardando...' : 'Añadir' }}
+                                                    </button>
+                                                </div>
+                                                } @case ('products') {
+                                                <p class="admin-panel--container__hint">Añadir producto de almacén</p>
+                                                <div style="position: relative">
+                                                    <input class="admin-panel--container__input" type="text" placeholder="Busca por nombre o marca..." [value]="cobroReservationStockSearch()" (input)="onCobroReservationStockSearchInput($event)" /> @if
+                                                    (cobroReservationStockSearch() && !cobroReservationStockProductId() && getCobroReservationStockSearchResults().length > 0) {
+                                                    <div style="position: absolute; z-index: 5; background: #fff; width: 100%; border: 1px solid rgba(201, 123, 99, 0.3); border-radius: 0.6rem; max-height: 11rem; overflow: auto; box-shadow: 0 8px 18px rgba(57, 39, 28, 0.14)">
+                                                        @for (product of getCobroReservationStockSearchResults(); track product.id) {
+                                                        <button type="button" style="width: 100%; text-align: left; padding: 0.5rem 0.7rem; border: none; background: #fff; border-bottom: 1px solid rgba(201, 123, 99, 0.14); cursor: pointer; font-size: 0.84rem; color: #5a433a" (click)="selectCobroReservationStockProduct(product)">
+                                                        {{ product.productName }} @if (product.brand) { · {{ product.brand }} } · {{ product.quantity }} uds · {{ product.price | number: '1.2-2' }} €
+                                                    </button> }
+                                                    </div>
+                                                    }
+                                                </div>
+
+                                                <label class="admin-panel--container__label">
+                                                Unidades
+                                                <input
+                                                  class="admin-panel--container__input"
+                                                  type="number"
+                                                  min="1"
+                                                  [value]="cobroReservationStockUnits()"
+                                                  (input)="onCobroReservationStockUnitsInput($event)"
                                                 />
-                                                <span>€</span>
-                                                <button type="button" class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact" [disabled]="cobroReservationTreatmentLoading()" (click)="addTreatmentToPaymentReservation()">
-                                                    {{ cobroReservationTreatmentLoading() ? 'Guardando...' : 'Añadir' }}
-                                                </button>
+                                            </label>
+
+                                                <button type="button" class="admin-panel--container__button admin-panel--container__button--primary admin-panel--container__button--compact" [disabled]="isCobroReservationBusy() || !cobroReservationStockProductId()" (click)="addStockToPaymentReservation()">
+                                                {{ cobroReservationStockLoading() ? 'Añadiendo...' : 'Añadir producto' }}
+                                            </button> } }
                                             </div>
                                         </div>
                                         }
+
+                                        <div class="admin-panel--container__payment-line-list admin-panel--container__cobro-selected">
+                                            <p class="admin-panel--container__hint" style="margin-bottom: 0.35rem">
+                                                Seleccionado para cobrar
+                                            </p>
+                                            @for (line of getCobroReservationServiceLines(reservation); track line.id; let index = $index) { @let serviceLinePaid = isCobroReservationServiceLinePaid(reservation, index);
+                                            <div class="admin-panel--container__cobro-selected-line" [style.opacity]="serviceLinePaid ? 0.72 : 1">
+                                                <span class="admin-panel--container__cobro-selected-name">
+                                                    {{ line.name }}
+                                                    <span class="admin-panel--container__cobro-selected-kind">{{ line.type === 'pack' ? 'Pack' : 'Tratamiento' }}</span> @if (serviceLinePaid) {
+                                                <span class="admin-panel--container__cobro-selected-paid">Ya cobrado</span> }
+                                                </span>
+                                                <span class="admin-panel--container__cobro-selected-price">
+                                                    <input class="admin-panel--container__input admin-panel--container__service-extra-price" type="number" min="0" step="0.01" [value]="line.unitPriceEuro" [disabled]="reservation.paymentReceived || serviceLinePaid || isCobroReservationBusy()" (change)="updatePaymentReservationServiceLinePrice(line.id, $any($event.target).value, $any($event.target))"
+                                                        aria-label="Precio" />
+                                                    <span>€</span>
+                                                </span>
+                                                <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--reject admin-panel--container__service-extra-remove" [disabled]="reservation.paymentReceived || serviceLinePaid || isCobroReservationBusy()" (click)="removeTreatmentFromPaymentReservation(line.id)"
+                                                    title="Quitar del cobro">🗑️</button>
+                                            </div>
+                                            } @for (stockLine of reservation.reservationStockItems ?? []; track stockLine.productId; let index = $index) { @let stockLinePaid = isCobroReservationStockLinePaid(reservation, index);
+                                            <div class="admin-panel--container__cobro-selected-line" [style.opacity]="stockLinePaid ? 0.72 : 1">
+                                                <span class="admin-panel--container__cobro-selected-name">
+                                                    {{ stockLine.productName }}
+                                                    <span class="admin-panel--container__cobro-selected-kind">Producto</span> @if (stockLinePaid) {
+                                                <span class="admin-panel--container__cobro-selected-paid">Ya cobrado</span> }
+                                                </span>
+                                                <span class="admin-panel--container__cobro-selected-qty">
+                                                    <button type="button" class="admin-panel--container__stock-qty-btn admin-panel--container__stock-qty-btn--minus" [disabled]="reservation.paymentReceived || stockLinePaid || isCobroReservationBusy() || stockLine.quantity <= 1" (click)="updateReservationStockLineQuantity(reservation.id, stockLine.productId, stockLine.quantity - 1)" title="Restar 1">&#8722;</button>
+                                                    <span class="admin-panel--container__stock-qty-value">{{ stockLine.quantity }}</span>
+                                                <button type="button" class="admin-panel--container__stock-qty-btn admin-panel--container__stock-qty-btn--plus" [disabled]="reservation.paymentReceived || stockLinePaid || isCobroReservationBusy()" (click)="updateReservationStockLineQuantity(reservation.id, stockLine.productId, stockLine.quantity + 1)"
+                                                    title="Sumar 1">+</button>
+                                                </span>
+                                                <span class="admin-panel--container__cobro-selected-price">
+                                                    <input class="admin-panel--container__input admin-panel--container__service-extra-price" type="number" min="0" step="0.01" [value]="stockLine.unitPriceEuro" [disabled]="reservation.paymentReceived || stockLinePaid || isCobroReservationBusy()" (change)="updatePaymentReservationStockLinePrice(stockLine.productId, $any($event.target).value, $any($event.target))"
+                                                        aria-label="Precio unitario" />
+                                                    <span>€</span>
+                                                </span>
+                                                <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--reject admin-panel--container__service-extra-remove" [disabled]="reservation.paymentReceived || stockLinePaid || isCobroReservationBusy()" (click)="removeReservationStockLine(reservation.id, stockLine.productId)"
+                                                    title="Eliminar producto">🗑️</button>
+                                            </div>
+                                            } @if (getCobroReservationSignalLabel(reservation)) {
+                                            <p class="admin-panel--container__cobro-signal-info">
+                                                Señal pagada: <strong>{{ getCobroReservationSignalLabel(reservation) }}</strong> · se descuenta del total.
+                                            </p>
+                                            } @if (cobroReservationStockError()) {
+                                            <p class="admin-panel--container__error" style="margin: 0.4rem 0 0">{{ cobroReservationStockError() }}</p>
+                                            }
+                                        </div>
 
                                         <div class="admin-panel--container__cobro-summary" style="margin: 1rem 0">
                                             @if (getReservationSignalAmount(reservation) > 0) {
