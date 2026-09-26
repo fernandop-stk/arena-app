@@ -6,7 +6,11 @@
             <p class="reserva-formulario--container__summary">
                 {{ appointmentTypeName }} · {{ reservationSelection?.dateIso }} · {{ reservationSelection?.time }}
             </p>
-            @if (requiresReservationSignal) {
+            @if (!isWaitlist && appointmentTypePrice > 0) {
+            <p class="reserva-formulario--container__summary reserva-formulario--container__summary--price">
+                Precio del servicio: <strong>{{ appointmentTypePrice }} €</strong>
+            </p>
+            } @if (requiresReservationSignal) {
             <p class="reserva-formulario--container__summary reserva-formulario--container__summary--warning">
                 Este servicio requiere señal y la franja quedará ocupada provisionalmente durante {{ provisionalHoldHours }} horas.
             </p>

@@ -309,6 +309,15 @@ export class ReservaCalendarioComponent {
     return this.reservaCalendarioService.getTypeName(this.appointmentTypes, this.selectedTypeId());
   }
 
+  protected getSelectedTypePrice(): number {
+    const selectedType = this.appointmentTypes.find((type) => type.id === this.selectedTypeId());
+    return selectedType ? this.citasService.getAppointmentTypePrice(selectedType.nombre) : 0;
+  }
+
+  protected getTypePrice(name: string): number {
+    return this.citasService.getAppointmentTypePrice(name);
+  }
+
   protected canContinue(): boolean {
     return this.reservaCalendarioService.hasCompleteSelection(
       this.selectedDateIso(),

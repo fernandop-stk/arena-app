@@ -14,12 +14,16 @@
             <li class="citas--container__card" [class.citas--container__card--selected]="selectedAppointmentTypeId() === appointment.id" (click)="selectAppointment(appointment.id)">
                 <h2 class="citas--container__card-title">{{ appointment.nombre }}</h2>
                 <p class="citas--container__card-description">{{ appointment.descripcion }}</p>
+                @if (citasService.getAppointmentTypePrice(appointment.nombre) > 0) {
+                <p class="citas--container__card-price">{{ citasService.getAppointmentTypePrice(appointment.nombre) }} €</p>
+                }
             </li>
             }
 
             <li class="citas--container__card" [class.citas--container__card--selected]="isInvitadaSelected()">
                 <button type="button" class="citas--container__invited-trigger" [class.citas--container__invited-trigger--active]="isInvitadaExpanded()" (click)="toggleInvitadaOptions()">
           <span class="citas--container__invited-title">Pack Invitada</span>
+          <span class="citas--container__invited-price">Desde {{ citasService.getAppointmentTypePrice('Pack Invitada') }} €</span>
           <span class="citas--container__invited-icon" aria-hidden="true">
             {{ isInvitadaExpanded() ? '−' : '+' }}
           </span>
@@ -31,6 +35,7 @@
                 " (click)="selectAppointment(option.id)">
                 <strong>{{ option.nombre }}</strong>
                 <span>{{ option.descripcion }}</span>
+                <small>{{ citasService.getAppointmentTypePrice(option.nombre) }} €</small>
               </button> }
                 </div>
                 }
@@ -40,6 +45,9 @@
             <li class="citas--container__card" [class.citas--container__card--selected]="selectedAppointmentTypeId() === appointment.id" (click)="selectAppointment(appointment.id)">
                 <h2 class="citas--container__card-title">{{ appointment.nombre }}</h2>
                 <p class="citas--container__card-description">{{ appointment.descripcion }}</p>
+                @if (citasService.getAppointmentTypePrice(appointment.nombre) > 0) {
+                <p class="citas--container__card-price">{{ citasService.getAppointmentTypePrice(appointment.nombre) }} €</p>
+                }
             </li>
             }
         </ul>

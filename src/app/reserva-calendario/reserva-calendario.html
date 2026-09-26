@@ -50,7 +50,7 @@
         @if (currentStep() > 1) {
         <div class="reserva-calendario--container__chips">
             <button type="button" class="reserva-calendario--container__chip" (click)="goToStep(1)" title="Cambiar servicio">
-          {{ getSelectedTypeName() }}
+          {{ getSelectedTypeName() }}{{ getSelectedTypePrice() > 0 ? ' · ' + getSelectedTypePrice() + ' €' : '' }}
           <span class="reserva-calendario--container__chip-x" aria-hidden="true">✕</span>
         </button> @if (currentStep() > 2 && selectedDateIso()) {
             <span class="reserva-calendario--container__chip-sep" aria-hidden="true">›</span>
@@ -79,6 +79,9 @@
                 selectedTypeId() === type.id
               " (click)="onTypeChange(type.id)">
               <span class="reserva-calendario--container__type-name">{{ type.nombre }}</span>
+              @if (getTypePrice(type.nombre) > 0) {
+                <span class="reserva-calendario--container__type-price">{{ getTypePrice(type.nombre) }} €</span>
+              }
             </button> }
             </div>
 

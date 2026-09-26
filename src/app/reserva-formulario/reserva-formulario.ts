@@ -41,6 +41,9 @@ export class ReservaFormularioComponent {
   protected readonly isClientAuthenticated = signal(false);
 
   protected readonly appointmentTypeName = this.getAppointmentTypeName();
+  protected readonly appointmentTypePrice = this.citasService.getAppointmentTypePrice(
+    this.appointmentTypeName,
+  );
   protected readonly appointmentTypeDuration = this.getSelectedDurationMinutes();
   protected readonly requiresReservationSignal = this.isReservationSignalRequired();
   protected readonly provisionalHoldHours = this.getProvisionalHoldHours();

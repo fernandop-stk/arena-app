@@ -273,6 +273,11 @@
             color: colors.$color-text-soft;
             font-weight: 500;
         }
+        &__type-price {
+            color: colors.$color-primary-dark;
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
         &__duration {
             margin-top: layout.$space-2;
             display: grid;

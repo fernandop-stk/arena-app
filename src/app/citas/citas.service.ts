@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
+import { getPackPriceByName } from '../../shared/pack-prices';
 
 export interface AppointmentType {
   id: number;
@@ -30,6 +31,10 @@ export class CitasService {
 
   getPrimaryButtonLabel(): string {
     return 'Reservar';
+  }
+
+  getAppointmentTypePrice(name: string): number {
+    return getPackPriceByName(name);
   }
 
   getAppointmentTypes(): AppointmentType[] {
