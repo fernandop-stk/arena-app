@@ -597,7 +597,39 @@ const formatDateIsoForEmail = (dateIso: string): string => {
   return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${day}/${month}/${year}`;
 };
 
-type AdminReservationEventKind = 'nueva_reserva' | 'cancelacion';
+type AdminReservationEventKind = 'nueva_reserva' | 'cancelacion' | 'confirmacion';
+
+const ADMIN_RESERVATION_EVENT_LABELS: Record<
+  AdminReservationEventKind,
+  { heading: string; subject: string; log: string; intro: string; footer: string; gradient: string }
+> = {
+  nueva_reserva: {
+    heading: 'Nueva reserva online',
+    subject: 'Nueva reserva online',
+    log: 'nueva reserva online',
+    intro: 'Una clienta ha reservado directamente en tu agenda:',
+    footer:
+      'La cita ya está en tu agenda. Puedes traspasarla a otra trabajadora desde el panel si lo prefieres.',
+    gradient: 'linear-gradient(135deg,#c97b63 0%,#d9a441 100%)',
+  },
+  cancelacion: {
+    heading: 'Cancelación online de cita',
+    subject: 'Cancelación online',
+    log: 'cancelación online',
+    intro: 'Una clienta ha solicitado cancelar su cita desde el enlace del email:',
+    footer:
+      'La cita sigue en la agenda hasta que el equipo la gestione desde el panel (aceptar la cancelación o contactar con la clienta).',
+    gradient: 'linear-gradient(135deg,#a63d2a 0%,#c97b63 100%)',
+  },
+  confirmacion: {
+    heading: 'Cita confirmada online',
+    subject: 'Cita confirmada online',
+    log: 'confirmación online',
+    intro: 'Una clienta ha confirmado su cita desde el enlace del email:',
+    footer: 'No hace falta hacer nada: la cita queda marcada como confirmada en la agenda.',
+    gradient: 'linear-gradient(135deg,#3d8c54 0%,#8fbf7a 100%)',
+  },
+};
 
 const buildAdminReservationEventEmailHtml = (data: {
   kind: AdminReservationEventKind;
@@ -607,23 +639,15 @@ const buildAdminReservationEventEmailHtml = (data: {
   dateIso: string;
   time: string;
 }): string => {
-  const isCancellation = data.kind === 'cancelacion';
   const customerName = escapeHtml(data.customerName);
   const customerPhone = escapeHtml(data.customerPhone ?? '');
   const appointmentTypeName = escapeHtml(data.appointmentTypeName);
   const reservationKind = getReservationKindLabel(data.appointmentTypeName);
   const dateLabel = escapeHtml(formatDateIsoForEmail(data.dateIso));
   const time = escapeHtml(data.time);
-  const heading = isCancellation ? 'Cancelación online de cita' : 'Nueva reserva online';
-  const intro = isCancellation
-    ? 'Una clienta ha solicitado cancelar su cita desde el enlace del email:'
-    : 'Una clienta ha reservado directamente en tu agenda:';
-  const footer = isCancellation
-    ? 'La cita sigue en la agenda hasta que el equipo la gestione desde el panel (aceptar la cancelación o contactar con la clienta).'
-    : 'La cita ya está en tu agenda. Puedes traspasarla a otra trabajadora desde el panel si lo prefieres.';
-  const headerGradient = isCancellation
-    ? 'linear-gradient(135deg,#a63d2a 0%,#c97b63 100%)'
-    : 'linear-gradient(135deg,#c97b63 0%,#d9a441 100%)';
+  const labels = ADMIN_RESERVATION_EVENT_LABELS[data.kind] ?? ADMIN_RESERVATION_EVENT_LABELS.nueva_reserva;
+  const { heading, intro, footer } = labels;
+  const headerGradient = labels.gradient;
 
   return `
     <div style="background:#fcf3ea;padding:24px;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;color:#3b2f2a;">
@@ -660,6 +684,7 @@ const buildAdminWaitlistEmailHtml = (data: {
   appointmentTypeName: string;
   dateIso: string;
   time: string;
+  variant?: 'waitlist' | 'slot_alert';
 }): string => {
   const customerName = escapeHtml(data.customerName);
   const customerPhone = escapeHtml(data.customerPhone);
@@ -667,6 +692,14 @@ const buildAdminWaitlistEmailHtml = (data: {
   const appointmentTypeName = escapeHtml(data.appointmentTypeName);
   const dateIso = escapeHtml(data.dateIso);
   const time = escapeHtml(data.time);
+  const isSlotAlert = data.variant === 'slot_alert';
+  const title = isSlotAlert ? 'Nueva alerta de hueco' : 'Nueva lista de espera';
+  const intro = isSlotAlert
+    ? 'Una clienta ha pedido que se le avise si queda libre este hueco:'
+    : 'Una clienta quiere ese día/hora pero está completo. Se ha apuntado a la lista de espera:';
+  const footer = isSlotAlert
+    ? 'La alerta está pendiente de aprobación en el panel. Si se libera el hueco, la clienta recibirá un aviso automático.'
+    : 'La solicitud está en "Citas sin asignar". Al asignarla y confirmarla, la clienta recibirá el email de confirmación automáticamente.';
 
   return `
     <div style="background:#fcf3ea;padding:24px;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;color:#3b2f2a;">
@@ -674,12 +707,12 @@ const buildAdminWaitlistEmailHtml = (data: {
         <tr>
           <td style="background:linear-gradient(135deg,#c97b63 0%,#d9a441 100%);padding:24px;">
             <p style="margin:0 0 6px;color:#fff6ee;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Arena Hair Studio</p>
-            <h1 style="margin:0;color:#ffffff;font-size:22px;line-height:1.25;">Nueva lista de espera</h1>
+            <h1 style="margin:0;color:#ffffff;font-size:22px;line-height:1.25;">${title}</h1>
           </td>
         </tr>
         <tr>
           <td style="padding:24px;">
-            <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#5a4a42;">Una clienta quiere ese día/hora pero está completo. Se ha apuntado a la lista de espera:</p>
+            <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#5a4a42;">${intro}</p>
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#fff;border:1px solid #ecd9ca;border-radius:12px;overflow:hidden;">
               <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Clienta</strong><br><span style="color:#7a675d;">${customerName}</span></td></tr>
               <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Teléfono</strong><br><span style="color:#7a675d;">${customerPhone}</span></td></tr>
@@ -688,7 +721,7 @@ const buildAdminWaitlistEmailHtml = (data: {
               <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Fecha deseada</strong><br><span style="color:#7a675d;">${dateIso}</span></td></tr>
               <tr><td style="padding:14px 16px;font-size:14px;"><strong>Hora deseada</strong><br><span style="color:#7a675d;">${time}</span></td></tr>
             </table>
-            <p style="margin:16px 0 0;font-size:12px;line-height:1.55;color:#8f7b6f;">La solicitud está en "Citas sin asignar". Al asignarla y confirmarla, la clienta recibirá el email de confirmación automáticamente.</p>
+            <p style="margin:16px 0 0;font-size:12px;line-height:1.55;color:#8f7b6f;">${footer}</p>
           </td>
         </tr>
       </table>
@@ -704,7 +737,7 @@ async function notifyAdminReservationEvent(data: {
   dateIso: string;
   time: string;
 }): Promise<void> {
-  const eventLabel = data.kind === 'cancelacion' ? 'cancelación online' : 'nueva reserva online';
+  const eventLabel = (ADMIN_RESERVATION_EVENT_LABELS[data.kind] ?? ADMIN_RESERVATION_EVENT_LABELS.nueva_reserva).log;
 
   try {
     const apiKey = process.env['RESEND_API_KEY'];
@@ -715,7 +748,7 @@ async function notifyAdminReservationEvent(data: {
     }
 
     const reservationKind = getReservationKindLabel(data.appointmentTypeName);
-    const subjectPrefix = data.kind === 'cancelacion' ? 'Cancelación online' : 'Nueva reserva online';
+    const subjectPrefix = (ADMIN_RESERVATION_EVENT_LABELS[data.kind] ?? ADMIN_RESERVATION_EVENT_LABELS.nueva_reserva).subject;
     const resend = new Resend(apiKey);
     const sendResult = await resend.emails.send({
       from: fromEmail,
@@ -752,6 +785,16 @@ async function notifyAdminReservationCancellation(data: {
   await notifyAdminReservationEvent({ ...data, kind: 'cancelacion' });
 }
 
+async function notifyAdminReservationConfirmation(data: {
+  customerName: string;
+  customerPhone?: string;
+  appointmentTypeName: string;
+  dateIso: string;
+  time: string;
+}): Promise<void> {
+  await notifyAdminReservationEvent({ ...data, kind: 'confirmacion' });
+}
+
 async function notifyAdminWaitlistSignup(data: {
   customerName: string;
   customerPhone: string;
@@ -759,7 +802,9 @@ async function notifyAdminWaitlistSignup(data: {
   appointmentTypeName: string;
   dateIso: string;
   time: string;
+  variant?: 'waitlist' | 'slot_alert';
 }): Promise<void> {
+  const isSlotAlert = data.variant === 'slot_alert';
   try {
     const apiKey = process.env['RESEND_API_KEY'];
     const fromEmail = process.env['RESEND_FROM_EMAIL'] ?? 'onboarding@resend.dev';
@@ -772,15 +817,21 @@ async function notifyAdminWaitlistSignup(data: {
     const sendResult = await resend.emails.send({
       from: fromEmail,
       to: resolveEmailRecipient(ADMIN_NOTIFICATIONS_EMAIL),
-      subject: `Lista de espera - ${data.appointmentTypeName} (${data.dateIso} ${data.time})`,
+      subject: `${isSlotAlert ? 'Alerta de hueco' : 'Lista de espera'} - ${data.customerName} · ${data.appointmentTypeName} (${data.dateIso} ${data.time})`,
       html: buildAdminWaitlistEmailHtml(data),
     });
 
     if (sendResult.error) {
-      throw new Error(sendResult.error.message || 'Resend rechazó el aviso de lista de espera.');
+      throw new Error(
+        sendResult.error.message ||
+          `Resend rechazó el aviso de ${isSlotAlert ? 'alerta de hueco' : 'lista de espera'}.`,
+      );
     }
   } catch (error) {
-    console.error('Error enviando aviso de lista de espera a admin:', error);
+    console.error(
+      `Error enviando aviso de ${isSlotAlert ? 'alerta de hueco' : 'lista de espera'} a admin:`,
+      error,
+    );
   }
 }
 
@@ -4756,6 +4807,16 @@ app.post('/api/cliente/alertas', async (req, res) => {
       appointmentTypeName,
       status: 'active',
       approvalStatus: 'pending',
+    });
+
+    void notifyAdminWaitlistSignup({
+      variant: 'slot_alert',
+      customerName: session.card?.fullName?.trim() || session.email,
+      customerPhone: session.card?.phone?.trim() || '-',
+      customerEmail: session.email,
+      appointmentTypeName: `${appointmentTypeName}`.trim(),
+      dateIso: `${dateIso}`,
+      time: `${startTime}`,
     });
 
     return res.status(201).json({ ok: true, alert: newAlert });
@@ -9366,6 +9427,14 @@ app.get('/api/reservas/confirmacion', async (req, res) => {
         title: `Cita confirmada online: ${reservation.appointmentTypeName}`,
         message: `${reservation.customerName} ha confirmado online su cita del ${reservation.dateIso} a las ${reservation.startTime}`,
         relatedId: reservation.id,
+      });
+
+      void notifyAdminReservationConfirmation({
+        customerName: reservation.customerName,
+        customerPhone: reservation.customerPhone,
+        appointmentTypeName: reservation.appointmentTypeName,
+        dateIso: reservation.dateIso,
+        time: reservation.startTime,
       });
 
       return res
