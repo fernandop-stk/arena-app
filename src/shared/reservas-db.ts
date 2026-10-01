@@ -26,7 +26,7 @@ export type AdminReservationStatus = 'pending' | 'accepted' | 'rejected';
 export type ClientConfirmationStatus = 'pending' | 'confirmed';
 // 'online' = la clienta confirmó desde el enlace del email; 'salon' = confirmada desde la peluquería.
 export type ClientConfirmationSource = 'online' | 'salon';
-export type ReservationSignalPaymentMethod = 'efectivo' | 'tarjeta' | 'bizum';
+export type ReservationSignalPaymentMethod = 'efectivo' | 'tarjeta' | 'bizum' | 'bono';
 
 export interface AdminReservationItem {
   id: string;
@@ -471,7 +471,8 @@ const loadMemoryFromFile = (): void => {
         signalPaymentMethod:
           item.signalPaymentMethod === 'efectivo' ||
           item.signalPaymentMethod === 'tarjeta' ||
-          item.signalPaymentMethod === 'bizum'
+          item.signalPaymentMethod === 'bizum' ||
+          item.signalPaymentMethod === 'bono'
             ? item.signalPaymentMethod
             : null,
         signalReceivedAtIso: item.signalReceivedAtIso ?? null,
@@ -1969,7 +1970,8 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
       signalPaymentMethod:
         row.signal_payment_method === 'efectivo' ||
         row.signal_payment_method === 'tarjeta' ||
-        row.signal_payment_method === 'bizum'
+        row.signal_payment_method === 'bizum' ||
+        row.signal_payment_method === 'bono'
           ? row.signal_payment_method
           : null,
       signalReceivedAtIso: row.signal_received_at,
@@ -2843,6 +2845,7 @@ export const updateReservationByAdmin = async (
     dateIso: string;
     startTime: string;
     durationMinutes: number;
+    workerEmail?: string;
     appointmentTypeName: string;
     customerName: string;
     customerPhone: string;
@@ -2894,7 +2897,7 @@ export const updateReservationByAdmin = async (
       return { ok: false, reason: 'not-found' };
     }
 
-    const assignedWorker = normalizeWorkerEmail(reservation.createdByEmail);
+    const assignedWorker = normalizeWorkerEmail(payload.workerEmail ?? reservation.createdByEmail);
     const blockedSlots = getBlockedSlotsFromMemory(payload.dateIso, assignedWorker || undefined);
 
     if (
@@ -2927,6 +2930,7 @@ export const updateReservationByAdmin = async (
     reservation.startTime = payload.startTime;
     reservation.endTime = endTime;
     reservation.durationMinutes = payload.durationMinutes;
+    reservation.createdByEmail = assignedWorker || null;
     reservation.appointmentTypeName = payload.appointmentTypeName;
     reservation.customerName = payload.customerName;
     reservation.customerPhone = payload.customerPhone;
@@ -2965,7 +2969,9 @@ export const updateReservationByAdmin = async (
       return { ok: false, reason: 'not-found' };
     }
 
-    const assignedWorkerForBlockCheck = normalizeWorkerEmail(current.rows[0]?.created_by_email);
+    const assignedWorkerForBlockCheck = normalizeWorkerEmail(
+      payload.workerEmail ?? current.rows[0]?.created_by_email,
+    );
 
     const blockedConflict = await client.query<{ slot_time: string; worker_email: string | null }>(
       `
@@ -3017,22 +3023,22 @@ export const updateReservationByAdmin = async (
         return { ok: false, reason: 'slot-conflict' };
       }
 
-      const workerConflict = await client.query<{ slot_time: string }>(
+      const workerConflict = assignedWorkerForBlockCheck
+        ? await client.query<{ slot_time: string }>(
         `
         SELECT rs.slot_time
         FROM reservation_slots rs
         INNER JOIN reservations r ON r.id = rs.reservation_id
-        INNER JOIN reservations current_reservation ON current_reservation.id = $3
         WHERE rs.date_iso = $1
           AND rs.slot_time = ANY($2::text[])
           AND rs.reservation_id <> $3
           AND r.admin_status <> 'rejected'
-          AND LOWER(COALESCE(r.created_by_email, '')) = LOWER(COALESCE(current_reservation.created_by_email, ''))
-          AND COALESCE(current_reservation.created_by_email, '') <> ''
+          AND LOWER(COALESCE(r.created_by_email, '')) = $4
         LIMIT 1
         `,
-        [payload.dateIso, nextSlots, reservationId],
-      );
+        [payload.dateIso, nextSlots, reservationId, assignedWorkerForBlockCheck],
+      )
+        : { rowCount: 0, rows: [] as { slot_time: string }[] };
 
       if (workerConflict.rowCount && workerConflict.rowCount > 0) {
         await client.query('ROLLBACK');
@@ -3051,7 +3057,8 @@ export const updateReservationByAdmin = async (
           customer_name = $7,
           customer_phone = $8,
           customer_email = $9,
-          additional_comments = COALESCE($10, additional_comments)
+          additional_comments = COALESCE($10, additional_comments),
+          created_by_email = NULLIF($11, '')
       WHERE id = $1
       `,
       [
@@ -3065,6 +3072,7 @@ export const updateReservationByAdmin = async (
         payload.customerPhone,
         payload.customerEmail,
         payload.additionalComments?.trim().slice(0, 8000) ?? null,
+        assignedWorkerForBlockCheck,
       ],
     );
 
@@ -3100,7 +3108,7 @@ export const updateReservationByAdmin = async (
         return { ok: false, reason: 'not-found' };
       }
 
-      const assignedWorker = normalizeWorkerEmail(reservation.createdByEmail);
+      const assignedWorker = normalizeWorkerEmail(payload.workerEmail ?? reservation.createdByEmail);
       const blockedSlots = getBlockedSlotsFromMemory(payload.dateIso, assignedWorker || undefined);
 
       if (
@@ -3133,6 +3141,7 @@ export const updateReservationByAdmin = async (
       reservation.startTime = payload.startTime;
       reservation.endTime = endTime;
       reservation.durationMinutes = payload.durationMinutes;
+      reservation.createdByEmail = assignedWorker || null;
       reservation.appointmentTypeName = payload.appointmentTypeName;
       reservation.customerName = payload.customerName;
       reservation.customerPhone = payload.customerPhone;
@@ -3599,6 +3608,7 @@ export interface DbClientCard {
   createdByEmail: string;
   treatments: unknown;
   appointmentNotes?: unknown;
+  giftVouchers?: unknown;
   passwordHash?: string;
   hasAviso?: boolean;
 }
@@ -3617,10 +3627,33 @@ export interface DbStockProduct {
 
 export interface DbPaymentOperationDetail {
   id: string;
-  operationType: 'stock_sale' | 'client_pack_payment' | 'reservation_payment';
+  operationType:
+    | 'stock_sale'
+    | 'client_pack_payment'
+    | 'reservation_payment'
+    | 'gift_voucher_sale'
+    | 'gift_voucher_refund';
   concept: string;
   amount: number;
   paymentMethod: 'efectivo' | 'tarjeta' | 'bizum';
+  paymentBreakdown?: Array<{ method: 'efectivo' | 'tarjeta' | 'bizum'; amount: number }>;
+  paymentType?: 'signal' | 'final' | 'stock' | 'client_treatment';
+  voucherAmountEuro?: number;
+  totalCoveredAmountEuro?: number;
+  voucherPayments?: Array<{ voucherId: string; amountEuro: number; clientName?: string }>;
+  clientCardId?: string;
+  clientName?: string;
+  reservationId?: string;
+  reservationDateIso?: string;
+  reservationStartTime?: string;
+  appointmentTypeName?: string;
+  lineItems?: Array<{
+    kind: 'service' | 'stock' | 'other';
+    name: string;
+    quantity: number;
+    unitPriceEuro: number;
+    amount: number;
+  }>;
   performedByEmail: string;
   createdAtIso: string;
 }
@@ -3766,6 +3799,11 @@ const ensureUsersAndCardsSchema = async (): Promise<void> => {
     ADD COLUMN IF NOT EXISTS appointment_notes JSONB NOT NULL DEFAULT '[]';
   `);
 
+  await db.query(`
+    ALTER TABLE client_cards
+    ADD COLUMN IF NOT EXISTS gift_vouchers JSONB NOT NULL DEFAULT '[]';
+  `);
+
   usersAndCardsSchemaReady = true;
 };
 
@@ -3890,10 +3928,11 @@ export const loadAllClientCardsFromDb = async (): Promise<DbClientCard[]> => {
       created_by_email: string;
       treatments: unknown;
       appointment_notes: unknown;
+      gift_vouchers: unknown;
       password_hash: string | null;
       has_aviso: boolean;
     }>(`
-      SELECT id, full_name, email, phone, birth_date_iso, notes, created_at, created_by_email, treatments, appointment_notes, password_hash, has_aviso
+      SELECT id, full_name, email, phone, birth_date_iso, notes, created_at, created_by_email, treatments, appointment_notes, gift_vouchers, password_hash, has_aviso
       FROM client_cards
     `);
 
@@ -3908,6 +3947,7 @@ export const loadAllClientCardsFromDb = async (): Promise<DbClientCard[]> => {
       createdByEmail: row.created_by_email,
       treatments: row.treatments ?? [],
       appointmentNotes: row.appointment_notes ?? [],
+      giftVouchers: row.gift_vouchers ?? [],
       passwordHash: row.password_hash ?? undefined,
       hasAviso: row.has_aviso,
     }));
@@ -3935,8 +3975,8 @@ export const saveClientCardToDb = async (card: DbClientCard): Promise<void> => {
     await client.query('BEGIN');
     await client.query(
       `
-      INSERT INTO client_cards (id, full_name, email, phone, birth_date_iso, notes, created_at, created_by_email, treatments, password_hash, has_aviso, appointment_notes)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      INSERT INTO client_cards (id, full_name, email, phone, birth_date_iso, notes, created_at, created_by_email, treatments, password_hash, has_aviso, appointment_notes, gift_vouchers)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       ON CONFLICT (id) DO UPDATE SET
         full_name = EXCLUDED.full_name,
         email = EXCLUDED.email,
@@ -3947,7 +3987,8 @@ export const saveClientCardToDb = async (card: DbClientCard): Promise<void> => {
         treatments = EXCLUDED.treatments,
         password_hash = EXCLUDED.password_hash,
         has_aviso = EXCLUDED.has_aviso,
-        appointment_notes = EXCLUDED.appointment_notes
+        appointment_notes = EXCLUDED.appointment_notes,
+        gift_vouchers = EXCLUDED.gift_vouchers
       `,
       [
         card.id,
@@ -3962,6 +4003,7 @@ export const saveClientCardToDb = async (card: DbClientCard): Promise<void> => {
         card.passwordHash ?? null,
         Boolean(card.hasAviso),
         JSON.stringify(card.appointmentNotes ?? []),
+        JSON.stringify(card.giftVouchers ?? []),
       ],
     );
 
@@ -3980,6 +4022,52 @@ export const saveClientCardToDb = async (card: DbClientCard): Promise<void> => {
     if (client) {
       client.release();
     }
+  }
+};
+
+export const updateClientGiftVouchersInDb = async <T, TVoucher>(
+  clientId: string,
+  update: (vouchers: unknown[]) => { vouchers: TVoucher[]; result: T },
+): Promise<{ vouchers: TVoucher[]; result: T } | null> => {
+  if (!shouldUseDatabase()) {
+    return null;
+  }
+
+  let client: PoolClient | null = null;
+
+  try {
+    await ensureUsersAndCardsSchema();
+    client = await getPool().connect();
+    await client.query('BEGIN');
+
+    const current = await client.query<{ gift_vouchers: unknown }>(
+      'SELECT gift_vouchers FROM client_cards WHERE id = $1 FOR UPDATE',
+      [clientId],
+    );
+    if (current.rowCount === 0) {
+      throw new Error('Ficha de clienta no encontrada al actualizar bonos.');
+    }
+
+    const rawVouchers = current.rows[0]?.gift_vouchers;
+    const updated = update(Array.isArray(rawVouchers) ? rawVouchers : []);
+    await client.query('UPDATE client_cards SET gift_vouchers = $2 WHERE id = $1', [
+      clientId,
+      JSON.stringify(updated.vouchers),
+    ]);
+    await client.query('COMMIT');
+    return updated;
+  } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK').catch(() => undefined);
+    }
+
+    if (enableRuntimeMemoryMode(error)) {
+      return null;
+    }
+
+    throw error;
+  } finally {
+    client?.release();
   }
 };
 

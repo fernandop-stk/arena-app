@@ -46,6 +46,7 @@ import {
   saveDailyPaymentToDb,
   saveStockProductToDb,
   saveUserToDb,
+  updateClientGiftVouchersInDb,
   assignReservationToWorker,
   updateReservationAdminStatus,
   updateReservationClientConfirmationStatus,
@@ -817,7 +818,7 @@ const buildReservationReminderEmailHtml = (data: {
         </tr>
         <tr>
           <td style="padding:24px;">
-            <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#5a4a42;">Hola ${safeName}, tu cita es en menos de 48 horas:</p>
+            <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#5a4a42;">Hola ${safeName}, tu cita es en menos de 72 horas:</p>
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#fff;border:1px solid #ecd9ca;border-radius:12px;overflow:hidden;">
               <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Servicio</strong><br><span style="color:#7a675d;">${safeType}</span></td></tr>
               <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Fecha</strong><br><span style="color:#7a675d;">${safeDate}</span></td></tr>
@@ -1058,6 +1059,8 @@ const tryNormalizeLegacyReservationSchedule = async (
   }
 };
 
+const CLIENT_CONFIRMATION_REMINDER_HOURS = 72;
+
 const shouldSend48hReminder = (reservation: {
   dateIso: string;
   startTime: string;
@@ -1089,7 +1092,7 @@ const shouldSend48hReminder = (reservation: {
     return false;
   }
 
-  return timeUntilMs <= 48 * 60 * 60 * 1000;
+  return timeUntilMs <= CLIENT_CONFIRMATION_REMINDER_HOURS * 60 * 60 * 1000;
 };
 
 const send48hReservationReminder = async (reservation: {
@@ -1331,8 +1334,46 @@ interface ClientTreatmentItem {
   createdAtIso: string;
   createdByEmail: string;
   priceEuro?: number;
-  paymentMethod?: 'efectivo' | 'tarjeta' | 'bizum' | null;
+  paymentMethod?: 'efectivo' | 'tarjeta' | 'bizum' | 'bono' | null;
 }
+
+interface ClientGiftVoucherLedgerEntry {
+  id: string;
+  type: 'issued' | 'redeemed' | 'refunded';
+  amountEuro: number;
+  createdAtIso: string;
+  createdByEmail: string;
+  concept: string;
+  paymentMethod?: 'efectivo' | 'tarjeta' | 'bizum';
+  reservationId?: string;
+}
+
+interface ClientGiftVoucherItem {
+  id: string;
+  initialAmountEuro: number;
+  balanceEuro: number;
+  issuedAtIso: string;
+  issuedByEmail: string;
+  paymentMethod: 'efectivo' | 'tarjeta' | 'bizum' | 'bono';
+  giftedByName?: string;
+  note?: string;
+  ledger: ClientGiftVoucherLedgerEntry[];
+}
+
+type PaymentOperationType =
+  | 'stock_sale'
+  | 'client_pack_payment'
+  | 'reservation_payment'
+  | 'gift_voucher_sale'
+  | 'gift_voucher_refund';
+
+const normalizePaymentOperationType = (value: unknown): PaymentOperationType =>
+  value === 'stock_sale' ||
+  value === 'reservation_payment' ||
+  value === 'gift_voucher_sale' ||
+  value === 'gift_voucher_refund'
+    ? value
+    : 'client_pack_payment';
 
 interface ClientAppointmentNoteItem {
   id: string;
@@ -1357,10 +1398,28 @@ interface DailyPaymentSummaryItem {
 
 interface PaymentOperationDetail {
   id: string;
-  operationType: 'stock_sale' | 'client_pack_payment' | 'reservation_payment';
+  operationType: PaymentOperationType;
   concept: string;
   amount: number;
   paymentMethod: 'efectivo' | 'tarjeta' | 'bizum';
+  paymentBreakdown?: Array<{ method: 'efectivo' | 'tarjeta' | 'bizum'; amount: number }>;
+  paymentType?: 'signal' | 'final' | 'stock' | 'client_treatment';
+  voucherAmountEuro?: number;
+  totalCoveredAmountEuro?: number;
+  voucherPayments?: Array<{ voucherId: string; amountEuro: number; clientName?: string }>;
+  clientCardId?: string;
+  clientName?: string;
+  reservationId?: string;
+  reservationDateIso?: string;
+  reservationStartTime?: string;
+  appointmentTypeName?: string;
+  lineItems?: Array<{
+    kind: 'service' | 'stock' | 'other';
+    name: string;
+    quantity: number;
+    unitPriceEuro: number;
+    amount: number;
+  }>;
   performedByEmail: string;
   createdAtIso: string;
 }
@@ -1375,6 +1434,7 @@ interface ClientCardItem {
   createdAtIso: string;
   createdByEmail: string;
   treatments: ClientTreatmentItem[];
+  giftVouchers?: ClientGiftVoucherItem[];
   appointmentNotes?: ClientAppointmentNoteItem[];
   passwordHash?: string;
   hasAviso?: boolean;
@@ -1396,10 +1456,11 @@ interface StockSaleHistoryItem {
   id: string;
   productId: string;
   productName: string;
+  clientCardId?: string;
   soldUnits: number;
   unitPrice: number;
   totalAmount: number;
-  paymentMethod: 'efectivo' | 'tarjeta' | 'bizum';
+  paymentMethod: 'efectivo' | 'tarjeta' | 'bizum' | 'bono';
   soldByEmail: string;
   soldAtIso: string;
 }
@@ -1438,6 +1499,7 @@ interface ReservationMetaPayload {
       method: 'efectivo' | 'tarjeta' | 'bizum';
       amount: number;
     }>;
+    giftVoucherPayments?: Array<{ voucherId: string; amountEuro: number }>;
     finalPaymentMethod: 'efectivo' | 'tarjeta' | 'bizum' | null;
     finalPaymentAmountEuro: number;
     registeredAtIso: string;
@@ -1847,6 +1909,16 @@ const normalizeClientCard = (card: ClientCardItem): ClientCardItem => ({
   ...card,
   birthDateIso: normalizeBirthDateIso(card.birthDateIso),
   hasAviso: Boolean(card.hasAviso),
+  giftVouchers: Array.isArray(card.giftVouchers)
+    ? card.giftVouchers
+        .map((voucher) => ({
+          ...voucher,
+          initialAmountEuro: Number(Math.max(0, Number(voucher.initialAmountEuro) || 0).toFixed(2)),
+          balanceEuro: Number(Math.max(0, Number(voucher.balanceEuro) || 0).toFixed(2)),
+          ledger: Array.isArray(voucher.ledger) ? voucher.ledger : [],
+        }))
+        .sort((a, b) => b.issuedAtIso.localeCompare(a.issuedAtIso))
+    : [],
   treatments: (card.treatments ?? [])
     .slice()
     .sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso)),
@@ -1854,6 +1926,227 @@ const normalizeClientCard = (card: ClientCardItem): ClientCardItem => ({
     .slice()
     .sort((a, b) => `${b.createdAtIso}`.localeCompare(`${a.createdAtIso}`)),
 });
+
+const normalizeClientGiftVouchers = (value: unknown): ClientGiftVoucherItem[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is ClientGiftVoucherItem => !!item && typeof item === 'object')
+    .map((voucher) => ({
+      ...voucher,
+      initialAmountEuro: Number(Math.max(0, Number(voucher.initialAmountEuro) || 0).toFixed(2)),
+      balanceEuro: Number(Math.max(0, Number(voucher.balanceEuro) || 0).toFixed(2)),
+      ledger: Array.isArray(voucher.ledger) ? voucher.ledger : [],
+    }));
+};
+
+const clientGiftVoucherMutationQueues = new Map<string, Promise<void>>();
+
+const mutateClientGiftVouchers = async <T>(
+  clientId: string,
+  update: (vouchers: ClientGiftVoucherItem[]) => { vouchers: ClientGiftVoucherItem[]; result: T },
+): Promise<{ card: ClientCardItem; result: T }> => {
+  const previous = clientGiftVoucherMutationQueues.get(clientId) ?? Promise.resolve();
+  let releaseMutation!: () => void;
+  const mutationGate = new Promise<void>((resolve) => {
+    releaseMutation = resolve;
+  });
+  const queuedMutation = previous.then(() => mutationGate);
+  clientGiftVoucherMutationQueues.set(clientId, queuedMutation);
+  await previous;
+
+  try {
+    const applyUpdate = (rawVouchers: unknown[]) => update(normalizeClientGiftVouchers(rawVouchers));
+    const persisted = await updateClientGiftVouchersInDb(clientId, applyUpdate);
+    const currentCard = clientCardsById.get(clientId);
+    if (!currentCard) {
+      throw new Error('Ficha de clienta no encontrada.');
+    }
+    const mutationResult = persisted ?? applyUpdate(currentCard.giftVouchers ?? []);
+
+    const updatedCard = normalizeClientCard({
+      ...currentCard,
+      giftVouchers: mutationResult.vouchers,
+    });
+    clientCardsById.set(clientId, updatedCard);
+    void persistClientCardsToDisk();
+
+    return {
+      card: updatedCard,
+      result: mutationResult.result,
+    };
+  } finally {
+    releaseMutation();
+    if (clientGiftVoucherMutationQueues.get(clientId) === queuedMutation) {
+      clientGiftVoucherMutationQueues.delete(clientId);
+    }
+  }
+};
+
+const redeemClientGiftVoucher = async (
+  clientId: string,
+  voucherId: string,
+  amountEuro: number,
+  concept: string,
+  createdByEmail: string,
+  reservationId?: string,
+): Promise<
+  | { ok: true; card: ClientCardItem; voucher: ClientGiftVoucherItem }
+  | { ok: false; reason: 'client-not-found' | 'voucher-not-found' | 'insufficient'; balanceEuro?: number }
+> => {
+  if (!clientCardsById.has(clientId)) {
+    return { ok: false, reason: 'client-not-found' };
+  }
+
+  const safeAmount = Number(amountEuro.toFixed(2));
+  const { card, result } = await mutateClientGiftVouchers<
+    | { ok: true; voucher: ClientGiftVoucherItem }
+    | { ok: false; reason: 'voucher-not-found' }
+    | { ok: false; reason: 'insufficient'; balanceEuro: number }
+  >(clientId, (vouchers) => {
+    const index = vouchers.findIndex((item) => item.id === voucherId);
+    if (index < 0) {
+      return { vouchers, result: { ok: false as const, reason: 'voucher-not-found' as const } };
+    }
+
+    const voucher = vouchers[index];
+    if (safeAmount > voucher.balanceEuro + 0.001) {
+      return {
+        vouchers,
+        result: { ok: false as const, reason: 'insufficient' as const, balanceEuro: voucher.balanceEuro },
+      };
+    }
+
+    const entry: ClientGiftVoucherLedgerEntry = {
+      id: `mov-bono-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type: 'redeemed',
+      amountEuro: safeAmount,
+      createdAtIso: new Date().toISOString(),
+      createdByEmail,
+      concept: concept.slice(0, 180),
+      reservationId,
+    };
+    const updatedVoucher = {
+      ...voucher,
+      balanceEuro: Number(Math.max(0, voucher.balanceEuro - safeAmount).toFixed(2)),
+      ledger: [entry, ...voucher.ledger],
+    };
+    const nextVouchers = [...vouchers];
+    nextVouchers[index] = updatedVoucher;
+    return { vouchers: nextVouchers, result: { ok: true as const, voucher: updatedVoucher } };
+  });
+
+  return result.ok
+    ? { ok: true, card, voucher: result.voucher }
+    : { ...result, reason: result.reason };
+};
+
+const refundClientGiftVoucherRedemption = async (
+  clientId: string,
+  voucherId: string,
+  amountEuro: number,
+  concept: string,
+  createdByEmail: string,
+  reservationId?: string,
+): Promise<void> => {
+  await mutateClientGiftVouchers(clientId, (vouchers) => {
+    const index = vouchers.findIndex((item) => item.id === voucherId);
+    if (index < 0) {
+      return { vouchers, result: undefined };
+    }
+
+    const voucher = vouchers[index];
+    const safeAmount = Number(amountEuro.toFixed(2));
+    const entry: ClientGiftVoucherLedgerEntry = {
+      id: `mov-bono-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type: 'refunded',
+      amountEuro: safeAmount,
+      createdAtIso: new Date().toISOString(),
+      createdByEmail,
+      concept: `Reintegro: ${concept}`.slice(0, 180),
+      reservationId,
+    };
+    const nextVouchers = [...vouchers];
+    nextVouchers[index] = {
+      ...voucher,
+      balanceEuro: Number((voucher.balanceEuro + safeAmount).toFixed(2)),
+      ledger: [entry, ...voucher.ledger],
+    };
+    return { vouchers: nextVouchers, result: undefined };
+  });
+};
+
+// Devuelve al bono lo canjeado en una cita cancelada y lo deja reflejado en la caja del día (sin tocar efectivo/tarjeta/bizum).
+const refundReservationGiftVoucherRedemptions = async (
+  reservation: {
+    id: string;
+    customerName: string;
+    appointmentTypeName: string;
+    dateIso: string;
+    startTime: string;
+  },
+  performedByEmail: string,
+  reasonLabel: string,
+): Promise<number> => {
+  const todayIso = new Date().toISOString().slice(0, 10);
+  let refundedTotal = 0;
+
+  for (const card of Array.from(clientCardsById.values())) {
+    for (const voucher of card.giftVouchers ?? []) {
+      const pendingAmount = Number(
+        voucher.ledger
+          .filter((entry) => entry.reservationId === reservation.id)
+          .reduce((sum, entry) => {
+            if (entry.type === 'redeemed') {
+              return sum + entry.amountEuro;
+            }
+            if (entry.type === 'refunded') {
+              return sum - entry.amountEuro;
+            }
+            return sum;
+          }, 0)
+          .toFixed(2),
+      );
+
+      if (pendingAmount <= 0) {
+        continue;
+      }
+
+      await refundClientGiftVoucherRedemption(
+        card.id,
+        voucher.id,
+        pendingAmount,
+        `Cita ${reservation.appointmentTypeName} (${reservation.dateIso} ${reservation.startTime}) ${reasonLabel}`,
+        performedByEmail,
+        reservation.id,
+      );
+
+      addPaymentToDailySummary(todayIso, 'efectivo', 0, {
+        operationType: 'gift_voucher_refund',
+        concept: `Reintegro a bono regalo: ${reservation.customerName} · ${reservation.appointmentTypeName} · ${reservation.dateIso} ${reservation.startTime} · Cita ${reasonLabel}`,
+        performedByEmail,
+        clientCardId: card.id,
+        clientName: card.fullName,
+        reservationId: reservation.id,
+        reservationDateIso: reservation.dateIso,
+        reservationStartTime: reservation.startTime,
+        appointmentTypeName: reservation.appointmentTypeName,
+        voucherAmountEuro: pendingAmount,
+        totalCoveredAmountEuro: 0,
+        voucherPayments: [
+          { voucherId: voucher.id, amountEuro: pendingAmount, clientName: card.fullName },
+        ],
+        paymentBreakdown: [],
+      });
+
+      refundedTotal = Number((refundedTotal + pendingAmount).toFixed(2));
+    }
+  }
+
+  return refundedTotal;
+};
 
 const normalizeStockProduct = (product: StockProductItem): StockProductItem => {
   const normalizedQuantity = Number.isFinite(product.quantity)
@@ -1883,11 +2176,12 @@ const normalizeStockSale = (sale: StockSaleHistoryItem): StockSaleHistoryItem =>
     ...sale,
     productId: `${sale.productId ?? ''}`.trim(),
     productName: `${sale.productName ?? ''}`.trim().slice(0, 120),
+    clientCardId: `${sale.clientCardId ?? ''}`.trim() || undefined,
     soldUnits,
     unitPrice: Number(unitPrice.toFixed(2)),
     totalAmount: Number(totalAmount.toFixed(2)),
     paymentMethod:
-      sale.paymentMethod === 'tarjeta' || sale.paymentMethod === 'bizum'
+      sale.paymentMethod === 'tarjeta' || sale.paymentMethod === 'bizum' || sale.paymentMethod === 'bono'
         ? sale.paymentMethod
         : 'efectivo',
     soldByEmail: `${sale.soldByEmail ?? ''}`.toLowerCase().trim(),
@@ -1994,6 +2288,14 @@ const parseReservationMetaFromComments = (
             } => !!entry,
           )
       : [];
+    const giftVoucherPayments = Array.isArray(paymentSummaryRaw?.giftVoucherPayments)
+      ? paymentSummaryRaw.giftVoucherPayments
+          .map((entry) => ({
+            voucherId: `${entry?.voucherId ?? ''}`.trim(),
+            amountEuro: Number(Math.max(0, Number(entry?.amountEuro) || 0).toFixed(2)),
+          }))
+          .filter((entry) => entry.voucherId && entry.amountEuro > 0)
+      : [];
     const finalPaymentMethodRaw = `${paymentSummaryRaw?.finalPaymentMethod ?? ''}`.trim();
     const finalPaymentMethod =
       finalPaymentMethodRaw === 'efectivo' ||
@@ -2028,6 +2330,7 @@ const parseReservationMetaFromComments = (
                   paidItemIds,
                   paidItems,
                   splitPayments,
+                  giftVoucherPayments,
                   finalPaymentMethod,
                   finalPaymentAmountEuro: Number(finalPaymentAmountEuro.toFixed(2)),
                   registeredAtIso,
@@ -2405,6 +2708,56 @@ const buildCierreId = (): string =>
 const buildPaymentOperationId = (): string =>
   `payop_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
+const normalizePaymentOperationLineItems = (
+  value: unknown,
+): NonNullable<PaymentOperationDetail['lineItems']> => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return null;
+      }
+
+      const candidate = item as Partial<NonNullable<PaymentOperationDetail['lineItems']>[number]>;
+      const name = `${candidate.name ?? ''}`.trim().slice(0, 160);
+      const amount = Number(candidate.amount);
+      if (!name || !Number.isFinite(amount)) {
+        return null;
+      }
+
+      const quantity = Math.max(1, Math.floor(Number(candidate.quantity) || 1));
+      return {
+        kind: (candidate.kind === 'stock' || candidate.kind === 'other'
+          ? candidate.kind
+          : 'service') as 'service' | 'stock' | 'other',
+        name,
+        quantity,
+        unitPriceEuro: Number(Math.max(0, Number(candidate.unitPriceEuro) || 0).toFixed(2)),
+        amount: Number(amount.toFixed(2)),
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+};
+
+const formatPaymentOperationLineItem = (
+  item: NonNullable<PaymentOperationDetail['lineItems']>[number],
+): string => {
+  const formatEuro = (amount: number): string =>
+    new Intl.NumberFormat('es-ES', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+
+  if (item.quantity > 1) {
+    return `${item.name} ×${item.quantity}: ${formatEuro(item.unitPriceEuro)} €/ud = ${formatEuro(item.amount)} €`;
+  }
+
+  return `${item.name}: ${formatEuro(item.amount)} €`;
+};
+
 const normalizePaymentOperationDetail = (
   detail: PaymentOperationDetail,
 ): PaymentOperationDetail => {
@@ -2413,17 +2766,60 @@ const normalizePaymentOperationDetail = (
       ? detail.paymentMethod
       : 'efectivo';
 
-  const operationType =
-    detail.operationType === 'stock_sale' || detail.operationType === 'reservation_payment'
-      ? detail.operationType
-      : 'client_pack_payment';
+  const operationType = normalizePaymentOperationType(detail.operationType);
+  const paymentBreakdown = Array.isArray(detail.paymentBreakdown)
+    ? detail.paymentBreakdown
+        .map((entry) => ({
+          method: (entry.method === 'tarjeta' || entry.method === 'bizum'
+            ? entry.method
+            : 'efectivo') as 'efectivo' | 'tarjeta' | 'bizum',
+          amount: Number.isFinite(entry.amount) ? Number(Math.max(0, entry.amount).toFixed(2)) : 0,
+        }))
+        .filter((entry) => entry.amount > 0)
+    : undefined;
+  const paymentType =
+    detail.paymentType === 'signal' ||
+    detail.paymentType === 'final' ||
+    detail.paymentType === 'stock' ||
+    detail.paymentType === 'client_treatment'
+      ? detail.paymentType
+      : undefined;
+  const voucherPayments = Array.isArray(detail.voucherPayments)
+    ? detail.voucherPayments
+        .map((entry) => ({
+          voucherId: `${entry.voucherId ?? ''}`.trim(),
+          amountEuro: Number(Math.max(0, Number(entry.amountEuro) || 0).toFixed(2)),
+          clientName: `${entry.clientName ?? ''}`.trim().slice(0, 120) || undefined,
+        }))
+        .filter((entry) => entry.voucherId && entry.amountEuro > 0)
+    : undefined;
+  const lineItems = normalizePaymentOperationLineItems(detail.lineItems);
+  const concept = `${detail.concept ?? ''}`.trim().slice(0, 800) || 'Operación';
+  const conceptWithPrices =
+    lineItems.length > 0 && !concept.includes(' · Precios: ')
+      ? `${concept} · Precios: ${lineItems.map(formatPaymentOperationLineItem).join(' · ')}`
+      : concept;
 
   return {
     id: `${detail.id ?? buildPaymentOperationId()}`,
     operationType,
-    concept: `${detail.concept ?? ''}`.trim().slice(0, 180) || 'Operación',
+    concept: conceptWithPrices.slice(0, 800),
     amount: Number(detail.amount) || 0,
     paymentMethod,
+    paymentBreakdown,
+    paymentType,
+    voucherAmountEuro: Number(Math.max(0, Number(detail.voucherAmountEuro) || 0).toFixed(2)),
+    totalCoveredAmountEuro: Number(
+      Math.max(0, Number(detail.totalCoveredAmountEuro ?? detail.amount) || 0).toFixed(2),
+    ),
+    voucherPayments,
+    clientCardId: `${detail.clientCardId ?? ''}`.trim() || undefined,
+    clientName: `${detail.clientName ?? ''}`.trim().slice(0, 120) || undefined,
+    reservationId: `${detail.reservationId ?? ''}`.trim() || undefined,
+    reservationDateIso: `${detail.reservationDateIso ?? ''}`.trim() || undefined,
+    reservationStartTime: `${detail.reservationStartTime ?? ''}`.trim() || undefined,
+    appointmentTypeName: `${detail.appointmentTypeName ?? ''}`.trim().slice(0, 160) || undefined,
+    lineItems,
     performedByEmail: `${detail.performedByEmail ?? ''}`.trim().toLowerCase(),
     createdAtIso: `${detail.createdAtIso ?? new Date().toISOString()}`,
   };
@@ -2443,22 +2839,33 @@ const normalizePaymentOperationDetails = (value: unknown): PaymentOperationDetai
       const candidate = item as Partial<PaymentOperationDetail>;
       return normalizePaymentOperationDetail({
         id: `${candidate.id ?? ''}`,
-        operationType:
-          candidate.operationType === 'stock_sale' ||
-          candidate.operationType === 'reservation_payment'
-            ? candidate.operationType
-            : 'client_pack_payment',
+        operationType: normalizePaymentOperationType(candidate.operationType),
         concept: `${candidate.concept ?? ''}`,
         amount: Number(candidate.amount) || 0,
         paymentMethod:
           candidate.paymentMethod === 'tarjeta' || candidate.paymentMethod === 'bizum'
             ? candidate.paymentMethod
             : 'efectivo',
+        paymentBreakdown: candidate.paymentBreakdown,
+        paymentType: candidate.paymentType,
+        voucherAmountEuro: candidate.voucherAmountEuro,
+        totalCoveredAmountEuro: candidate.totalCoveredAmountEuro,
+        voucherPayments: candidate.voucherPayments,
+        clientCardId: candidate.clientCardId,
+        clientName: candidate.clientName,
+        reservationId: candidate.reservationId,
+        reservationDateIso: candidate.reservationDateIso,
+        reservationStartTime: candidate.reservationStartTime,
+        appointmentTypeName: candidate.appointmentTypeName,
+        lineItems: candidate.lineItems,
         performedByEmail: `${candidate.performedByEmail ?? ''}`,
         createdAtIso: `${candidate.createdAtIso ?? new Date().toISOString()}`,
       });
     })
-    .filter((detail): detail is PaymentOperationDetail => detail !== null && detail.amount > 0)
+    .filter(
+      (detail): detail is PaymentOperationDetail =>
+        detail !== null && (detail.amount > 0 || Number(detail.voucherAmountEuro ?? 0) > 0),
+    )
     .sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso));
 };
 
@@ -2485,7 +2892,7 @@ const getLatestCierreForDate = (dateIso: string): CierreCajaItem | null => {
   }
 
   const cierresForDate = Array.from(cierreCajaById.values())
-    .map(normalizeCierre)
+    .map(hydrateCierreWithDailyPaymentDetails)
     .filter((cierre) => cierre.fechaIso === normalizedDateIso)
     .sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso));
 
@@ -2545,6 +2952,249 @@ const normalizeDailyPaymentSummary = (item: DailyPaymentSummaryItem): DailyPayme
   };
 };
 
+const hydrateCierreWithDailyPaymentDetails = (cierre: CierreCajaItem): CierreCajaItem => {
+  const normalized = normalizeCierre(cierre);
+  const dailySummary = dailyPaymentsByDateIso.get(normalized.fechaIso);
+
+  if (!dailySummary?.operationDetails.length) {
+    return normalized;
+  }
+
+  const dailyOperationsById = new Map(
+    dailySummary.operationDetails.map((detail) => [detail.id, detail]),
+  );
+  const operationDetails = normalized.operationDetails.map((detail) => {
+    const dailyDetail = dailyOperationsById.get(detail.id);
+    if (!dailyDetail) {
+      return detail;
+    }
+
+    const concept = detail.concept.includes(' · Precios: ')
+      ? detail.concept
+      : dailyDetail.concept.includes(' · Precios: ')
+        ? dailyDetail.concept
+        : detail.concept;
+
+    return normalizePaymentOperationDetail({
+      ...dailyDetail,
+      ...detail,
+      concept,
+      paymentBreakdown: detail.paymentBreakdown?.length
+        ? detail.paymentBreakdown
+        : dailyDetail.paymentBreakdown,
+      paymentType: detail.paymentType ?? dailyDetail.paymentType,
+      clientCardId: detail.clientCardId ?? dailyDetail.clientCardId,
+      clientName: detail.clientName ?? dailyDetail.clientName,
+      reservationId: detail.reservationId ?? dailyDetail.reservationId,
+      reservationDateIso: detail.reservationDateIso ?? dailyDetail.reservationDateIso,
+      reservationStartTime: detail.reservationStartTime ?? dailyDetail.reservationStartTime,
+      appointmentTypeName: detail.appointmentTypeName ?? dailyDetail.appointmentTypeName,
+      lineItems: detail.lineItems?.length ? detail.lineItems : dailyDetail.lineItems,
+    });
+  });
+
+  return { ...normalized, operationDetails };
+};
+
+const hydrateCierreWithReservationDetails = (
+  cierre: CierreCajaItem,
+  reservations: Awaited<ReturnType<typeof listReservationsForAdmin>>,
+): CierreCajaItem => {
+  const normalized = hydrateCierreWithDailyPaymentDetails(cierre);
+  const operationDetails = normalized.operationDetails.map((detail) => {
+    if (detail.lineItems?.length) {
+      return detail;
+    }
+
+    if (detail.operationType === 'stock_sale') {
+      const stockConcept = detail.concept.match(/^Venta stock:\s*(.+?)\s+\((\d+)\s+ud\.\)/i);
+      if (!stockConcept) {
+        return detail;
+      }
+
+      const productName = stockConcept[1].trim();
+      const quantity = Math.max(1, Number(stockConcept[2]) || 1);
+      const matchingSale = Array.from(stockSalesById.values())
+        .filter(
+          (sale) =>
+            sale.productName.trim().toLowerCase() === productName.toLowerCase() &&
+            sale.soldUnits === quantity &&
+            Math.abs(sale.totalAmount - detail.amount) < 0.01,
+        )
+        .sort(
+          (a, b) =>
+            Math.abs(new Date(a.soldAtIso).getTime() - new Date(detail.createdAtIso).getTime()) -
+            Math.abs(new Date(b.soldAtIso).getTime() - new Date(detail.createdAtIso).getTime()),
+        )[0];
+      const unitPriceEuro = matchingSale?.unitPrice ?? Number((detail.amount / quantity).toFixed(2));
+      const clientName = detail.concept.match(/\)\s+·\s+(.+)$/)?.[1]?.trim();
+
+      return normalizePaymentOperationDetail({
+        ...detail,
+        clientCardId: detail.clientCardId ?? matchingSale?.clientCardId,
+        clientName: detail.clientName ?? clientName,
+        lineItems: [
+          {
+            kind: 'stock',
+            name: productName,
+            quantity,
+            unitPriceEuro,
+            amount: detail.amount,
+          },
+        ],
+      });
+    }
+
+    if (detail.operationType === 'client_pack_payment') {
+      const treatmentName = detail.concept.replace(/^Pack:\s*/i, '').trim();
+      if (!treatmentName) {
+        return detail;
+      }
+
+      const matchingTreatment = Array.from(clientCardsById.values())
+        .flatMap((card) =>
+          (card.treatments ?? [])
+            .filter(
+              (treatment) =>
+                treatment.name.trim().toLowerCase() === treatmentName.toLowerCase() &&
+                Number(treatment.priceEuro ?? 0) === detail.amount,
+            )
+            .map((treatment) => ({ card, treatment })),
+        )
+        .sort(
+          (a, b) =>
+            Math.abs(new Date(a.treatment.createdAtIso).getTime() - new Date(detail.createdAtIso).getTime()) -
+            Math.abs(new Date(b.treatment.createdAtIso).getTime() - new Date(detail.createdAtIso).getTime()),
+        )[0];
+
+      return normalizePaymentOperationDetail({
+        ...detail,
+        clientCardId: detail.clientCardId ?? matchingTreatment?.card.id,
+        clientName: detail.clientName ?? matchingTreatment?.card.fullName,
+        lineItems: [
+          {
+            kind: 'service',
+            name: treatmentName,
+            quantity: 1,
+            unitPriceEuro: detail.amount,
+            amount: detail.amount,
+          },
+        ],
+      });
+    }
+
+    const scheduleMatch = detail.concept.match(/(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})/);
+    const prefix = scheduleMatch
+      ? detail.concept.slice(0, scheduleMatch.index).replace(/^Pago final cita:\s*/i, '')
+      : '';
+    const [parsedClientName = '', ...parsedAppointmentNameParts] = prefix
+      .split(' · ')
+      .map((part) => part.trim());
+    const clientName = detail.clientName || parsedClientName;
+    const appointmentTypeName =
+      detail.appointmentTypeName || parsedAppointmentNameParts.join(' · ');
+    const reservation = reservations.find((item) => {
+      if (detail.reservationId) {
+        return item.id === detail.reservationId;
+      }
+
+      if (!scheduleMatch || item.dateIso !== scheduleMatch[1]) {
+        return false;
+      }
+
+      const itemTime = `${item.startTime ?? ''}`.slice(0, 5);
+      if (itemTime !== scheduleMatch[2]) {
+        return false;
+      }
+
+      return (
+        !clientName ||
+        `${item.customerName ?? ''}`.trim().toLowerCase() === clientName.trim().toLowerCase()
+      );
+    });
+
+    if (!reservation) {
+      return detail;
+    }
+
+    const meta = parseReservationMetaFromComments(reservation.additionalComments).meta;
+    const reservationServices = meta?.services ?? [];
+    const reservationStock = meta?.stock ?? [];
+    const allLineItems: NonNullable<PaymentOperationDetail['lineItems']> = meta
+      ? [
+          ...reservationServices.map((item) => ({
+            kind: 'service' as const,
+            name: item.name,
+            quantity: item.quantity,
+            unitPriceEuro: item.unitPriceEuro,
+            amount: Number((item.unitPriceEuro * item.quantity).toFixed(2)),
+          })),
+          ...reservationStock.map((item) => ({
+            kind: 'stock' as const,
+            name: item.productName,
+            quantity: item.quantity,
+            unitPriceEuro: item.unitPriceEuro,
+            amount: Number((item.unitPriceEuro * item.quantity).toFixed(2)),
+          })),
+        ]
+      : (appointmentTypeName || reservation.appointmentTypeName)
+          .split(' + ')
+          .map((name) => name.trim())
+          .filter(Boolean)
+          .map((name) => {
+            const unitPriceEuro = getServicePriceByName(name, false);
+            return {
+              kind: 'service' as const,
+              name,
+              quantity: 1,
+              unitPriceEuro,
+              amount: unitPriceEuro,
+            };
+          });
+
+    const conceptsMatch = detail.concept.match(/Conceptos:\s*(.+?)(?:\s+·\s+(?:efectivo|tarjeta|bizum))?$/i);
+    const paidLabels = conceptsMatch?.[1]
+      ? new Set(conceptsMatch[1].split(',').map((label) => label.trim()).filter(Boolean))
+      : null;
+    const lineItems = paidLabels
+      ? allLineItems.filter((item) => {
+          const label =
+            item.kind === 'stock' ? `${item.name} x${item.quantity}` : item.name;
+          return paidLabels.has(label);
+        })
+      : allLineItems;
+
+    if (lineItems.length === 0) {
+      return detail;
+    }
+
+    const lineItemsTotal = lineItems.reduce((sum, item) => sum + item.amount, 0);
+    const adjustment = Number((detail.amount - lineItemsTotal).toFixed(2));
+    if (Math.abs(adjustment) > 0.01) {
+      lineItems.push({
+        kind: 'other',
+        name: adjustment > 0 ? 'Ajuste de cobro' : 'Descuento aplicado',
+        quantity: 1,
+        unitPriceEuro: Math.abs(adjustment),
+        amount: adjustment,
+      });
+    }
+
+    return normalizePaymentOperationDetail({
+      ...detail,
+      clientCardId: detail.clientCardId ?? meta?.linkedClientId,
+      clientName: detail.clientName || reservation.customerName,
+      reservationId: detail.reservationId || reservation.id,
+      reservationDateIso: detail.reservationDateIso || reservation.dateIso,
+      reservationStartTime: detail.reservationStartTime || reservation.startTime,
+      appointmentTypeName: detail.appointmentTypeName || reservation.appointmentTypeName,
+      lineItems,
+    });
+  });
+
+  return { ...normalized, operationDetails };
+};
+
 const persistDailyPaymentsToDisk = async (): Promise<void> => {
   try {
     const data = Array.from(dailyPaymentsByDateIso.values());
@@ -2576,9 +3226,21 @@ const addPaymentToDailySummary = (
   paymentMethod: 'efectivo' | 'tarjeta' | 'bizum',
   amount: number,
   operationDetail: {
-    operationType: 'stock_sale' | 'client_pack_payment' | 'reservation_payment';
+    operationType: PaymentOperationType;
     concept: string;
     performedByEmail: string;
+    paymentBreakdown?: Array<{ method: 'efectivo' | 'tarjeta' | 'bizum'; amount: number }>;
+    paymentType?: 'signal' | 'final' | 'stock' | 'client_treatment';
+    voucherAmountEuro?: number;
+    totalCoveredAmountEuro?: number;
+    voucherPayments?: Array<{ voucherId: string; amountEuro: number; clientName?: string }>;
+    clientCardId?: string;
+    clientName?: string;
+    reservationId?: string;
+    reservationDateIso?: string;
+    reservationStartTime?: string;
+    appointmentTypeName?: string;
+    lineItems?: PaymentOperationDetail['lineItems'];
   },
 ): DailyPaymentSummaryItem => {
   const current = dailyPaymentsByDateIso.get(dateIso) ?? {
@@ -2592,6 +3254,7 @@ const addPaymentToDailySummary = (
   };
 
   const detail = normalizePaymentOperationDetail({
+    ...operationDetail,
     id: buildPaymentOperationId(),
     operationType: operationDetail.operationType,
     concept: operationDetail.concept,
@@ -2601,12 +3264,18 @@ const addPaymentToDailySummary = (
     createdAtIso: new Date().toISOString(),
   });
 
+  const paymentAllocations = operationDetail.paymentBreakdown?.length
+    ? operationDetail.paymentBreakdown
+    : [{ method: paymentMethod, amount }];
   const next: DailyPaymentSummaryItem = {
     ...current,
-    [paymentMethod]: Number((current[paymentMethod] + amount).toFixed(2)),
     updatedAtIso: new Date().toISOString(),
     operationDetails: [detail, ...(current.operationDetails ?? [])],
   };
+
+  paymentAllocations.forEach((allocation) => {
+    next[allocation.method] = Number((next[allocation.method] + allocation.amount).toFixed(2));
+  });
 
   const normalized = normalizeDailyPaymentSummary(next);
   dailyPaymentsByDateIso.set(dateIso, normalized);
@@ -4625,6 +5294,9 @@ app.patch('/api/admin/almacen/:id', async (req, res) => {
   const productName = `${req.body?.productName ?? ''}`.trim();
   const priceRaw = `${req.body?.price ?? ''}`.trim().replace(',', '.');
   const price = priceRaw === '' ? 0 : Number(priceRaw);
+  const hasQuantity =
+    req.body?.quantity !== undefined && req.body?.quantity !== null && `${req.body.quantity}`.trim() !== '';
+  const quantity = hasQuantity ? Number(`${req.body.quantity}`.trim()) : NaN;
   const sellableRaw = req.body?.isSellable;
   const isSellable =
     typeof sellableRaw === 'string'
@@ -4646,6 +5318,13 @@ app.patch('/api/admin/almacen/:id', async (req, res) => {
     });
   }
 
+  if (hasQuantity && (!Number.isInteger(quantity) || quantity < 0)) {
+    return res.status(400).json({
+      ok: false,
+      error: 'La cantidad debe ser un número entero igual o mayor que 0.',
+    });
+  }
+
   const product = stockProductsById.get(id);
 
   if (!product) {
@@ -4656,6 +5335,7 @@ app.patch('/api/admin/almacen/:id', async (req, res) => {
     ...product,
     productName,
     price,
+    quantity: hasQuantity ? quantity : product.quantity,
     isSellable,
   });
 
@@ -4734,6 +5414,13 @@ app.post('/api/admin/almacen/:id/sell', async (req, res) => {
   const id = `${req.params['id'] ?? ''}`.trim();
   const units = Number(req.body?.units ?? NaN);
   const paymentMethod = `${req.body?.paymentMethod ?? ''}`.trim();
+  const clientCardId = `${req.body?.clientCardId ?? ''}`.trim();
+  const giftVoucherPaymentRaw =
+    req.body?.giftVoucherPayment && typeof req.body.giftVoucherPayment === 'object'
+      ? (req.body.giftVoucherPayment as { voucherId?: unknown; amountEuro?: unknown })
+      : null;
+  const giftVoucherId = `${giftVoucherPaymentRaw?.voucherId ?? ''}`.trim();
+  const giftVoucherAmountRaw = Number(giftVoucherPaymentRaw?.amountEuro ?? 0);
 
   if (!id) {
     return res.status(400).json({ ok: false, error: 'ID de producto inválido.' });
@@ -4745,11 +5432,23 @@ app.post('/api/admin/almacen/:id/sell', async (req, res) => {
       .json({ ok: false, error: 'Las unidades deben ser un entero mayor que 0.' });
   }
 
-  if (!['efectivo', 'tarjeta', 'bizum'].includes(paymentMethod)) {
+  if (!Number.isFinite(giftVoucherAmountRaw) || giftVoucherAmountRaw < 0 || (giftVoucherAmountRaw > 0 && !giftVoucherId)) {
+    return res.status(400).json({ ok: false, error: 'Importe de bono inválido.' });
+  }
+
+  if (giftVoucherAmountRaw > 0 && !clientCardId) {
+    return res.status(400).json({ ok: false, error: 'Selecciona la ficha de la clienta para usar su bono.' });
+  }
+
+  if (giftVoucherAmountRaw === 0 && !['efectivo', 'tarjeta', 'bizum'].includes(paymentMethod)) {
     return res.status(400).json({
       ok: false,
       error: 'Método de pago debe ser "efectivo", "tarjeta" o "bizum".',
     });
+  }
+
+  if (clientCardId && !clientCardsById.has(clientCardId)) {
+    return res.status(400).json({ ok: false, error: 'La ficha de clienta no es válida.' });
   }
 
   const product = stockProductsById.get(id);
@@ -4767,6 +5466,33 @@ app.post('/api/admin/almacen/:id/sell', async (req, res) => {
   }
 
   const totalAmount = Number((product.price * units).toFixed(2));
+  const voucherAmount = Number(giftVoucherAmountRaw.toFixed(2));
+  const cashAmount = Number(Math.max(0, totalAmount - voucherAmount).toFixed(2));
+  if (voucherAmount > totalAmount + 0.001) {
+    return res.status(400).json({ ok: false, error: 'El bono no puede superar el total de la venta.' });
+  }
+  if (cashAmount > 0 && !['efectivo', 'tarjeta', 'bizum'].includes(paymentMethod)) {
+    return res.status(400).json({ ok: false, error: 'Selecciona el método para el importe restante.' });
+  }
+
+  let redeemedVoucher: { clientId: string; voucherId: string; amountEuro: number } | null = null;
+  if (voucherAmount > 0) {
+    const redemption = await redeemClientGiftVoucher(
+      clientCardId,
+      giftVoucherId,
+      voucherAmount,
+      `Compra de ${product.productName} ×${units}`,
+      session.email,
+    );
+    if (!redemption.ok) {
+      const error = redemption.reason === 'insufficient'
+        ? `Saldo insuficiente en el bono: ${(redemption.balanceEuro ?? 0).toFixed(2)} €.`
+        : 'El bono no está disponible en la ficha seleccionada.';
+      return res.status(409).json({ ok: false, error });
+    }
+    redeemedVoucher = { clientId: clientCardId, voucherId: giftVoucherId, amountEuro: voucherAmount };
+  }
+
   const updated = normalizeStockProduct({
     ...product,
     quantity: product.quantity - units,
@@ -4775,6 +5501,15 @@ app.post('/api/admin/almacen/:id/sell', async (req, res) => {
   try {
     await saveStockProductToDb(updated);
   } catch (error) {
+    if (redeemedVoucher) {
+      await refundClientGiftVoucherRedemption(
+        redeemedVoucher.clientId,
+        redeemedVoucher.voucherId,
+        redeemedVoucher.amountEuro,
+        `Compra de ${product.productName} ×${units} fallida`,
+        session.email,
+      );
+    }
     console.error('Error persistiendo venta de producto en DB:', error);
     return res.status(500).json({
       ok: false,
@@ -4790,10 +5525,13 @@ app.post('/api/admin/almacen/:id/sell', async (req, res) => {
     id: buildStockSaleId(),
     productId: updated.id,
     productName: updated.productName,
+    clientCardId: clientCardId || undefined,
     soldUnits: units,
     unitPrice: updated.price,
     totalAmount,
-    paymentMethod: paymentMethod as 'efectivo' | 'tarjeta' | 'bizum',
+    paymentMethod: cashAmount > 0
+      ? paymentMethod as 'efectivo' | 'tarjeta' | 'bizum'
+      : 'bono',
     soldByEmail: session.email,
     soldAtIso: new Date().toISOString(),
   });
@@ -4801,14 +5539,37 @@ app.post('/api/admin/almacen/:id/sell', async (req, res) => {
   void persistStockSalesToDisk();
 
   const todayIso = new Date().toISOString().slice(0, 10);
+  const cashMethod = cashAmount > 0
+    ? paymentMethod as 'efectivo' | 'tarjeta' | 'bizum'
+    : 'efectivo';
   addPaymentToDailySummary(
     todayIso,
-    paymentMethod as 'efectivo' | 'tarjeta' | 'bizum',
-    totalAmount,
+    cashMethod,
+    cashAmount,
     {
       operationType: 'stock_sale',
-      concept: `Venta stock: ${updated.productName} (${units} ud.)`,
+      concept: `Venta stock: ${updated.productName} (${units} ud.)${clientCardId ? ` · ${clientCardsById.get(clientCardId)?.fullName ?? 'Clienta'}` : ''}${voucherAmount > 0 ? ` · Bono: ${voucherAmount.toFixed(2)} €` : ''}`,
       performedByEmail: session.email,
+      paymentType: 'stock',
+      clientCardId: clientCardId || undefined,
+      clientName: clientCardId ? clientCardsById.get(clientCardId)?.fullName : undefined,
+      voucherAmountEuro: voucherAmount,
+      totalCoveredAmountEuro: totalAmount,
+      voucherPayments: redeemedVoucher
+        ? [{ voucherId: redeemedVoucher.voucherId, amountEuro: redeemedVoucher.amountEuro, clientName: clientCardsById.get(clientCardId)?.fullName }]
+        : undefined,
+      paymentBreakdown: cashAmount > 0
+        ? [{ method: cashMethod, amount: cashAmount }]
+        : [],
+      lineItems: [
+        {
+          kind: 'stock',
+          name: updated.productName,
+          quantity: units,
+          unitPriceEuro: updated.price,
+          amount: totalAmount,
+        },
+      ],
     },
   );
 
@@ -4817,7 +5578,9 @@ app.post('/api/admin/almacen/:id/sell', async (req, res) => {
     product: normalizeStockProduct(updated),
     soldUnits: units,
     totalAmount,
-    paymentMethod,
+    paymentMethod: cashAmount > 0 ? cashMethod : 'bono',
+    cashAmount,
+    voucherAmount,
   });
 });
 
@@ -4857,7 +5620,7 @@ app.delete('/api/admin/almacen/:id', async (req, res) => {
   return res.status(200).json({ ok: true, id });
 });
 
-app.get('/api/admin/cierre-caja', (req, res) => {
+app.get('/api/admin/cierre-caja', async (req, res) => {
   seedAuthUsers();
   const session = isAdminRequest(req.headers.cookie);
 
@@ -4865,8 +5628,15 @@ app.get('/api/admin/cierre-caja', (req, res) => {
     return res.status(401).json({ ok: false, error: 'No autorizado.' });
   }
 
+  let reservations: Awaited<ReturnType<typeof listReservationsForAdmin>> = [];
+  try {
+    reservations = await listReservationsForAdmin();
+  } catch (error) {
+    console.warn('No se pudieron cargar reservas para completar el historial de caja:', error);
+  }
+
   const cierres = Array.from(cierreCajaById.values())
-    .map(normalizeCierre)
+    .map((cierre) => hydrateCierreWithReservationDetails(cierre, reservations))
     .sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso));
 
   return res.status(200).json({ ok: true, cierres });
@@ -5460,6 +6230,13 @@ app.patch('/api/admin/clientes/:clientId/packs/:treatmentId/payment', async (req
   const treatmentId = `${req.params['treatmentId'] ?? ''}`.trim();
   const priceEuro = Number(req.body?.priceEuro ?? NaN);
   const paymentMethod = req.body?.paymentMethod ?? null;
+  const giftVoucherPaymentRaw =
+    req.body?.giftVoucherPayment && typeof req.body.giftVoucherPayment === 'object'
+      ? (req.body.giftVoucherPayment as { voucherId?: unknown; amountEuro?: unknown })
+      : null;
+  const giftVoucherId = `${giftVoucherPaymentRaw?.voucherId ?? ''}`.trim();
+  const giftVoucherAmount = Number(giftVoucherPaymentRaw?.amountEuro ?? 0);
+  const cashAmount = Number(Math.max(0, priceEuro - giftVoucherAmount).toFixed(2));
 
   if (!clientId || !treatmentId) {
     return res.status(400).json({
@@ -5468,11 +6245,19 @@ app.patch('/api/admin/clientes/:clientId/packs/:treatmentId/payment', async (req
     });
   }
 
-  if (!['efectivo', 'tarjeta', 'bizum'].includes(paymentMethod)) {
+  if (!Number.isFinite(giftVoucherAmount) || giftVoucherAmount < 0 || (giftVoucherAmount > 0 && !giftVoucherId)) {
+    return res.status(400).json({ ok: false, error: 'Importe de bono inválido.' });
+  }
+
+  if (cashAmount > 0 && !['efectivo', 'tarjeta', 'bizum'].includes(paymentMethod)) {
     return res.status(400).json({
       ok: false,
-      error: 'Método de pago debe ser "efectivo", "tarjeta" o "bizum".',
+      error: 'Selecciona el método para el importe restante.',
     });
+  }
+
+  if (giftVoucherAmount > priceEuro + 0.001) {
+    return res.status(400).json({ ok: false, error: 'El bono no puede superar el importe del tratamiento.' });
   }
 
   if (!Number.isFinite(priceEuro) || priceEuro < 0) {
@@ -5501,10 +6286,30 @@ app.patch('/api/admin/clientes/:clientId/packs/:treatmentId/payment', async (req
     });
   }
 
+  let redeemedVoucher: { voucherId: string; amountEuro: number } | null = null;
+  if (giftVoucherAmount > 0) {
+    const redemption = await redeemClientGiftVoucher(
+      clientId,
+      giftVoucherId,
+      giftVoucherAmount,
+      `Tratamiento ${treatment.name}`,
+      session.email,
+    );
+    if (!redemption.ok) {
+      const error = redemption.reason === 'insufficient'
+        ? `Saldo insuficiente en el bono: ${(redemption.balanceEuro ?? 0).toFixed(2)} €.`
+        : 'El bono seleccionado no está disponible en esta ficha.';
+      return res.status(409).json({ ok: false, error });
+    }
+    redeemedVoucher = { voucherId: giftVoucherId, amountEuro: giftVoucherAmount };
+  }
+
   const updatedTreatment: ClientTreatmentItem = {
     ...treatment,
     priceEuro: Number(priceEuro.toFixed(2)),
-    paymentMethod: paymentMethod as 'efectivo' | 'tarjeta' | 'bizum',
+    paymentMethod: cashAmount > 0
+      ? paymentMethod as 'efectivo' | 'tarjeta' | 'bizum'
+      : 'bono',
   };
 
   const updatedTreatments = (card.treatments ?? []).map((t) =>
@@ -5512,13 +6317,24 @@ app.patch('/api/admin/clientes/:clientId/packs/:treatmentId/payment', async (req
   );
 
   const updatedCard: ClientCardItem = {
-    ...card,
+    ...(clientCardsById.get(clientId) ?? card),
     treatments: updatedTreatments,
   };
 
   try {
     await saveClientCardToDb(updatedCard);
   } catch (error) {
+    if (redeemedVoucher) {
+      await refundClientGiftVoucherRedemption(
+        clientId,
+        redeemedVoucher.voucherId,
+        redeemedVoucher.amountEuro,
+        `Tratamiento ${treatment.name}`,
+        session.email,
+      ).catch((refundError: unknown) => {
+        console.error('No se pudo reintegrar el bono tras fallar el pago de tratamiento:', refundError);
+      });
+    }
     console.error('Error persistiendo pago de tratamiento en DB:', error);
     return res.status(500).json({
       ok: false,
@@ -5531,16 +6347,189 @@ app.patch('/api/admin/clientes/:clientId/packs/:treatmentId/payment', async (req
   const todayIso = new Date().toISOString().slice(0, 10);
   addPaymentToDailySummary(
     todayIso,
-    paymentMethod as 'efectivo' | 'tarjeta' | 'bizum',
-    Number(priceEuro.toFixed(2)),
+    cashAmount > 0 ? paymentMethod as 'efectivo' | 'tarjeta' | 'bizum' : 'efectivo',
+    cashAmount,
     {
       operationType: 'client_pack_payment',
       concept: `Pack: ${updatedTreatment.name}`,
       performedByEmail: session.email,
+      paymentType: 'client_treatment',
+      clientCardId: clientId,
+      clientName: updatedCard.fullName,
+      voucherAmountEuro: giftVoucherAmount,
+      totalCoveredAmountEuro: Number(priceEuro.toFixed(2)),
+      voucherPayments: redeemedVoucher
+        ? [{ voucherId: redeemedVoucher.voucherId, amountEuro: redeemedVoucher.amountEuro, clientName: updatedCard.fullName }]
+        : undefined,
+      paymentBreakdown: cashAmount > 0 && paymentMethod
+        ? [{ method: paymentMethod as 'efectivo' | 'tarjeta' | 'bizum', amount: cashAmount }]
+        : [],
+      lineItems: [
+        {
+          kind: 'service',
+          name: updatedTreatment.name,
+          quantity: 1,
+          unitPriceEuro: Number(priceEuro.toFixed(2)),
+          amount: Number(priceEuro.toFixed(2)),
+        },
+      ],
     },
   );
 
   return res.status(200).json({ ok: true, card: updatedCard });
+});
+
+app.post('/api/admin/clientes/:id/bonos', async (req, res) => {
+  const session = isAdminRequest(req.headers.cookie);
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const clientId = `${req.params['id'] ?? ''}`.trim();
+  const amountRaw = Number(`${req.body?.amountEuro ?? ''}`.replace(',', '.'));
+  const paymentMethod = `${req.body?.paymentMethod ?? ''}`.trim();
+  const giftedByName = `${req.body?.giftedByName ?? ''}`.trim().slice(0, 100);
+  const note = `${req.body?.note ?? ''}`.trim().slice(0, 300);
+
+  if (!clientId || !clientCardsById.has(clientId)) {
+    return res.status(404).json({ ok: false, error: 'Ficha de clienta no encontrada.' });
+  }
+  if (!Number.isFinite(amountRaw) || amountRaw <= 0 || amountRaw > 10000) {
+    return res.status(400).json({ ok: false, error: 'El importe del bono debe ser mayor que 0.' });
+  }
+  if (!['efectivo', 'tarjeta', 'bizum'].includes(paymentMethod)) {
+    return res.status(400).json({ ok: false, error: 'Selecciona el método de pago del bono.' });
+  }
+
+  const amountEuro = Number(amountRaw.toFixed(2));
+  const now = new Date().toISOString();
+  const voucher: ClientGiftVoucherItem = {
+    id: `bono-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    initialAmountEuro: amountEuro,
+    balanceEuro: amountEuro,
+    issuedAtIso: now,
+    issuedByEmail: session.email,
+    paymentMethod: paymentMethod as 'efectivo' | 'tarjeta' | 'bizum',
+    giftedByName: giftedByName || undefined,
+    note: note || undefined,
+    ledger: [
+      {
+        id: `mov-bono-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: 'issued',
+        amountEuro,
+        createdAtIso: now,
+        createdByEmail: session.email,
+        concept: giftedByName ? `Bono regalo emitido por ${giftedByName}` : 'Bono regalo emitido',
+        paymentMethod: paymentMethod as 'efectivo' | 'tarjeta' | 'bizum',
+      },
+    ],
+  };
+
+  try {
+    const { card } = await mutateClientGiftVouchers(clientId, (vouchers) => ({
+      vouchers: [voucher, ...vouchers],
+      result: voucher,
+    }));
+
+    addPaymentToDailySummary(
+      new Date().toISOString().slice(0, 10),
+      paymentMethod as 'efectivo' | 'tarjeta' | 'bizum',
+      amountEuro,
+      {
+        operationType: 'gift_voucher_sale',
+        concept: `Bono regalo ${amountEuro.toFixed(2)} €${giftedByName ? ` · De: ${giftedByName}` : ''}`,
+        performedByEmail: session.email,
+        clientCardId: clientId,
+        clientName: card.fullName,
+        lineItems: [
+          {
+            kind: 'service',
+            name: 'Bono regalo',
+            quantity: 1,
+            unitPriceEuro: amountEuro,
+            amount: amountEuro,
+          },
+        ],
+      },
+    );
+
+    return res.status(200).json({ ok: true, card, voucher });
+  } catch (error) {
+    console.error('Error emitiendo bono regalo:', error);
+    return res.status(500).json({ ok: false, error: 'No se pudo emitir el bono regalo.' });
+  }
+});
+
+app.post('/api/admin/clientes/:id/bonos/:voucherId/canjear', async (req, res) => {
+  const session = isAdminRequest(req.headers.cookie);
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const clientId = `${req.params['id'] ?? ''}`.trim();
+  const voucherId = `${req.params['voucherId'] ?? ''}`.trim();
+  const amountEuro = Number(`${req.body?.amountEuro ?? ''}`.replace(',', '.'));
+  const concept = `${req.body?.concept ?? ''}`.trim().slice(0, 180);
+  const reservationId = `${req.body?.reservationId ?? ''}`.trim() || undefined;
+
+  if (!clientId || !voucherId || !Number.isFinite(amountEuro) || amountEuro <= 0 || !concept) {
+    return res.status(400).json({ ok: false, error: 'Datos de canje de bono inválidos.' });
+  }
+
+  try {
+    const { card, result } = await mutateClientGiftVouchers<
+      | { ok: true; voucher: ClientGiftVoucherItem }
+      | { ok: false; reason: 'not-found' }
+      | { ok: false; reason: 'insufficient'; balanceEuro: number }
+    >(clientId, (vouchers) => {
+      const index = vouchers.findIndex((item) => item.id === voucherId);
+      if (index < 0) {
+        return { vouchers, result: { ok: false as const, reason: 'not-found' as const } };
+      }
+
+      const voucher = vouchers[index];
+      const safeAmount = Number(amountEuro.toFixed(2));
+      if (safeAmount > voucher.balanceEuro + 0.001) {
+        return {
+          vouchers,
+          result: { ok: false as const, reason: 'insufficient' as const, balanceEuro: voucher.balanceEuro },
+        };
+      }
+
+      const entry: ClientGiftVoucherLedgerEntry = {
+        id: `mov-bono-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: 'redeemed',
+        amountEuro: safeAmount,
+        createdAtIso: new Date().toISOString(),
+        createdByEmail: session.email,
+        concept,
+        reservationId,
+      };
+      const updatedVoucher = {
+        ...voucher,
+        balanceEuro: Number(Math.max(0, voucher.balanceEuro - safeAmount).toFixed(2)),
+        ledger: [entry, ...voucher.ledger],
+      };
+      const nextVouchers = [...vouchers];
+      nextVouchers[index] = updatedVoucher;
+      return { vouchers: nextVouchers, result: { ok: true as const, voucher: updatedVoucher } };
+    });
+
+    if (!result.ok) {
+      if (result.reason === 'not-found') {
+        return res.status(404).json({ ok: false, error: 'Bono regalo no encontrado.' });
+      }
+      return res.status(409).json({
+        ok: false,
+        error: `Saldo insuficiente. Disponible: ${result.balanceEuro.toFixed(2)} €.`,
+      });
+    }
+
+    return res.status(200).json({ ok: true, card, voucher: result.voucher });
+  } catch (error) {
+    console.error('Error canjeando bono regalo:', error);
+    return res.status(500).json({ ok: false, error: 'No se pudo descontar el bono regalo.' });
+  }
 });
 
 app.get('/api/admin/empleados', (req, res) => {
@@ -6156,6 +7145,14 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
   const paymentMethod = req.body?.paymentMethod as string | undefined;
   const paymentAmountEuroRaw = Number(req.body?.priceEuro ?? NaN);
   const splitPaymentsRaw = Array.isArray(req.body?.splitPayments) ? req.body.splitPayments : [];
+  const giftVoucherPaymentRaw =
+    req.body?.giftVoucherPayment && typeof req.body.giftVoucherPayment === 'object'
+      ? (req.body.giftVoucherPayment as { voucherId?: unknown; amountEuro?: unknown })
+      : null;
+  const giftVoucherId = `${giftVoucherPaymentRaw?.voucherId ?? ''}`.trim();
+  const giftVoucherAmountRaw = Number(giftVoucherPaymentRaw?.amountEuro ?? 0);
+  let redeemedVoucher: { clientId: string; voucherId: string; amountEuro: number } | null = null;
+  let reservationPaymentPersisted = false;
   const paidItemIdsRaw = Array.isArray(req.body?.paidItemIds)
     ? req.body.paidItemIds.map((item: unknown) => `${item ?? ''}`.trim()).filter(Boolean)
     : [];
@@ -6178,6 +7175,18 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
 
     const parsedMeta = parseReservationMetaFromComments(reservation.additionalComments);
     const meta = parsedMeta.meta;
+    const reservationPhone = `${reservation.customerPhone ?? ''}`.replace(/\D/g, '');
+    const reservationEmail = `${reservation.customerEmail ?? ''}`.trim().toLowerCase();
+    const voucherClient = meta?.linkedClientId
+      ? (clientCardsById.get(meta.linkedClientId) ?? null)
+      : (Array.from(clientCardsById.values()).find((card) => {
+          const cardEmail = `${card.email ?? ''}`.trim().toLowerCase();
+          const cardPhone = `${card.phone ?? ''}`.replace(/\D/g, '');
+          return (
+            (reservationEmail && cardEmail === reservationEmail) ||
+            (reservationPhone && cardPhone === reservationPhone)
+          );
+        }) ?? null);
     const metaSummary = meta ? getReservationMetaSummary(meta) : null;
     const resolvedPriceEuro = Number(
       (metaSummary?.totalAmountEuro ?? getPackPriceByName(reservation.appointmentTypeName)).toFixed(
@@ -6189,11 +7198,19 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
           ...meta.services.map((item, index) => ({
             id: `svc-${index}`,
             label: item.name,
+            kind: 'service' as const,
+            name: item.name,
+            quantity: item.quantity,
+            unitPriceEuro: item.unitPriceEuro,
             amount: Number((item.unitPriceEuro * item.quantity).toFixed(2)),
           })),
           ...meta.stock.map((item, index) => ({
             id: `stk-${index}`,
             label: `${item.productName} x${item.quantity}`,
+            kind: 'stock' as const,
+            name: item.productName,
+            quantity: item.quantity,
+            unitPriceEuro: item.unitPriceEuro,
             amount: Number((item.unitPriceEuro * item.quantity).toFixed(2)),
           })),
         ]
@@ -6201,6 +7218,10 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
           {
             id: 'svc-main',
             label: reservation.appointmentTypeName,
+            kind: 'service' as const,
+            name: reservation.appointmentTypeName,
+            quantity: 1,
+            unitPriceEuro: resolvedPriceEuro,
             amount: Number(resolvedPriceEuro.toFixed(2)),
           },
         ];
@@ -6239,32 +7260,105 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
       Number.isFinite(paymentAmountEuroRaw) && paymentAmountEuroRaw >= 0
         ? Number(paymentAmountEuroRaw.toFixed(2))
         : Number(selectedItemsAmount.toFixed(2));
+    const giftVoucherAmountEuro = Number.isFinite(giftVoucherAmountRaw) && giftVoucherAmountRaw >= 0
+      ? Number(giftVoucherAmountRaw.toFixed(2))
+      : -1;
+    if (
+      giftVoucherAmountEuro < 0 ||
+      (giftVoucherAmountEuro > 0 && (!giftVoucherId || !voucherClient || !paymentReceived))
+    ) {
+      return res.status(400).json({ ok: false, error: 'El bono no se puede aplicar a este pago.' });
+    }
     const splitAmountEuro = splitPayments.reduce(
       (acc: number, item: { method: 'efectivo' | 'tarjeta' | 'bizum'; amount: number }) =>
         acc + item.amount,
       0,
     );
-    const combinedPaymentAmountEuro =
-      splitPayments.length > 0 ? Number(splitAmountEuro.toFixed(2)) : paymentAmountEuro;
+    const cashPaymentAmountEuro = splitPayments.length > 0
+      ? Number(splitAmountEuro.toFixed(2))
+      : Number(Math.max(0, paymentAmountEuro - giftVoucherAmountEuro).toFixed(2));
+    const combinedPaymentAmountEuro = Number(
+      (cashPaymentAmountEuro + giftVoucherAmountEuro).toFixed(2),
+    );
     const signalAmountEuro = Math.max(0, Number(reservation.signalAmountEuro ?? 0));
     const finalChargeEuro = Math.max(0, Number(combinedPaymentAmountEuro.toFixed(2)));
+    const receiptLineItems = selectedItems.map(
+      (item): NonNullable<PaymentOperationDetail['lineItems']>[number] => ({
+        kind: item.kind,
+        name: item.name,
+        quantity: item.quantity,
+        unitPriceEuro: Number(item.unitPriceEuro.toFixed(2)),
+        amount: Number(item.amount.toFixed(2)),
+      }),
+    );
+    const receiptLineItemsTotal = receiptLineItems.reduce((sum, item) => sum + item.amount, 0);
+    const receiptAdjustment = Number((finalChargeEuro - receiptLineItemsTotal).toFixed(2));
+    if (Math.abs(receiptAdjustment) > 0.01) {
+      receiptLineItems.push({
+        kind: 'other',
+        name: receiptAdjustment > 0 ? 'Ajuste de cobro' : 'Descuento aplicado',
+        quantity: 1,
+        unitPriceEuro: Math.abs(receiptAdjustment),
+        amount: receiptAdjustment,
+      });
+    }
     const shouldAccumulate =
       paymentReceived &&
       !reservation.paymentReceived &&
-      ((paymentMethod && ['efectivo', 'tarjeta', 'bizum'].includes(paymentMethod)) ||
-        splitPayments.length > 0);
+      (cashPaymentAmountEuro > 0 || giftVoucherAmountEuro > 0);
 
-    if (splitPayments.length > 0 && Math.abs(splitAmountEuro - paymentAmountEuro) > 0.01) {
+    if (Math.abs(combinedPaymentAmountEuro - paymentAmountEuro) > 0.01) {
       return res.status(400).json({
         ok: false,
-        error: 'La suma del cobro combinado debe coincidir con el total a cobrar.',
+        error: 'Bono y métodos de pago deben cubrir el total completo.',
       });
+    }
+
+    if (
+      cashPaymentAmountEuro > 0 &&
+      splitPayments.length === 0 &&
+      !['efectivo', 'tarjeta', 'bizum'].includes(`${paymentMethod ?? ''}`)
+    ) {
+      return res.status(400).json({ ok: false, error: 'Selecciona el método para el importe restante.' });
+    }
+
+    if (paymentReceived && giftVoucherAmountEuro > 0 && voucherClient) {
+      const redemption = await redeemClientGiftVoucher(
+        voucherClient.id,
+        giftVoucherId,
+        giftVoucherAmountEuro,
+        `Cita ${reservation.appointmentTypeName} (${reservation.dateIso} ${reservation.startTime})`,
+        session.email,
+        reservationId,
+      );
+      if (!redemption.ok) {
+        const error = redemption.reason === 'insufficient'
+          ? `Saldo insuficiente en el bono: ${(redemption.balanceEuro ?? 0).toFixed(2)} €.`
+          : 'El bono seleccionado no está disponible en la ficha de esta clienta.';
+        return res.status(409).json({ ok: false, error });
+      }
+      redeemedVoucher = {
+        clientId: voucherClient.id,
+        voucherId: giftVoucherId,
+        amountEuro: giftVoucherAmountEuro,
+      };
     }
 
     if (shouldAccumulate && meta?.stock?.length) {
       const stockUpdate = await applyReservationStockOutput(meta);
 
       if (!stockUpdate.ok) {
+        if (redeemedVoucher && voucherClient) {
+          await refundClientGiftVoucherRedemption(
+            voucherClient.id,
+            redeemedVoucher.voucherId,
+            redeemedVoucher.amountEuro,
+            'Salida de stock de reserva fallida',
+            session.email,
+            reservationId,
+          );
+          redeemedVoucher = null;
+        }
         return res.status(409).json({ ok: false, error: stockUpdate.error });
       }
     }
@@ -6311,11 +7405,11 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
     const normalizedCurrentSplit =
       splitPayments.length > 0
         ? splitPayments
-        : resolvedPaymentMethod
+        : resolvedPaymentMethod && cashPaymentAmountEuro > 0
           ? [
               {
                 method: resolvedPaymentMethod,
-                amount: Number(combinedPaymentAmountEuro.toFixed(2)),
+                  amount: Number(cashPaymentAmountEuro.toFixed(2)),
               },
             ]
           : [];
@@ -6329,6 +7423,12 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
     const mergedSplitPayments = Array.from(splitTotalsByMethod.entries())
       .filter(([, amount]) => amount > 0)
       .map(([method, amount]) => ({ method, amount: Number(amount.toFixed(2)) }));
+    const mergedGiftVoucherPayments = [
+      ...(previousPaymentSummary?.giftVoucherPayments ?? []),
+      ...(redeemedVoucher
+        ? [{ voucherId: redeemedVoucher.voucherId, amountEuro: redeemedVoucher.amountEuro }]
+        : []),
+    ];
     const nowIso = new Date().toISOString();
     const baseMeta =
       meta ??
@@ -6344,6 +7444,7 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
             paidItemIds: mergedPaidItemIds,
             paidItems: Array.from(mergedPaidItemsById.values()),
             splitPayments: mergedSplitPayments,
+            giftVoucherPayments: mergedGiftVoucherPayments,
             finalPaymentMethod:
               mergedSplitPayments.length === 1
                 ? mergedSplitPayments[0].method
@@ -6367,6 +7468,17 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
     });
 
     if (!detailsSaved.ok) {
+      if (redeemedVoucher) {
+        await refundClientGiftVoucherRedemption(
+          redeemedVoucher.clientId,
+          redeemedVoucher.voucherId,
+          redeemedVoucher.amountEuro,
+          `Cita ${reservation.appointmentTypeName}`,
+          session.email,
+          reservationId,
+        );
+        redeemedVoucher = null;
+      }
       return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
     }
 
@@ -6376,10 +7488,22 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
     });
 
     if (!updated.ok) {
+      if (redeemedVoucher) {
+        await refundClientGiftVoucherRedemption(
+          redeemedVoucher.clientId,
+          redeemedVoucher.voucherId,
+          redeemedVoucher.amountEuro,
+          `Cita ${reservation.appointmentTypeName}`,
+          session.email,
+          reservationId,
+        );
+        redeemedVoucher = null;
+      }
       return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
     }
+    reservationPaymentPersisted = true;
 
-    if (shouldAccumulate && finalChargeEuro > 0) {
+    if (shouldAccumulate && (cashPaymentAmountEuro > 0 || giftVoucherAmountEuro > 0)) {
       const todayIso = new Date().toISOString().slice(0, 10);
       const signalPaymentMethodLabel =
         reservation.signalPaymentMethod === 'efectivo'
@@ -6388,7 +7512,9 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
             ? 'tarjeta'
             : reservation.signalPaymentMethod === 'bizum'
               ? 'bizum'
-              : null;
+              : reservation.signalPaymentMethod === 'bono'
+                ? 'bono regalo'
+                : null;
       const signalDateLabel = reservation.signalReceivedAtIso
         ? new Date(reservation.signalReceivedAtIso).toISOString().slice(0, 10)
         : null;
@@ -6400,33 +7526,43 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
         selectedItems.length > 0
           ? ` · Conceptos: ${selectedItems.map((item) => item.label).join(', ')}`
           : '';
+      const giftVoucherSuffix = redeemedVoucher
+        ? ` · Bono regalo aplicado: ${redeemedVoucher.amountEuro.toFixed(2)} €`
+        : '';
+      const cashBreakdown = splitPayments.length > 0
+        ? splitPayments
+        : resolvedPaymentMethod && cashPaymentAmountEuro > 0
+          ? [{ method: resolvedPaymentMethod, amount: cashPaymentAmountEuro }]
+          : [];
 
-      if (splitPayments.length > 0) {
-        splitPayments.forEach(
-          (entry: { method: 'efectivo' | 'tarjeta' | 'bizum'; amount: number }) => {
-            addPaymentToDailySummary(todayIso, entry.method, entry.amount, {
-              operationType: 'reservation_payment',
-              concept: `Pago final cita: ${reservation.customerName} · ${reservation.appointmentTypeName} · ${reservation.dateIso} ${reservation.startTime}${signalInfoSuffix}${paidItemsSuffix} · ${entry.method}`,
-              performedByEmail: session.email,
-            });
-          },
-        );
-      } else if (
-        paymentMethod === 'efectivo' ||
-        paymentMethod === 'tarjeta' ||
-        paymentMethod === 'bizum'
-      ) {
-        addPaymentToDailySummary(
-          todayIso,
-          paymentMethod as 'efectivo' | 'tarjeta' | 'bizum',
-          finalChargeEuro,
-          {
-            operationType: 'reservation_payment',
-            concept: `Pago final cita: ${reservation.customerName} · ${reservation.appointmentTypeName} · ${reservation.dateIso} ${reservation.startTime}${signalInfoSuffix}${paidItemsSuffix}`,
-            performedByEmail: session.email,
-          },
-        );
-      }
+      const paymentOperation = {
+        operationType: 'reservation_payment' as const,
+        concept: `Pago final cita: ${reservation.customerName} · ${reservation.appointmentTypeName} · ${reservation.dateIso} ${reservation.startTime}${signalInfoSuffix}${paidItemsSuffix}${giftVoucherSuffix}`,
+        performedByEmail: session.email,
+        paymentType: 'final' as const,
+        clientCardId: meta?.linkedClientId,
+        clientName: reservation.customerName,
+        reservationId,
+        reservationDateIso: reservation.dateIso,
+        reservationStartTime: reservation.startTime,
+        appointmentTypeName: reservation.appointmentTypeName,
+        lineItems: receiptLineItems,
+        voucherAmountEuro: giftVoucherAmountEuro,
+        totalCoveredAmountEuro: finalChargeEuro,
+        voucherPayments: redeemedVoucher && voucherClient
+          ? [{
+              voucherId: redeemedVoucher.voucherId,
+              amountEuro: redeemedVoucher.amountEuro,
+              clientName: voucherClient.fullName,
+            }]
+          : undefined,
+      };
+
+      const cashMethod = cashBreakdown[0]?.method ?? resolvedPaymentMethod ?? 'efectivo';
+      addPaymentToDailySummary(todayIso, cashMethod, cashPaymentAmountEuro, {
+        ...paymentOperation,
+        paymentBreakdown: cashBreakdown,
+      });
     }
 
     if (paymentReceived) {
@@ -6527,6 +7663,18 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
 
     return res.status(200).json({ ok: true });
   } catch (error) {
+    if (redeemedVoucher && !reservationPaymentPersisted) {
+      await refundClientGiftVoucherRedemption(
+        redeemedVoucher.clientId,
+        redeemedVoucher.voucherId,
+        redeemedVoucher.amountEuro,
+        'Pago final de reserva fallido',
+        session.email,
+        reservationId,
+      ).catch((refundError: unknown) => {
+        console.error('No se pudo reintegrar el bono tras fallar el cobro:', refundError);
+      });
+    }
     console.error('Error actualizando pago de reserva:', error);
     return res.status(500).json({ ok: false, error: 'No se pudo actualizar el pago.' });
   }
@@ -7196,6 +8344,10 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
   const customerName = `${req.body?.customerName ?? ''}`.trim();
   const customerPhone = `${req.body?.customerPhone ?? ''}`.trim();
   const customerEmail = `${req.body?.customerEmail ?? ''}`.trim().toLowerCase();
+  const hasRequestedWorker = Object.prototype.hasOwnProperty.call(req.body ?? {}, 'workerEmail');
+  const requestedWorkerEmail = hasRequestedWorker
+    ? normalizeWorkerEmail(req.body?.workerEmail)
+    : '';
   const hasAdditionalComments = Object.prototype.hasOwnProperty.call(
     req.body ?? {},
     'additionalComments',
@@ -7240,6 +8392,28 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
     }
 
+    if (hasRequestedWorker) {
+      if (!requestedWorkerEmail) {
+        return res.status(400).json({ ok: false, error: 'Debes seleccionar una trabajadora.' });
+      }
+
+      const currentWorkerEmail = normalizeWorkerEmail(currentReservation.createdByEmail);
+      if (requestedWorkerEmail !== currentWorkerEmail) {
+        const assigneeUser = usersByEmail.get(requestedWorkerEmail);
+        if (!isAssignableWorkerUser(assigneeUser)) {
+          return res.status(400).json({ ok: false, error: 'La trabajadora seleccionada no es válida.' });
+        }
+
+        const currentUser = usersByEmail.get(session.email);
+        const canAssignReservations =
+          superadminSession.isSuperadmin ||
+          Boolean(currentUser?.permissions?.includes('citas_asignar'));
+        if (!canAssignReservations) {
+          return res.status(403).json({ ok: false, error: 'No tienes permisos para asignar citas.' });
+        }
+      }
+    }
+
     const parsedCurrentMeta = parseReservationMetaFromComments(
       currentReservation.additionalComments,
     );
@@ -7281,10 +8455,14 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
     const currentComparableDurationMinutes =
       currentDurationFromRange ?? currentReservation.durationMinutes;
 
+    const isWorkerChange =
+      hasRequestedWorker &&
+      requestedWorkerEmail !== normalizeWorkerEmail(currentReservation.createdByEmail);
     const isScheduleChange =
       currentReservation.dateIso !== dateIso ||
       currentComparableStartTime !== normalizedStartTime ||
-      currentComparableDurationMinutes !== durationMinutes;
+      currentComparableDurationMinutes !== durationMinutes ||
+      isWorkerChange;
 
     if (!isScheduleChange) {
       const updatedDetails = await updateReservationDetailsByAdmin(reservationId, {
@@ -7329,6 +8507,7 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
         dateIso,
         startTime: normalizedStartTime,
         durationMinutes,
+        workerEmail: hasRequestedWorker ? requestedWorkerEmail : undefined,
         appointmentTypeName,
         customerName,
         customerPhone,
@@ -7650,17 +8829,43 @@ app.post('/api/admin/reservas/:id/senal', async (req, res) => {
   const paymentMethod = `${req.body?.paymentMethod ?? ''}`.trim() as
     | 'efectivo'
     | 'tarjeta'
-    | 'bizum';
+    | 'bizum'
+    | 'bono';
   const amount = Number(req.body?.amount ?? 20);
+  const giftVoucherPaymentRaw =
+    req.body?.giftVoucherPayment && typeof req.body.giftVoucherPayment === 'object'
+      ? (req.body.giftVoucherPayment as { voucherId?: unknown; amountEuro?: unknown })
+      : null;
+  const giftVoucherId = `${giftVoucherPaymentRaw?.voucherId ?? ''}`.trim();
+  const giftVoucherAmountRaw = Number(giftVoucherPaymentRaw?.amountEuro ?? 0);
+  const giftVoucherAmountEuro = Number.isFinite(giftVoucherAmountRaw)
+    ? Number(giftVoucherAmountRaw.toFixed(2))
+    : -1;
+  const cashAmountEuro = Number(Math.max(0, amount - giftVoucherAmountEuro).toFixed(2));
 
   if (!reservationId) {
     return res.status(400).json({ ok: false, error: 'ID de reserva inválido.' });
   }
 
-  if (!['efectivo', 'tarjeta', 'bizum'].includes(paymentMethod)) {
+  if (
+    !Number.isFinite(giftVoucherAmountEuro) ||
+    giftVoucherAmountEuro < 0 ||
+    (giftVoucherAmountEuro > 0 && !giftVoucherId)
+  ) {
+    return res.status(400).json({ ok: false, error: 'Importe de bono inválido.' });
+  }
+
+  if (
+    cashAmountEuro > 0 &&
+    !['efectivo', 'tarjeta', 'bizum'].includes(paymentMethod)
+  ) {
     return res
       .status(400)
-      .json({ ok: false, error: 'Método de pago inválido. Usa efectivo, tarjeta o bizum.' });
+      .json({ ok: false, error: 'Selecciona cómo cobrar la diferencia de la señal.' });
+  }
+
+  if (cashAmountEuro === 0 && giftVoucherAmountEuro > 0 && paymentMethod !== 'bono') {
+    return res.status(400).json({ ok: false, error: 'La señal está cubierta por bono.' });
   }
 
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -7674,15 +8879,71 @@ app.post('/api/admin/reservas/:id/senal', async (req, res) => {
     return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
   }
 
+  if (giftVoucherAmountEuro > amount + 0.001) {
+    return res.status(400).json({ ok: false, error: 'El bono no puede superar el importe de la señal.' });
+  }
+
+  const signalMeta = parseReservationMetaFromComments(reservation.additionalComments).meta;
+  const normalizePhone = (value: string): string => `${value}`.replace(/\D/g, '');
+  const reservationEmail = `${reservation.customerEmail ?? ''}`.trim().toLowerCase();
+  const reservationPhone = normalizePhone(reservation.customerPhone ?? '');
+  const voucherClient = signalMeta?.linkedClientId
+    ? (clientCardsById.get(signalMeta.linkedClientId) ?? null)
+    : (Array.from(clientCardsById.values()).find((card) => {
+        const cardEmail = `${card.email ?? ''}`.trim().toLowerCase();
+        const cardPhone = normalizePhone(card.phone ?? '');
+        return (
+          (reservationEmail && cardEmail === reservationEmail) ||
+          (reservationPhone && cardPhone === reservationPhone)
+        );
+      }) ?? null);
+
+  if (giftVoucherAmountEuro > 0 && !voucherClient) {
+    return res.status(409).json({ ok: false, error: 'La clienta no tiene una ficha vinculada para usar bonos.' });
+  }
+
+  let redeemedVoucher: { clientId: string; voucherId: string; amountEuro: number } | null = null;
+  if (giftVoucherAmountEuro > 0 && voucherClient) {
+    const redemption = await redeemClientGiftVoucher(
+      voucherClient.id,
+      giftVoucherId,
+      giftVoucherAmountEuro,
+      `Señal de cita ${reservation.appointmentTypeName} (${reservation.dateIso} ${reservation.startTime})`,
+      session.email,
+      reservationId,
+    );
+    if (!redemption.ok) {
+      const error = redemption.reason === 'insufficient'
+        ? `Saldo insuficiente en el bono: ${(redemption.balanceEuro ?? 0).toFixed(2)} €.`
+        : 'El bono seleccionado no está disponible en la ficha de esta clienta.';
+      return res.status(409).json({ ok: false, error });
+    }
+    redeemedVoucher = {
+      clientId: voucherClient.id,
+      voucherId: giftVoucherId,
+      amountEuro: giftVoucherAmountEuro,
+    };
+  }
+
   const todayIso = new Date().toISOString().slice(0, 10);
   const signalRegistered = await registerReservationSignalPayment(reservationId, {
     amountEuro: Number(amount.toFixed(2)),
-    paymentMethod,
+    paymentMethod: cashAmountEuro > 0 ? paymentMethod as 'efectivo' | 'tarjeta' | 'bizum' : 'bono',
     receivedAtIso: new Date().toISOString(),
     registeredByEmail: session.email,
   });
 
   if (!signalRegistered.ok) {
+    if (redeemedVoucher && voucherClient) {
+      await refundClientGiftVoucherRedemption(
+        voucherClient.id,
+        redeemedVoucher.voucherId,
+        redeemedVoucher.amountEuro,
+        'Señal de reserva no registrada',
+        session.email,
+        reservationId,
+      );
+    }
     if (signalRegistered.reason === 'not-found') {
       return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
     }
@@ -7693,12 +8954,57 @@ app.post('/api/admin/reservas/:id/senal', async (req, res) => {
     });
   }
 
+  const signalReservationMeta = signalMeta;
+  const signalLineItems = signalReservationMeta
+    ? [
+        ...signalReservationMeta.services.map((item) => ({
+          kind: 'service' as const,
+          name: item.name,
+          quantity: item.quantity,
+          unitPriceEuro: item.unitPriceEuro,
+          amount: Number((item.unitPriceEuro * item.quantity).toFixed(2)),
+        })),
+        ...signalReservationMeta.stock.map((item) => ({
+          kind: 'stock' as const,
+          name: item.productName,
+          quantity: item.quantity,
+          unitPriceEuro: item.unitPriceEuro,
+          amount: Number((item.unitPriceEuro * item.quantity).toFixed(2)),
+        })),
+      ]
+    : [
+        {
+          kind: 'service' as const,
+          name: reservation.appointmentTypeName,
+          quantity: 1,
+          unitPriceEuro: getPackPriceByName(reservation.appointmentTypeName),
+          amount: getPackPriceByName(reservation.appointmentTypeName),
+        },
+      ];
   const concept = `Señal cita: ${reservation.customerName} · ${reservation.appointmentTypeName} · ${reservation.dateIso} ${reservation.startTime}`;
 
-  addPaymentToDailySummary(todayIso, paymentMethod, amount, {
+  addPaymentToDailySummary(todayIso, cashAmountEuro > 0 ? paymentMethod as 'efectivo' | 'tarjeta' | 'bizum' : 'efectivo', cashAmountEuro, {
     operationType: 'reservation_payment',
-    concept,
+    concept: redeemedVoucher
+      ? `${concept} · Bono regalo aplicado: ${redeemedVoucher.amountEuro.toFixed(2)} €`
+      : concept,
     performedByEmail: session.email ?? '',
+    paymentType: 'signal',
+    clientCardId: signalReservationMeta?.linkedClientId,
+    clientName: reservation.customerName,
+    reservationId,
+    reservationDateIso: reservation.dateIso,
+    reservationStartTime: reservation.startTime,
+    appointmentTypeName: reservation.appointmentTypeName,
+    lineItems: signalLineItems,
+    voucherAmountEuro: giftVoucherAmountEuro,
+    totalCoveredAmountEuro: amount,
+    voucherPayments: redeemedVoucher && voucherClient
+      ? [{ voucherId: redeemedVoucher.voucherId, amountEuro: redeemedVoucher.amountEuro, clientName: voucherClient.fullName }]
+      : undefined,
+    paymentBreakdown: cashAmountEuro > 0
+      ? [{ method: paymentMethod as 'efectivo' | 'tarjeta' | 'bizum', amount: cashAmountEuro }]
+      : [],
   });
 
   return res.status(200).json({ ok: true });
@@ -7859,6 +9165,12 @@ app.patch('/api/admin/reservas/:id/status', async (req, res) => {
         startTime: reservation.startTime,
       });
     } else if (status === 'rejected') {
+      await refundReservationGiftVoucherRedemptions(reservation, session.email ?? '', 'cancelada').catch(
+        (refundError: unknown) => {
+          console.error('No se pudo reintegrar el bono de la cita cancelada:', refundError);
+        },
+      );
+
       await notifyRejectedReservation({
         customerEmail: reservation.customerEmail,
         customerName: reservation.customerName,
@@ -7913,6 +9225,12 @@ app.delete('/api/admin/reservas/:id', async (req, res) => {
     }
 
     await deleteReservationById(reservationId);
+
+    await refundReservationGiftVoucherRedemptions(reservation, session.email ?? '', 'eliminada').catch(
+      (refundError: unknown) => {
+        console.error('No se pudo reintegrar el bono de la cita eliminada:', refundError);
+      },
+    );
 
     await notifyFreedSlotAlerts({
       dateIso: reservation.dateIso,
@@ -8641,6 +9959,7 @@ const initializeFromDb = async (): Promise<void> => {
         createdAtIso: dbCard.createdAtIso,
         createdByEmail: dbCard.createdByEmail,
         treatments: (dbCard.treatments as ClientTreatmentItem[]) ?? [],
+        giftVouchers: (dbCard.giftVouchers as ClientGiftVoucherItem[]) ?? [],
         appointmentNotes: (dbCard.appointmentNotes as ClientAppointmentNoteItem[]) ?? [],
         passwordHash: dbCard.passwordHash,
         hasAviso: dbCard.hasAviso,

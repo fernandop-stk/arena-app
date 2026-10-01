@@ -1,0 +1,14 @@
+[
+  {
+    "id": "stock-sale-1790847515426-ujnhxsh3",
+    "productId": "stock-1790847360984-qg9bbfql",
+    "productName": "prueba",
+    "clientCardId": "client-1790846886253-e9y5ybo9",
+    "soldUnits": 1,
+    "unitPrice": 12,
+    "totalAmount": 12,
+    "paymentMethod": "bono",
+    "soldByEmail": "ferperezsanchez@gmail.com",
+    "soldAtIso": "2026-10-01T09:38:35.426Z"
+  }
+]

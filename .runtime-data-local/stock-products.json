@@ -1,0 +1,13 @@
+[
+  {
+    "id": "stock-1790847360984-qg9bbfql",
+    "productName": "prueba",
+    "brand": "preuba2",
+    "color": "",
+    "quantity": 1,
+    "price": 12,
+    "isSellable": true,
+    "createdAtIso": "2026-10-01T09:36:00.984Z",
+    "createdByEmail": "ferperezsanchez@gmail.com"
+  }
+]

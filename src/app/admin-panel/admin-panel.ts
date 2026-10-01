@@ -128,7 +128,7 @@ interface AdminReservationItem {
   appointmentTypeName: string;
   additionalComments: string;
   signalAmountEuro: number;
-  signalPaymentMethod: 'efectivo' | 'tarjeta' | 'bizum' | null;
+  signalPaymentMethod: 'efectivo' | 'tarjeta' | 'bizum' | 'bono' | null;
   signalReceivedAtIso?: string | null;
   signalRegisteredByEmail?: string | null;
   paymentReceived: boolean;
@@ -159,6 +159,7 @@ interface ReservationPaymentSummary {
     method: 'efectivo' | 'tarjeta' | 'bizum';
     amount: number;
   }>;
+  giftVoucherPayments?: Array<{ voucherId: string; amountEuro: number }>;
   finalPaymentMethod: 'efectivo' | 'tarjeta' | 'bizum' | null;
   finalPaymentAmountEuro: number;
   registeredAtIso: string;
@@ -303,9 +304,33 @@ interface ClientCardItem {
     createdAtIso: string;
     createdByEmail: string;
     priceEuro?: number;
-    paymentMethod?: 'efectivo' | 'tarjeta' | 'bizum' | null;
+    paymentMethod?: 'efectivo' | 'tarjeta' | 'bizum' | 'bono' | null;
   }>;
+  giftVouchers?: ClientGiftVoucherItem[];
   appointmentNotes?: ClientAppointmentNote[];
+}
+
+interface ClientGiftVoucherLedgerEntry {
+  id: string;
+  type: 'issued' | 'redeemed' | 'refunded';
+  amountEuro: number;
+  createdAtIso: string;
+  createdByEmail: string;
+  concept: string;
+  paymentMethod?: 'efectivo' | 'tarjeta' | 'bizum';
+  reservationId?: string;
+}
+
+interface ClientGiftVoucherItem {
+  id: string;
+  initialAmountEuro: number;
+  balanceEuro: number;
+  issuedAtIso: string;
+  issuedByEmail: string;
+  paymentMethod: 'efectivo' | 'tarjeta' | 'bizum';
+  giftedByName?: string;
+  note?: string;
+  ledger: ClientGiftVoucherLedgerEntry[];
 }
 
 interface ClientAppointmentNote {
@@ -348,20 +373,44 @@ interface StockSaleHistoryItem {
   id: string;
   productId: string;
   productName: string;
+  clientCardId?: string;
   soldUnits: number;
   unitPrice: number;
   totalAmount: number;
-  paymentMethod: 'efectivo' | 'tarjeta' | 'bizum';
+  paymentMethod: 'efectivo' | 'tarjeta' | 'bizum' | 'bono';
   soldByEmail: string;
   soldAtIso: string;
 }
 
 interface CierreOperationDetailItem {
   id: string;
-  operationType: 'stock_sale' | 'client_pack_payment' | 'reservation_payment';
+  operationType:
+    | 'stock_sale'
+    | 'client_pack_payment'
+    | 'reservation_payment'
+    | 'gift_voucher_sale'
+    | 'gift_voucher_refund';
   concept: string;
   amount: number;
   paymentMethod: 'efectivo' | 'tarjeta' | 'bizum';
+  paymentBreakdown?: Array<{ method: 'efectivo' | 'tarjeta' | 'bizum'; amount: number }>;
+  paymentType?: 'signal' | 'final' | 'stock' | 'client_treatment';
+  voucherAmountEuro?: number;
+  totalCoveredAmountEuro?: number;
+  voucherPayments?: Array<{ voucherId: string; amountEuro: number; clientName?: string }>;
+  clientCardId?: string;
+  clientName?: string;
+  reservationId?: string;
+  reservationDateIso?: string;
+  reservationStartTime?: string;
+  appointmentTypeName?: string;
+  lineItems?: Array<{
+    kind: 'service' | 'stock' | 'other';
+    name: string;
+    quantity: number;
+    unitPriceEuro: number;
+    amount: number;
+  }>;
   performedByEmail: string;
   createdAtIso: string;
 }
@@ -380,6 +429,7 @@ interface CierreCajaItem {
   enviadoAlServicioFiscal: boolean;
   idServicioFiscal: string;
   operationDetails: CierreOperationDetailItem[];
+  isDailyPreview?: boolean;
 }
 
 interface CierreAutoDiario {
@@ -695,8 +745,11 @@ export class AdminPanelComponent implements OnDestroy {
   );
   protected readonly showSenalModal = signal(false);
   protected readonly senalPaymentMethod = signal<
-    'efectivo' | 'tarjeta' | 'bizum' | 'sin_senal' | ''
+    'efectivo' | 'tarjeta' | 'bizum' | 'bono' | 'sin_senal' | ''
   >('');
+  protected readonly senalVoucherClientId = signal('');
+  protected readonly senalVoucherId = signal('');
+  protected readonly senalVoucherAmount = signal('0');
   protected readonly senalLoading = signal(false);
   protected readonly senalError = signal('');
   protected readonly SENAL_AMOUNT = 20;
@@ -764,11 +817,15 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly editStockTargetProductId = signal('');
   protected readonly editStockName = signal('');
   protected readonly editStockPrice = signal('');
+  protected readonly editStockQuantity = signal('');
   protected readonly editStockIsSellable = signal(false);
   protected readonly editStockLoading = signal(false);
   protected readonly stockAdjustError = signal('');
   protected readonly stockSaleProductId = signal('');
   protected readonly stockSaleUnits = signal('1');
+  protected readonly stockSaleClientCardId = signal('');
+  protected readonly stockSaleVoucherId = signal('');
+  protected readonly stockSaleVoucherAmount = signal('0');
   protected readonly stockSalePaymentMethod = signal<'efectivo' | 'tarjeta' | 'bizum' | ''>('');
   protected readonly stockSaleLoading = signal(false);
   protected readonly stockSaleError = signal('');
@@ -777,7 +834,7 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly stockSalesHistoryLoading = signal(false);
   protected readonly stockSalesHistoryDateFilter = signal('');
   protected readonly stockSalesHistoryMethodFilter = signal<
-    'all' | 'efectivo' | 'tarjeta' | 'bizum'
+    'all' | 'efectivo' | 'tarjeta' | 'bizum' | 'bono'
   >('all');
 
   // ── Cierre de caja ──────────────────────────────────────────────────────────
@@ -806,10 +863,18 @@ export class AdminPanelComponent implements OnDestroy {
   );
   protected readonly showCierreDetailsModal = signal(false);
   protected readonly selectedCierreForDetails = signal<CierreCajaItem | null>(null);
+  // Sustituye a window.confirm: en iOS (web app en pantalla de inicio) los diálogos nativos no se muestran.
+  protected readonly confirmDialog = signal<{
+    title: string;
+    message: string;
+    acceptLabel: string;
+    onAccept: () => void;
+  } | null>(null);
   protected readonly cierreDetailsMethodFilters = signal({
     efectivo: true,
     tarjeta: true,
     bizum: true,
+    bono: true,
   });
   protected readonly cierreDetailsEmployeeFilter = signal('all');
   // Edición de cierre
@@ -923,6 +988,9 @@ export class AdminPanelComponent implements OnDestroy {
     'efectivo',
   );
   protected readonly paymentSplitCustomAmount = signal('');
+  protected readonly paymentVoucherClientId = signal('');
+  protected readonly paymentVoucherId = signal('');
+  protected readonly paymentVoucherAmount = signal('0');
   protected readonly selectedReservationPaymentLineIds = signal<string[]>([]);
   protected readonly cobroReservationStockProductId = signal('');
   protected readonly cobroReservationStockSearch = signal('');
@@ -979,7 +1047,8 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly paymentSplitRemainingEuro = computed(() => {
     const total = this.paymentMethodReservationPriceEuro();
     const splitTotal = this.paymentSplitTotalEuro();
-    return Math.max(0, Number((total - splitTotal).toFixed(2)));
+    const voucherAmount = Math.max(0, Number(this.paymentVoucherAmount().replace(',', '.')) || 0);
+    return Math.max(0, Number((total - splitTotal - voucherAmount).toFixed(2)));
   });
   protected readonly cobroDayGroups = computed<CobroDayGroup[]>(() => {
     const selectedDateIso = this.cobroSelectedDateIso() || this.getTodayIso();
@@ -1114,6 +1183,21 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly showClientReservationStockSuccessModal = signal(false);
   protected readonly clientReservationStockSuccessProductName = signal('');
   protected readonly clientReservationStockSuccessTotalEuro = signal(0);
+  protected readonly clientDirectStockProductId = signal('');
+  protected readonly clientDirectStockUnits = signal('1');
+  protected readonly clientDirectStockPaymentMethod = signal<'efectivo' | 'tarjeta' | 'bizum' | ''>('');
+  protected readonly clientDirectStockVoucherId = signal('');
+  protected readonly clientDirectStockVoucherAmount = signal('0');
+  protected readonly clientDirectStockLoading = signal(false);
+  protected readonly clientDirectStockError = signal('');
+  protected readonly clientDirectStockMessage = signal('');
+  protected readonly showClientGiftVoucherModal = signal(false);
+  protected readonly clientGiftVoucherAmount = signal('');
+  protected readonly clientGiftVoucherPaymentMethod = signal<'efectivo' | 'tarjeta' | 'bizum' | ''>('');
+  protected readonly clientGiftVoucherGiftedBy = signal('');
+  protected readonly clientGiftVoucherNote = signal('');
+  protected readonly clientGiftVoucherLoading = signal(false);
+  protected readonly clientGiftVoucherError = signal('');
   protected readonly paymentModalOpen = signal(false);
   protected readonly paymentSelectTreatmentOpen = signal(false);
   protected readonly selectedTreatmentForPayment = signal<{
@@ -1123,6 +1207,8 @@ export class AdminPanelComponent implements OnDestroy {
   } | null>(null);
   protected readonly paymentMethod = signal<'efectivo' | 'tarjeta' | 'bizum' | null>(null);
   protected readonly paymentAmount = signal('');
+  protected readonly clientPaymentGiftVoucherId = signal('');
+  protected readonly clientPaymentGiftVoucherAmount = signal('0');
   protected readonly paymentLoading = signal(false);
   protected readonly paymentError = signal('');
   protected readonly clientChartType = signal<ClientChartType>('pie');
@@ -2293,6 +2379,9 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected openStockSaleModal(productId: string): void {
     this.selectStockSaleProduct(productId);
+    this.stockSaleClientCardId.set('');
+    this.stockSaleVoucherId.set('');
+    this.stockSaleVoucherAmount.set('0');
     this.showStockSaleModal.set(true);
   }
 
@@ -2303,6 +2392,9 @@ export class AdminPanelComponent implements OnDestroy {
 
     this.showStockSaleModal.set(false);
     this.stockSaleUnits.set('1');
+    this.stockSaleClientCardId.set('');
+    this.stockSaleVoucherId.set('');
+    this.stockSaleVoucherAmount.set('0');
     this.stockSalePaymentMethod.set('');
     this.stockSaleError.set('');
   }
@@ -2339,6 +2431,14 @@ export class AdminPanelComponent implements OnDestroy {
   protected onStockSaleUnitsInput(event: Event): void {
     const target = event.target as HTMLInputElement;
     this.stockSaleUnits.set(target.value);
+    const voucher = this.getStockSaleGiftVouchers().find(
+      (item) => item.id === this.stockSaleVoucherId(),
+    );
+    if (voucher) {
+      this.stockSaleVoucherAmount.set(
+        Math.min(this.getStockSaleTotalAmount(), voucher.balanceEuro).toFixed(2),
+      );
+    }
   }
 
   protected setStockSalePaymentMethod(method: 'efectivo' | 'tarjeta' | 'bizum'): void {
@@ -2367,10 +2467,54 @@ export class AdminPanelComponent implements OnDestroy {
     return Number((product.price * units).toFixed(2));
   }
 
+  protected getStockSaleGiftVouchers(): ClientGiftVoucherItem[] {
+    const client = this.clientCards().find((card) => card.id === this.stockSaleClientCardId());
+    return (client?.giftVouchers ?? []).filter((voucher) => voucher.balanceEuro > 0);
+  }
+
+  protected onStockSaleClientChange(clientId: string): void {
+    this.stockSaleClientCardId.set(clientId);
+    const voucher = this.getStockSaleGiftVouchers()[0] ?? null;
+    this.stockSaleVoucherId.set(voucher?.id ?? '');
+    this.stockSaleVoucherAmount.set(
+      Math.min(this.getStockSaleTotalAmount(), voucher?.balanceEuro ?? 0).toFixed(2),
+    );
+    this.stockSaleError.set('');
+  }
+
+  protected onStockSaleVoucherChange(voucherId: string): void {
+    this.stockSaleVoucherId.set(voucherId);
+    const voucher = this.getStockSaleGiftVouchers().find((item) => item.id === voucherId);
+    this.stockSaleVoucherAmount.set(
+      Math.min(this.getStockSaleTotalAmount(), voucher?.balanceEuro ?? 0).toFixed(2),
+    );
+  }
+
+  protected onStockSaleVoucherAmountInput(value: string): void {
+    const parsed = Number(value.replace(',', '.'));
+    const voucher = this.getStockSaleGiftVouchers().find(
+      (item) => item.id === this.stockSaleVoucherId(),
+    );
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      this.stockSaleVoucherAmount.set(value);
+      return;
+    }
+    this.stockSaleVoucherAmount.set(
+      Math.min(parsed, this.getStockSaleTotalAmount(), voucher?.balanceEuro ?? 0).toFixed(2),
+    );
+  }
+
+  protected getStockSaleCashRemaining(): number {
+    const voucherAmount = Number(this.stockSaleVoucherAmount().replace(',', '.')) || 0;
+    return Math.max(0, Number((this.getStockSaleTotalAmount() - voucherAmount).toFixed(2)));
+  }
+
   protected submitStockSale(): void {
     const product = this.getSelectedStockSaleProduct();
     const units = this.getStockSaleUnitsValue();
     const paymentMethod = this.stockSalePaymentMethod();
+    const voucherAmount = Number(this.stockSaleVoucherAmount().replace(',', '.')) || 0;
+    const voucher = this.getStockSaleGiftVouchers().find((item) => item.id === this.stockSaleVoucherId());
 
     this.stockSaleError.set('');
     this.stockError.set('');
@@ -2381,8 +2525,13 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
-    if (!paymentMethod) {
-      this.stockSaleError.set('Selecciona un metodo de pago.');
+    if (this.getStockSaleCashRemaining() > 0 && !paymentMethod) {
+      this.stockSaleError.set('Selecciona cómo cobrar el importe restante.');
+      return;
+    }
+
+    if (voucherAmount > 0 && (!voucher || voucherAmount > voucher.balanceEuro + 0.001)) {
+      this.stockSaleError.set('El bono seleccionado no tiene saldo suficiente.');
       return;
     }
 
@@ -2408,7 +2557,12 @@ export class AdminPanelComponent implements OnDestroy {
         error?: string;
       }>(`/api/admin/almacen/${encodeURIComponent(product.id)}/sell`, {
         units,
-        paymentMethod,
+        paymentMethod: paymentMethod ?? 'bono',
+        clientCardId: this.stockSaleClientCardId() || undefined,
+        giftVoucherPayment:
+          voucherAmount > 0 && voucher
+            ? { voucherId: voucher.id, amountEuro: voucherAmount }
+            : undefined,
       })
       .subscribe({
         next: (response) => {
@@ -2426,9 +2580,11 @@ export class AdminPanelComponent implements OnDestroy {
           const soldUnits = response.soldUnits ?? units;
           const totalAmount = Number(response.totalAmount ?? this.getStockSaleTotalAmount());
           this.stockMessage.set(
-            `Venta registrada: ${soldUnits} ud de ${product.productName} por ${totalAmount.toFixed(2)} EUR (${paymentMethod}).`,
+            `Venta registrada: ${soldUnits} ud de ${product.productName} por ${totalAmount.toFixed(2)} EUR${voucherAmount > 0 ? ` · Bono ${voucherAmount.toFixed(2)} €` : ''}${this.getStockSaleCashRemaining() > 0 ? ` · ${paymentMethod}` : ''}.`,
           );
           this.stockSaleUnits.set('1');
+          this.stockSaleVoucherAmount.set('0');
+          this.loadClientCards();
           this.stockSalePaymentMethod.set('');
           this.showStockSaleModal.set(false);
           this.loadStockSalesHistory();
@@ -2601,6 +2757,7 @@ export class AdminPanelComponent implements OnDestroy {
     this.editStockTargetProductId.set(product.id);
     this.editStockName.set(product.productName);
     this.editStockPrice.set(`${product.price}`);
+    this.editStockQuantity.set(`${product.quantity}`);
     this.editStockIsSellable.set(product.isSellable);
     this.showEditStockModal.set(true);
   }
@@ -2614,6 +2771,7 @@ export class AdminPanelComponent implements OnDestroy {
     this.editStockTargetProductId.set('');
     this.editStockName.set('');
     this.editStockPrice.set('');
+    this.editStockQuantity.set('');
     this.editStockIsSellable.set(false);
   }
 
@@ -2627,6 +2785,11 @@ export class AdminPanelComponent implements OnDestroy {
     this.editStockPrice.set(target.value);
   }
 
+  protected onEditStockQuantityInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.editStockQuantity.set(target.value);
+  }
+
   protected onEditStockIsSellableInput(event: Event): void {
     const target = event.target as HTMLInputElement;
     this.editStockIsSellable.set(target.checked);
@@ -2637,6 +2800,8 @@ export class AdminPanelComponent implements OnDestroy {
     const productName = this.editStockName().trim();
     const priceRaw = this.editStockPrice().trim().replace(',', '.');
     const price = priceRaw === '' ? 0 : Number(priceRaw);
+    const quantityRaw = this.editStockQuantity().trim();
+    const quantity = quantityRaw === '' ? NaN : Number(quantityRaw);
     const isSellable = this.editStockIsSellable();
 
     this.stockError.set('');
@@ -2658,6 +2823,11 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
+    if (!Number.isInteger(quantity) || quantity < 0) {
+      this.stockError.set('La cantidad debe ser un número entero igual o mayor que 0.');
+      return;
+    }
+
     this.editStockLoading.set(true);
 
     this.http
@@ -2666,6 +2836,7 @@ export class AdminPanelComponent implements OnDestroy {
         {
           productName,
           price,
+          quantity,
           isSellable,
         },
       )
@@ -2755,7 +2926,9 @@ export class AdminPanelComponent implements OnDestroy {
     const target = event.target as HTMLSelectElement;
     const next = target.value;
     this.stockSalesHistoryMethodFilter.set(
-      next === 'efectivo' || next === 'tarjeta' || next === 'bizum' ? next : 'all',
+      next === 'efectivo' || next === 'tarjeta' || next === 'bizum' || next === 'bono'
+        ? next
+        : 'all',
     );
   }
 
@@ -2901,6 +3074,7 @@ export class AdminPanelComponent implements OnDestroy {
     this.clientEditNotes.set(card.notes ?? '');
     this.clientEditHasAviso.set(Boolean(card.hasAviso));
     this.showClientDetailModal.set(true);
+    this.showClientGiftVoucherModal.set(false);
     this.showDeleteClientConfirmModal.set(false);
     this.showClientReservationStockModal.set(false);
     this.clientDeleteLoading.set(false);
@@ -2921,6 +3095,21 @@ export class AdminPanelComponent implements OnDestroy {
     this.clientReservationStockUnits.set('1');
     this.clientReservationStockLoading.set(false);
     this.clientReservationStockError.set('');
+    this.clientDirectStockProductId.set(this.getAvailableSellableStockProducts()[0]?.id ?? '');
+    this.clientDirectStockUnits.set('1');
+    this.clientDirectStockPaymentMethod.set('');
+    const availableClientVoucher = (card.giftVouchers ?? []).find((voucher) => voucher.balanceEuro > 0);
+    this.clientDirectStockVoucherId.set(availableClientVoucher?.id ?? '');
+    this.clientDirectStockVoucherAmount.set(
+      Math.min(
+        this.getAvailableSellableStockProducts()[0]?.price ?? 0,
+        availableClientVoucher?.balanceEuro ?? 0,
+      ).toFixed(2),
+    );
+    this.clientDirectStockLoading.set(false);
+    this.clientDirectStockError.set('');
+    this.clientDirectStockMessage.set('');
+    this.loadStockSalesHistory();
   }
 
   protected openClientStatsModal(): void {
@@ -2930,6 +3119,9 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected closeClientDetailModal(): void {
     this.showClientDetailModal.set(false);
+    this.showClientGiftVoucherModal.set(false);
+    this.clientGiftVoucherLoading.set(false);
+    this.clientGiftVoucherError.set('');
     this.showClientReservationModal.set(false);
     this.showClientReservationStockModal.set(false);
     this.showDeleteClientConfirmModal.set(false);
@@ -2954,6 +3146,14 @@ export class AdminPanelComponent implements OnDestroy {
     this.clientReservationStockUnits.set('1');
     this.clientReservationStockLoading.set(false);
     this.clientReservationStockError.set('');
+    this.clientDirectStockProductId.set('');
+    this.clientDirectStockUnits.set('1');
+    this.clientDirectStockPaymentMethod.set('');
+    this.clientDirectStockVoucherId.set('');
+    this.clientDirectStockVoucherAmount.set('0');
+    this.clientDirectStockLoading.set(false);
+    this.clientDirectStockError.set('');
+    this.clientDirectStockMessage.set('');
   }
 
   protected closeClientStatsModal(): void {
@@ -5314,6 +5514,238 @@ export class AdminPanelComponent implements OnDestroy {
     return this.getSelectedClientReservationHistory();
   }
 
+  protected getClientDirectStockSales(card: ClientCardItem): StockSaleHistoryItem[] {
+    return this.stockSalesHistory()
+      .filter((sale) => sale.clientCardId === card.id)
+      .sort((a, b) => b.soldAtIso.localeCompare(a.soldAtIso));
+  }
+
+  protected getClientDirectStockTotal(): number {
+    const product = this.getAvailableSellableStockProducts().find(
+      (item) => item.id === this.clientDirectStockProductId(),
+    );
+    const units = Math.max(1, Math.floor(Number(this.clientDirectStockUnits().trim()) || 1));
+    return product ? Number((product.price * units).toFixed(2)) : 0;
+  }
+
+  protected onClientDirectStockProductChange(event: Event): void {
+    this.clientDirectStockProductId.set((event.target as HTMLSelectElement).value);
+    const voucher = this.getSelectedClientDirectStockVoucher();
+    this.clientDirectStockVoucherAmount.set(
+      Math.min(this.getClientDirectStockTotal(), voucher?.balanceEuro ?? 0).toFixed(2),
+    );
+    this.clientDirectStockError.set('');
+    this.clientDirectStockMessage.set('');
+  }
+
+  protected onClientDirectStockUnitsInput(event: Event): void {
+    this.clientDirectStockUnits.set((event.target as HTMLInputElement).value);
+    const voucher = this.getSelectedClientDirectStockVoucher();
+    this.clientDirectStockVoucherAmount.set(
+      Math.min(this.getClientDirectStockTotal(), voucher?.balanceEuro ?? 0).toFixed(2),
+    );
+    this.clientDirectStockError.set('');
+    this.clientDirectStockMessage.set('');
+  }
+
+  protected onClientDirectStockPaymentMethodChange(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    this.clientDirectStockPaymentMethod.set(
+      value === 'efectivo' || value === 'tarjeta' || value === 'bizum' ? value : '',
+    );
+    this.clientDirectStockError.set('');
+  }
+
+  protected getClientDirectStockGiftVouchers(): ClientGiftVoucherItem[] {
+    return (this.getSelectedClientCard()?.giftVouchers ?? []).filter((voucher) => voucher.balanceEuro > 0);
+  }
+
+  protected getSelectedClientDirectStockVoucher(): ClientGiftVoucherItem | null {
+    return this.getClientDirectStockGiftVouchers().find(
+      (voucher) => voucher.id === this.clientDirectStockVoucherId(),
+    ) ?? null;
+  }
+
+  protected onClientDirectStockVoucherChange(voucherId: string): void {
+    this.clientDirectStockVoucherId.set(voucherId);
+    const voucher = this.getClientDirectStockGiftVouchers().find((item) => item.id === voucherId);
+    this.clientDirectStockVoucherAmount.set(
+      Math.min(this.getClientDirectStockTotal(), voucher?.balanceEuro ?? 0).toFixed(2),
+    );
+  }
+
+  protected onClientDirectStockVoucherAmountInput(value: string): void {
+    const parsed = Number(value.replace(',', '.'));
+    const voucher = this.getSelectedClientDirectStockVoucher();
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      this.clientDirectStockVoucherAmount.set(value);
+      return;
+    }
+    this.clientDirectStockVoucherAmount.set(
+      Math.min(parsed, this.getClientDirectStockTotal(), voucher?.balanceEuro ?? 0).toFixed(2),
+    );
+  }
+
+  protected getClientDirectStockCashRemaining(): number {
+    const voucherAmount = Number(this.clientDirectStockVoucherAmount().replace(',', '.')) || 0;
+    return Math.max(0, Number((this.getClientDirectStockTotal() - voucherAmount).toFixed(2)));
+  }
+
+  protected openClientGiftVoucherModal(): void {
+    this.clientGiftVoucherAmount.set('');
+    this.clientGiftVoucherPaymentMethod.set('');
+    this.clientGiftVoucherGiftedBy.set('');
+    this.clientGiftVoucherNote.set('');
+    this.clientGiftVoucherError.set('');
+    this.showClientGiftVoucherModal.set(true);
+  }
+
+  protected closeClientGiftVoucherModal(): void {
+    if (this.clientGiftVoucherLoading()) {
+      return;
+    }
+    this.showClientGiftVoucherModal.set(false);
+    this.clientGiftVoucherError.set('');
+  }
+
+  protected issueClientGiftVoucher(): void {
+    const client = this.getSelectedClientCard();
+    const amountEuro = Number(this.clientGiftVoucherAmount().replace(',', '.'));
+    const paymentMethod = this.clientGiftVoucherPaymentMethod();
+
+    if (!client) {
+      this.clientGiftVoucherError.set('No se encontró la ficha de la clienta.');
+      return;
+    }
+    if (!Number.isFinite(amountEuro) || amountEuro <= 0) {
+      this.clientGiftVoucherError.set('Introduce un importe de bono válido.');
+      return;
+    }
+    if (!paymentMethod) {
+      this.clientGiftVoucherError.set('Selecciona el método de pago.');
+      return;
+    }
+
+    this.clientGiftVoucherLoading.set(true);
+    this.clientGiftVoucherError.set('');
+    this.http
+      .post<{
+        ok: boolean;
+        card?: ClientCardItem;
+        error?: string;
+      }>(`/api/admin/clientes/${encodeURIComponent(client.id)}/bonos`, {
+        amountEuro,
+        paymentMethod,
+        giftedByName: this.clientGiftVoucherGiftedBy(),
+        note: this.clientGiftVoucherNote(),
+      })
+      .subscribe({
+        next: (response) => {
+          if (!response.ok || !response.card) {
+            this.clientGiftVoucherError.set(response.error ?? 'No se pudo emitir el bono.');
+            return;
+          }
+
+          this.clientCards.update((cards) =>
+            cards.map((card) => (card.id === response.card?.id ? response.card : card)),
+          );
+          this.clientCardsMessage.set(
+            `Bono regalo de ${amountEuro.toFixed(2)} € emitido para ${client.fullName}.`,
+          );
+          this.showClientGiftVoucherModal.set(false);
+          this.loadCierreAutoDiario();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.clientGiftVoucherError.set(
+            typeof apiError === 'string' && apiError
+              ? apiError
+              : 'No se pudo emitir el bono. Inténtalo de nuevo.',
+          );
+        },
+        complete: () => this.clientGiftVoucherLoading.set(false),
+      });
+  }
+
+  protected chargeClientDirectStock(): void {
+    const client = this.getSelectedClientCard();
+    const productId = this.clientDirectStockProductId().trim();
+    const product = this.getAvailableSellableStockProducts().find((item) => item.id === productId);
+    const units = Math.max(1, Math.floor(Number(this.clientDirectStockUnits().trim()) || 1));
+    const paymentMethod = this.clientDirectStockPaymentMethod();
+    const voucherAmount = Number(this.clientDirectStockVoucherAmount().replace(',', '.')) || 0;
+    const voucher = this.getSelectedClientDirectStockVoucher();
+
+    if (!client || !product) {
+      this.clientDirectStockError.set('Selecciona un producto disponible para cobrar.');
+      return;
+    }
+
+    if (units > product.quantity) {
+      this.clientDirectStockError.set(
+        `No hay unidades suficientes de ${product.productName}. Disponible: ${product.quantity}.`,
+      );
+      return;
+    }
+
+    if (this.getClientDirectStockCashRemaining() > 0 && !paymentMethod) {
+      this.clientDirectStockError.set('Selecciona el método para el importe restante.');
+      return;
+    }
+
+    if (voucherAmount > 0 && (!voucher || voucherAmount > voucher.balanceEuro + 0.001)) {
+      this.clientDirectStockError.set('El bono seleccionado no tiene saldo suficiente.');
+      return;
+    }
+
+    this.clientDirectStockLoading.set(true);
+    this.clientDirectStockError.set('');
+    this.clientDirectStockMessage.set('');
+    this.http
+      .post<{ ok: boolean; totalAmount?: number; error?: string }>(
+        `/api/admin/almacen/${encodeURIComponent(product.id)}/sell`,
+        {
+          units,
+          paymentMethod: paymentMethod ?? 'bono',
+          clientCardId: client.id,
+          giftVoucherPayment:
+            voucherAmount > 0 && voucher
+              ? { voucherId: voucher.id, amountEuro: voucherAmount }
+              : undefined,
+        },
+      )
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.clientDirectStockError.set(response.error ?? 'No se pudo registrar el cobro.');
+            return;
+          }
+
+          const total = Number(response.totalAmount ?? product.price * units);
+          this.clientDirectStockMessage.set(
+            `Cobro registrado: ${product.productName} · ${total.toFixed(2)} €`,
+          );
+          this.clientDirectStockProductId.set('');
+          this.clientDirectStockUnits.set('1');
+          this.clientDirectStockPaymentMethod.set('');
+          this.clientDirectStockVoucherAmount.set('0');
+          this.loadClientCards();
+          this.loadStockProducts();
+          this.loadStockSalesHistory();
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.clientDirectStockError.set(
+            typeof apiError === 'string' && apiError
+              ? apiError
+              : 'No se pudo registrar el cobro. Inténtalo de nuevo.',
+          );
+          this.clientDirectStockLoading.set(false);
+        },
+        complete: () => this.clientDirectStockLoading.set(false),
+      });
+  }
+
   protected getSelectedClientReservationForStockModal(): AdminReservationItem | null {
     const reservationId = this.clientReservationStockTargetReservationId();
 
@@ -5533,6 +5965,8 @@ export class AdminPanelComponent implements OnDestroy {
     this.selectedTreatmentForPayment.set(null);
     this.paymentMethod.set(null);
     this.paymentAmount.set('');
+    this.clientPaymentGiftVoucherId.set('');
+    this.clientPaymentGiftVoucherAmount.set('0');
     this.paymentError.set('');
   }
 
@@ -5542,6 +5976,8 @@ export class AdminPanelComponent implements OnDestroy {
     this.selectedTreatmentForPayment.set(null);
     this.paymentMethod.set(null);
     this.paymentAmount.set('');
+    this.clientPaymentGiftVoucherId.set('');
+    this.clientPaymentGiftVoucherAmount.set('0');
     this.paymentLoading.set(false);
     this.paymentError.set('');
   }
@@ -5551,6 +5987,8 @@ export class AdminPanelComponent implements OnDestroy {
     this.paymentSelectTreatmentOpen.set(true);
     this.paymentMethod.set(null);
     this.paymentAmount.set('');
+    this.clientPaymentGiftVoucherId.set('');
+    this.clientPaymentGiftVoucherAmount.set('0');
     this.paymentError.set('');
   }
 
@@ -5570,6 +6008,11 @@ export class AdminPanelComponent implements OnDestroy {
       });
     }
     this.paymentAmount.set(Number.isFinite(resolvedPrice) ? `${resolvedPrice}` : '');
+    const voucher = this.getClientPaymentGiftVouchers()[0] ?? null;
+    this.clientPaymentGiftVoucherId.set(voucher?.id ?? '');
+    this.clientPaymentGiftVoucherAmount.set(
+      Math.min(Number.isFinite(resolvedPrice) ? resolvedPrice : 0, voucher?.balanceEuro ?? 0).toFixed(2),
+    );
     this.paymentSelectTreatmentOpen.set(false);
     this.paymentModalOpen.set(true);
     this.paymentMethod.set(null);
@@ -5578,6 +6021,48 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected onPaymentAmountInput(value: string): void {
     this.paymentAmount.set(value);
+    const amount = Number(value.replace(',', '.'));
+    const voucher = this.getClientPaymentGiftVouchers().find(
+      (item) => item.id === this.clientPaymentGiftVoucherId(),
+    );
+    if (Number.isFinite(amount) && amount >= 0 && voucher) {
+      const currentVoucherAmount = Number(this.clientPaymentGiftVoucherAmount().replace(',', '.')) || 0;
+      this.clientPaymentGiftVoucherAmount.set(
+        Math.min(currentVoucherAmount, amount, voucher.balanceEuro).toFixed(2),
+      );
+    }
+  }
+
+  protected getClientPaymentGiftVouchers(): ClientGiftVoucherItem[] {
+    return (this.getSelectedClientCard()?.giftVouchers ?? []).filter(
+      (voucher) => voucher.balanceEuro > 0,
+    );
+  }
+
+  protected onClientPaymentGiftVoucherChange(voucherId: string): void {
+    this.clientPaymentGiftVoucherId.set(voucherId);
+    const voucher = this.getClientPaymentGiftVouchers().find((item) => item.id === voucherId);
+    const amount = Number(this.paymentAmount().replace(',', '.')) || 0;
+    this.clientPaymentGiftVoucherAmount.set(Math.min(amount, voucher?.balanceEuro ?? 0).toFixed(2));
+  }
+
+  protected onClientPaymentGiftVoucherAmountInput(value: string): void {
+    const parsed = Number(value.replace(',', '.'));
+    const voucher = this.getClientPaymentGiftVouchers().find(
+      (item) => item.id === this.clientPaymentGiftVoucherId(),
+    );
+    const amount = Number(this.paymentAmount().replace(',', '.')) || 0;
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      this.clientPaymentGiftVoucherAmount.set(value);
+      return;
+    }
+    this.clientPaymentGiftVoucherAmount.set(Math.min(parsed, amount, voucher?.balanceEuro ?? 0).toFixed(2));
+  }
+
+  protected getClientPaymentCashRemaining(): number {
+    const amount = Number(this.paymentAmount().replace(',', '.')) || 0;
+    const voucherAmount = Number(this.clientPaymentGiftVoucherAmount().replace(',', '.')) || 0;
+    return Math.max(0, Number((amount - voucherAmount).toFixed(2)));
   }
 
   protected submitPayment(): void {
@@ -5585,9 +6070,18 @@ export class AdminPanelComponent implements OnDestroy {
     const treatment = this.selectedTreatmentForPayment();
     const method = this.paymentMethod();
     const amountRaw = this.paymentAmount().replace(',', '.').trim();
+    const giftVoucherAmount = Number(this.clientPaymentGiftVoucherAmount().replace(',', '.')) || 0;
+    const giftVoucher = this.getClientPaymentGiftVouchers().find(
+      (item) => item.id === this.clientPaymentGiftVoucherId(),
+    );
 
-    if (!selected || !treatment || !method) {
-      this.paymentError.set('Selecciona un tratamiento y método de pago.');
+    if (!selected || !treatment || (this.getClientPaymentCashRemaining() > 0 && !method)) {
+      this.paymentError.set('Selecciona el tratamiento y método para el importe restante.');
+      return;
+    }
+
+    if (giftVoucherAmount > 0 && (!giftVoucher || giftVoucherAmount > giftVoucher.balanceEuro + 0.001)) {
+      this.paymentError.set('El bono seleccionado no tiene saldo suficiente.');
       return;
     }
 
@@ -5611,7 +6105,11 @@ export class AdminPanelComponent implements OnDestroy {
         `/api/admin/clientes/${encodeURIComponent(selected.id)}/packs/${encodeURIComponent(treatment.id)}/payment`,
         {
           priceEuro: price,
-          paymentMethod: method,
+          paymentMethod: method ?? (giftVoucherAmount >= price ? 'bono' : undefined),
+          giftVoucherPayment:
+            giftVoucherAmount > 0 && giftVoucher
+              ? { voucherId: giftVoucher.id, amountEuro: giftVoucherAmount }
+              : undefined,
         },
       )
       .subscribe({
@@ -6246,10 +6744,13 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected deleteEmployee(email: string): void {
-    if (typeof window !== 'undefined' && !window.confirm('¿Eliminar este empleado?')) {
-      return;
-    }
+    this.openConfirmDialog(
+      { title: 'Eliminar empleado', message: '¿Eliminar este empleado?', acceptLabel: 'Eliminar' },
+      () => this.performDeleteEmployee(email),
+    );
+  }
 
+  private performDeleteEmployee(email: string): void {
     this.employeeError.set('');
     this.employeeMessage.set('');
     this.employeeActionLoadingEmail.set(email);
@@ -6585,21 +7086,23 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected getReservationPaymentBreakdownLabel(reservation: AdminReservationItem): string {
     const split = reservation.paymentSummary?.splitPayments ?? [];
-
-    if (split.length > 0) {
-      return split
-        .map(
+    const paymentMethods = split.length > 0
+      ? split.map(
           (entry) =>
             `${this.getPaymentMethodDisplayLabel(entry.method)} ${entry.amount.toFixed(2)} €`,
         )
-        .join(' + ');
+      : reservation.paymentMethod
+        ? [this.getPaymentMethodDisplayLabel(reservation.paymentMethod)]
+        : [];
+    const voucherAmount = (reservation.paymentSummary?.giftVoucherPayments ?? []).reduce(
+      (sum, entry) => sum + entry.amountEuro,
+      0,
+    );
+    if (voucherAmount > 0) {
+      paymentMethods.push(`Bono regalo ${voucherAmount.toFixed(2)} €`);
     }
 
-    if (reservation.paymentMethod) {
-      return this.getPaymentMethodDisplayLabel(reservation.paymentMethod);
-    }
-
-    return 'Método no especificado';
+    return paymentMethods.length > 0 ? paymentMethods.join(' + ') : 'Método no especificado';
   }
 
   protected getClientReservationPaymentBadgeLabel(reservation: AdminReservationItem): string {
@@ -6860,6 +7363,9 @@ export class AdminPanelComponent implements OnDestroy {
     this.cobroReservationClientComment.set('');
     this.cobroReservationTreatmentId.set(this.agendaTreatmentCatalog[0]?.id ?? 0);
     this.syncCobroReservationTreatmentPrice();
+    this.paymentVoucherClientId.set('');
+    this.paymentVoucherId.set('');
+    this.paymentVoucherAmount.set('0');
 
     const reservation = this.reservations().find((item) => item.id === reservationId) ?? null;
 
@@ -6896,7 +7402,80 @@ export class AdminPanelComponent implements OnDestroy {
       this.paymentSplitCustomAmount.set('');
     }
 
+    if (reservation && !reservation.paymentReceived) {
+      const clientId = this.findClientCardIdForCustomer(
+        reservation.customerEmail,
+        reservation.customerPhone,
+        reservation.linkedClientId,
+      );
+      this.paymentVoucherClientId.set(clientId);
+      const voucher = this.getReservationPaymentGiftVouchers()[0] ?? null;
+      this.paymentVoucherId.set(voucher?.id ?? '');
+      const voucherDefault = Math.min(
+        this.paymentMethodReservationPriceEuro(),
+        Number(voucher?.balanceEuro ?? 0),
+      );
+      this.paymentVoucherAmount.set(voucherDefault.toFixed(2));
+      const cashRemaining = this.paymentSplitRemainingEuro();
+      this.paymentSplitCustomAmount.set(cashRemaining > 0 ? cashRemaining.toFixed(2) : '');
+    }
+
     this.showPaymentMethodModal.set(true);
+  }
+
+  protected getReservationPaymentGiftVouchers(): ClientGiftVoucherItem[] {
+    const clientId = this.paymentVoucherClientId();
+    const card = this.clientCards().find((item) => item.id === clientId);
+    return (card?.giftVouchers ?? []).filter((voucher) => voucher.balanceEuro > 0);
+  }
+
+  protected getSelectedReservationGiftVoucher(): ClientGiftVoucherItem | null {
+    const voucherId = this.paymentVoucherId();
+    return this.getReservationPaymentGiftVouchers().find((item) => item.id === voucherId) ?? null;
+  }
+
+  protected getReservationGiftVoucherMaximum(): number {
+    const voucher = this.getSelectedReservationGiftVoucher();
+    const amount = Math.max(0, Number(this.paymentVoucherAmount().replace(',', '.')) || 0);
+    const cashPaid = this.paymentSplitTotalEuro();
+    return Number(
+      Math.max(
+        0,
+        Math.min(
+          voucher?.balanceEuro ?? 0,
+          this.paymentMethodReservationPriceEuro() - cashPaid,
+        ),
+      ).toFixed(2),
+    );
+  }
+
+  protected onReservationGiftVoucherChange(event: Event): void {
+    const voucherId = (event.target as HTMLSelectElement).value;
+    this.paymentVoucherId.set(voucherId);
+    const voucher = this.getReservationPaymentGiftVouchers().find((item) => item.id === voucherId);
+    const defaultAmount = Math.min(
+      this.paymentMethodReservationPriceEuro() - this.paymentSplitTotalEuro(),
+      Number(voucher?.balanceEuro ?? 0),
+    );
+    this.paymentVoucherAmount.set(Math.max(0, defaultAmount).toFixed(2));
+    this.paymentSplitCustomAmount.set(this.paymentSplitRemainingEuro().toFixed(2));
+    this.actionError.set('');
+  }
+
+  protected onReservationGiftVoucherAmountInput(value: string): void {
+    const parsed = Number(value.replace(',', '.'));
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      this.paymentVoucherAmount.set(value);
+      return;
+    }
+
+    this.paymentVoucherAmount.set(Math.min(parsed, this.getReservationGiftVoucherMaximum()).toFixed(2));
+    this.paymentSplitCustomAmount.set(this.paymentSplitRemainingEuro().toFixed(2));
+    this.actionError.set('');
+  }
+
+  protected getPaymentVoucherAmountValue(): number {
+    return Math.max(0, Number(this.paymentVoucherAmount().replace(',', '.')) || 0);
   }
 
   protected getReservationPaymentLineItems(
@@ -7123,10 +7702,17 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected removeReservationStockLine(reservationId: string, productId: string): void {
-    if (typeof window !== 'undefined' && !window.confirm('¿Eliminar este producto de la cita?')) {
-      return;
-    }
+    this.openConfirmDialog(
+      {
+        title: 'Eliminar producto',
+        message: '¿Eliminar este producto de la cita?',
+        acceptLabel: 'Eliminar',
+      },
+      () => this.performRemoveReservationStockLine(reservationId, productId),
+    );
+  }
 
+  private performRemoveReservationStockLine(reservationId: string, productId: string): void {
     this.cobroReservationStockError.set('');
     this.cobroReservationStockLoading.set(true);
 
@@ -7283,8 +7869,10 @@ export class AdminPanelComponent implements OnDestroy {
     return (this.cobroSelectedDateIso() || this.getTodayIso()) === this.getTodayIso();
   }
 
-  protected getReservationPaymentMethodLabel(method: 'efectivo' | 'tarjeta' | 'bizum'): string {
+  protected getReservationPaymentMethodLabel(method: 'efectivo' | 'tarjeta' | 'bizum' | 'bono'): string {
     switch (method) {
+      case 'bono':
+        return 'Bono regalo';
       case 'efectivo':
         return 'Efectivo';
       case 'tarjeta':
@@ -7351,12 +7939,14 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected isPaymentSplitBalanced(): boolean {
+    const voucherAmount = Math.max(0, Number(this.paymentVoucherAmount().replace(',', '.')) || 0);
     if (this.paymentSplitEntries().length === 0) {
-      return true;
+      return voucherAmount <= this.paymentMethodReservationPriceEuro() + 0.01;
     }
-
     return (
-      Math.abs(this.paymentSplitTotalEuro() - this.paymentMethodReservationPriceEuro()) <= 0.01
+      Math.abs(
+        this.paymentSplitTotalEuro() + voucherAmount - this.paymentMethodReservationPriceEuro(),
+      ) <= 0.01
     );
   }
 
@@ -7368,6 +7958,9 @@ export class AdminPanelComponent implements OnDestroy {
     const selectedLineIds = this.selectedReservationPaymentLineIds();
     const splitEntries = this.paymentSplitEntries();
     const splitTotal = splitEntries.reduce((acc, entry) => acc + entry.amount, 0);
+    const voucherAmount = Number(this.paymentVoucherAmount().replace(',', '.')) || 0;
+    const cashRequired = Math.max(0, Number((priceEuro - voucherAmount).toFixed(2)));
+    const selectedVoucher = this.getSelectedReservationGiftVoucher();
 
     if (!reservationId) {
       return;
@@ -7385,14 +7978,19 @@ export class AdminPanelComponent implements OnDestroy {
       }))
       .filter((entry) => entry.amount > 0);
 
-    if (normalizedSplit.length > 0 && Math.abs(splitTotal - priceEuro) > 0.01) {
-      this.actionError.set('La suma de los métodos debe coincidir con el total a cobrar.');
+    if (voucherAmount > 0 && (!selectedVoucher || voucherAmount > selectedVoucher.balanceEuro + 0.001)) {
+      this.actionError.set('El bono seleccionado no tiene saldo suficiente.');
       return;
     }
 
-    const resolvedMethod = normalizedSplit[0]?.method ?? paymentMethod;
+    if (normalizedSplit.length > 0 && Math.abs(splitTotal - cashRequired) > 0.01) {
+      this.actionError.set('La suma de los métodos más el bono debe coincidir con el total a cobrar.');
+      return;
+    }
 
-    if (!resolvedMethod) {
+    const resolvedMethod = normalizedSplit[0]?.method ?? (cashRequired > 0 ? paymentMethod : null);
+
+    if (cashRequired > 0 && !resolvedMethod) {
       this.actionError.set('Selecciona un método de pago.');
       return;
     }
@@ -7406,9 +8004,18 @@ export class AdminPanelComponent implements OnDestroy {
     this.http
       .patch<{ ok: boolean; error?: string }>(`/api/admin/reservas/${reservationId}/payment`, {
         paymentReceived: true,
-        paymentMethod: resolvedMethod,
+        paymentMethod: resolvedMethod ?? undefined,
         priceEuro,
-        splitPayments: normalizedSplit.length > 0 ? normalizedSplit : undefined,
+        splitPayments:
+          normalizedSplit.length > 0
+            ? normalizedSplit
+            : cashRequired > 0 && resolvedMethod
+              ? [{ method: resolvedMethod, amount: cashRequired }]
+              : [],
+        giftVoucherPayment:
+          voucherAmount > 0 && selectedVoucher
+            ? { voucherId: selectedVoucher.id, amountEuro: voucherAmount }
+            : undefined,
         paidItemIds: selectedLineIds,
       })
       .subscribe({
@@ -7458,6 +8065,7 @@ export class AdminPanelComponent implements OnDestroy {
 
           this.loadReservations();
           this.loadCierreAutoDiario();
+          this.loadClientCards();
         },
         error: (error) => {
           const apiError = error?.error?.error;
@@ -7479,6 +8087,9 @@ export class AdminPanelComponent implements OnDestroy {
     this.paymentSplitEntries.set([]);
     this.paymentSplitEditorMethod.set('efectivo');
     this.paymentSplitCustomAmount.set('');
+    this.paymentVoucherClientId.set('');
+    this.paymentVoucherId.set('');
+    this.paymentVoucherAmount.set('0');
     this.selectedReservationPaymentLineIds.set([]);
     this.cobroReservationStockProductId.set('');
     this.cobroReservationStockUnits.set('1');
@@ -7935,6 +8546,10 @@ export class AdminPanelComponent implements OnDestroy {
           }
 
           this.loadReservations();
+          if (status === 'rejected') {
+            this.loadClientCards();
+            this.loadCierreAutoDiario();
+          }
         },
         error: (error) => {
           const apiError = error?.error?.error;
@@ -8705,6 +9320,29 @@ export class AdminPanelComponent implements OnDestroy {
     return this.cierreHistorial().find((cierre) => cierre.fechaIso === todayIso) ?? null;
   }
 
+  protected openTodayCierreDetailsModal(): void {
+    const auto = this.cierreAutoDiario();
+    if (!auto) {
+      return;
+    }
+
+    this.openCierreDetailsModal({
+      id: `daily-preview-${auto.dateIso}`,
+      fechaIso: auto.dateIso,
+      efectivo: auto.efectivo,
+      tarjeta: auto.tarjeta,
+      bizum: auto.bizum,
+      total: auto.total,
+      notas: '',
+      registradoPorEmail: '',
+      createdAtIso: auto.updatedAtIso,
+      enviadoAlServicioFiscal: false,
+      idServicioFiscal: '',
+      operationDetails: auto.operationDetails,
+      isDailyPreview: true,
+    });
+  }
+
   protected getCierreStatsTotalAmount(): number {
     return this.getFilteredCierreStatsItems().reduce(
       (sum, cierre) => sum + this.getCierreMetricAmount(cierre, this.cierreStatsMetric()),
@@ -8829,6 +9467,7 @@ export class AdminPanelComponent implements OnDestroy {
       efectivo: true,
       tarjeta: true,
       bizum: true,
+      bono: true,
     });
     this.cierreDetailsEmployeeFilter.set('all');
     this.showCierreDetailsModal.set(true);
@@ -8841,7 +9480,7 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected onCierreDetailsMethodFilterChange(
-    method: 'efectivo' | 'tarjeta' | 'bizum',
+    method: 'efectivo' | 'tarjeta' | 'bizum' | 'bono',
     event: Event,
   ): void {
     const target = event.target as HTMLInputElement;
@@ -8861,6 +9500,7 @@ export class AdminPanelComponent implements OnDestroy {
       efectivo: true,
       tarjeta: true,
       bizum: true,
+      bono: true,
     });
     this.cierreDetailsEmployeeFilter.set('all');
   }
@@ -8889,7 +9529,15 @@ export class AdminPanelComponent implements OnDestroy {
     }
 
     return this.getSortedCierreOperationDetails(cierre).filter((detail) => {
-      if (!filters[detail.paymentMethod]) {
+      const voucherAmount = Number(detail.voucherAmountEuro ?? 0);
+      const cashMethods = detail.paymentBreakdown?.length
+        ? detail.paymentBreakdown.map((entry) => entry.method)
+        : detail.amount > 0
+          ? [detail.paymentMethod]
+          : [];
+      const matchesCash = cashMethods.some((method) => filters[method]);
+      const matchesVoucher = voucherAmount > 0 && filters.bono;
+      if (!matchesCash && !matchesVoucher) {
         return false;
       }
 
@@ -8902,10 +9550,35 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected getSelectedCierreDetailsFilteredTotal(): number {
-    return this.getSelectedCierreDetailItems().reduce((sum, detail) => sum + detail.amount, 0);
+    const filters = this.cierreDetailsMethodFilters();
+    return this.getSelectedCierreDetailItems().reduce((sum, detail) => {
+      if (!detail.paymentBreakdown?.length) {
+        return filters[detail.paymentMethod] ? sum + detail.amount : sum;
+      }
+
+      const visibleAmount = detail.paymentBreakdown
+        .filter((entry) => filters[entry.method])
+        .reduce((methodSum, entry) => methodSum + entry.amount, 0);
+      return sum + visibleAmount;
+    }, 0);
   }
 
-  protected getPaymentMethodDisplayLabel(method: 'efectivo' | 'tarjeta' | 'bizum'): string {
+  protected getSelectedCierreDetailsVoucherTotal(): number {
+    if (!this.cierreDetailsMethodFilters().bono) {
+      return 0;
+    }
+    return this.getSelectedCierreDetailItems().reduce((sum, detail) => {
+      const voucherAmount = Math.max(0, Number(detail.voucherAmountEuro ?? 0));
+      return detail.operationType === 'gift_voucher_refund'
+        ? sum - voucherAmount
+        : sum + voucherAmount;
+    }, 0);
+  }
+
+  protected getPaymentMethodDisplayLabel(method: 'efectivo' | 'tarjeta' | 'bizum' | 'bono'): string {
+    if (method === 'bono') {
+      return 'Bono regalo';
+    }
     if (method === 'tarjeta') {
       return 'Tarjeta';
     }
@@ -8917,9 +9590,35 @@ export class AdminPanelComponent implements OnDestroy {
     return 'Efectivo';
   }
 
+  protected getCierreOperationPaymentLabel(detail: CierreOperationDetailItem): string {
+    const voucherAmount = Math.max(0, Number(detail.voucherAmountEuro ?? 0));
+    if (detail.operationType === 'gift_voucher_refund') {
+      return `Reintegro a bono regalo ${voucherAmount.toFixed(2)} €`;
+    }
+    if (!detail.paymentBreakdown?.length) {
+      return voucherAmount > 0
+        ? `Bono regalo ${voucherAmount.toFixed(2)} €`
+        : this.getPaymentMethodDisplayLabel(detail.paymentMethod);
+    }
+
+    const cashLabel = detail.paymentBreakdown
+      .map(
+        (entry) =>
+          `${this.getPaymentMethodDisplayLabel(entry.method)} ${entry.amount.toFixed(2)} €`,
+      )
+      .join(' · ');
+    return voucherAmount > 0
+      ? `${cashLabel} · Bono regalo ${voucherAmount.toFixed(2)} €`
+      : cashLabel;
+  }
+
   private getSortedCierreOperationDetails(cierre: CierreCajaItem): CierreOperationDetailItem[] {
     return (cierre.operationDetails ?? [])
-      .filter((detail) => Number.isFinite(detail.amount) && detail.amount > 0)
+      .filter(
+        (detail) =>
+          Number.isFinite(detail.amount) &&
+          (detail.amount > 0 || Number(detail.voucherAmountEuro ?? 0) > 0),
+      )
       .slice()
       .sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso));
   }
@@ -10445,6 +11144,8 @@ export class AdminPanelComponent implements OnDestroy {
           this.closeAgendaDeleteReservationModal();
           this.cancelAgendaUnassignedReservationAssign();
           this.loadReservations();
+          this.loadClientCards();
+          this.loadCierreAutoDiario();
         },
         error: (error) => {
           const apiError = error?.error?.error;
@@ -10530,6 +11231,7 @@ export class AdminPanelComponent implements OnDestroy {
 
       this.agendaDetailError.set('');
       this.senalPaymentMethod.set('');
+      this.initializeSignalGiftVoucher();
       this.senalError.set('');
       this.showSenalModal.set(true);
       return;
@@ -10563,6 +11265,7 @@ export class AdminPanelComponent implements OnDestroy {
 
     // Open the señal modal before confirming
     this.senalPaymentMethod.set('');
+    this.initializeSignalGiftVoucher();
     this.senalError.set('');
     this.showSenalModal.set(true);
   }
@@ -10570,8 +11273,69 @@ export class AdminPanelComponent implements OnDestroy {
   protected closeSenalModal(): void {
     this.showSenalModal.set(false);
     this.senalPaymentMethod.set('');
+    this.senalVoucherClientId.set('');
+    this.senalVoucherId.set('');
+    this.senalVoucherAmount.set('0');
     this.senalError.set('');
     this.senalLoading.set(false);
+  }
+
+  private initializeSignalGiftVoucher(): void {
+    const reservation = this.agendaDetailReservation();
+    const clientId = reservation
+      ? this.findClientCardIdForCustomer(
+          reservation.customerEmail,
+          reservation.customerPhone,
+          reservation.linkedClientId,
+        )
+      : '';
+    this.senalVoucherClientId.set(clientId);
+    const voucher = (this.clientCards().find((card) => card.id === clientId)?.giftVouchers ?? [])
+      .filter((item) => item.balanceEuro > 0)[0];
+    this.senalVoucherId.set(voucher?.id ?? '');
+    this.senalVoucherAmount.set(Math.min(this.SENAL_AMOUNT, voucher?.balanceEuro ?? 0).toFixed(2));
+    this.senalPaymentMethod.set(
+      voucher && voucher.balanceEuro >= this.SENAL_AMOUNT ? 'bono' : '',
+    );
+  }
+
+  protected getSignalGiftVouchers(): ClientGiftVoucherItem[] {
+    const card = this.clientCards().find((item) => item.id === this.senalVoucherClientId());
+    return (card?.giftVouchers ?? []).filter((voucher) => voucher.balanceEuro > 0);
+  }
+
+  protected getSelectedSignalGiftVoucher(): ClientGiftVoucherItem | null {
+    return this.getSignalGiftVouchers().find((voucher) => voucher.id === this.senalVoucherId()) ?? null;
+  }
+
+  protected onSignalGiftVoucherChange(event: Event): void {
+    const voucherId = (event.target as HTMLSelectElement).value;
+    this.senalVoucherId.set(voucherId);
+    const voucher = this.getSignalGiftVouchers().find((item) => item.id === voucherId);
+    const amount = Math.min(this.SENAL_AMOUNT, voucher?.balanceEuro ?? 0);
+    this.senalVoucherAmount.set(amount.toFixed(2));
+    this.senalPaymentMethod.set(amount >= this.SENAL_AMOUNT ? 'bono' : '');
+  }
+
+  protected onSignalGiftVoucherAmountInput(value: string): void {
+    const voucher = this.getSelectedSignalGiftVoucher();
+    const parsed = Number(value.replace(',', '.'));
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      this.senalVoucherAmount.set(value);
+      return;
+    }
+
+    const amount = Math.min(this.SENAL_AMOUNT, voucher?.balanceEuro ?? 0, parsed);
+    this.senalVoucherAmount.set(amount.toFixed(2));
+    if (amount >= this.SENAL_AMOUNT) {
+      this.senalPaymentMethod.set('bono');
+    } else if (this.senalPaymentMethod() === 'bono') {
+      this.senalPaymentMethod.set('');
+    }
+  }
+
+  protected getSignalGiftVoucherAmountValue(): number {
+    return Math.max(0, Number(this.senalVoucherAmount().replace(',', '.')) || 0);
   }
 
   protected canAddSignalToConfirmedAgendaReservation(reservation: AdminReservationItem): boolean {
@@ -10584,21 +11348,31 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected submitSenalAndConfirm(): void {
     const method = this.senalPaymentMethod();
-
-    if (!method) {
-      this.senalError.set('Elige una opción antes de continuar.');
-      return;
-    }
-
+    const voucherAmount = Math.max(0, Number(this.senalVoucherAmount().replace(',', '.')) || 0);
+    const voucher = this.getSelectedSignalGiftVoucher();
+    const cashRequired = Math.max(0, Number((this.SENAL_AMOUNT - voucherAmount).toFixed(2)));
     const alreadyAccepted = this.isSenalModalForConfirmedReservation();
 
-    if (method === 'sin_senal') {
+    if (method === 'sin_senal' && voucherAmount === 0) {
       this.closeSenalModal();
 
       if (!alreadyAccepted) {
         this.confirmAgendaDetailSignal();
       }
 
+      return;
+    }
+
+    if (voucherAmount > 0 && (!voucher || voucherAmount > voucher.balanceEuro + 0.001)) {
+      this.senalError.set('El bono seleccionado no tiene saldo suficiente.');
+      return;
+    }
+    if (cashRequired > 0 && (!method || method === 'sin_senal' || method === 'bono')) {
+      this.senalError.set('Selecciona cómo se cobrará la diferencia de la señal.');
+      return;
+    }
+    if (voucherAmount === 0 && (!method || method === 'bono')) {
+      this.senalError.set('Elige una opción antes de continuar.');
       return;
     }
 
@@ -10614,8 +11388,12 @@ export class AdminPanelComponent implements OnDestroy {
 
     this.http
       .post<{ ok: boolean; error?: string }>(`/api/admin/reservas/${reservation.id}/senal`, {
-        paymentMethod: method,
+        paymentMethod: cashRequired > 0 ? method : 'bono',
         amount: this.SENAL_AMOUNT,
+        giftVoucherPayment:
+          voucherAmount > 0 && voucher
+            ? { voucherId: voucher.id, amountEuro: voucherAmount }
+            : undefined,
       })
       .subscribe({
         next: (response) => {
@@ -10627,6 +11405,7 @@ export class AdminPanelComponent implements OnDestroy {
 
           this.closeSenalModal();
           this.loadCierreAutoDiario();
+          this.loadClientCards();
 
           if (alreadyAccepted) {
             this.loadReservations();
@@ -11422,6 +12201,7 @@ export class AdminPanelComponent implements OnDestroy {
         dateIso: nextDateIso,
         startTime: nextStartTime,
         durationMinutes: nextDurationMinutes,
+        workerEmail: nextWorkerEmail,
         appointmentTypeName: nextAppointmentTypeName,
         customerName: r.customerName,
         customerPhone: r.customerPhone,
@@ -11485,41 +12265,8 @@ export class AdminPanelComponent implements OnDestroy {
             this.loadReservations();
           };
 
-          if (!isWorkerChanged) {
-            applyLocalUpdate();
-            this.agendaDetailSaving.set(false);
-            return;
-          }
-
-          this.http
-            .patch<{ ok: boolean; error?: string }>(`/api/admin/reservas/${r.id}/assign`, {
-              assigneeEmail: nextWorkerEmail,
-            })
-            .subscribe({
-              next: (assignResponse) => {
-                if (!assignResponse.ok) {
-                  this.agendaDetailError.set(
-                    assignResponse.error ?? 'No se pudo reasignar la cita a la trabajadora.',
-                  );
-                  this.loadReservations();
-                  this.agendaDetailSaving.set(false);
-                  return;
-                }
-
-                applyLocalUpdate(nextWorkerEmail);
-                this.agendaDetailSaving.set(false);
-              },
-              error: (error) => {
-                const apiError = error?.error?.error;
-                this.agendaDetailError.set(
-                  typeof apiError === 'string' && apiError
-                    ? apiError
-                    : 'No se pudo reasignar la cita a la trabajadora.',
-                );
-                this.loadReservations();
-                this.agendaDetailSaving.set(false);
-              },
-            });
+          applyLocalUpdate(nextWorkerEmail);
+          this.agendaDetailSaving.set(false);
         },
         error: (error) => {
           const apiError = error?.error?.error;
@@ -11537,10 +12284,41 @@ export class AdminPanelComponent implements OnDestroy {
       return;
     }
 
-    if (
-      typeof window !== 'undefined' &&
-      !window.confirm(`¿Cancelar la cita de ${r.customerName}? Esta acción no se puede deshacer.`)
-    ) {
+    this.openConfirmDialog(
+      {
+        title: 'Cancelar cita',
+        message: `¿Cancelar la cita de ${r.customerName}? Esta acción no se puede deshacer.`,
+        acceptLabel: 'Sí, cancelar cita',
+      },
+      () => this.performCancelAgendaReservationFromDetail(),
+    );
+  }
+
+  private openConfirmDialog(
+    options: { title: string; message: string; acceptLabel?: string },
+    onAccept: () => void,
+  ): void {
+    this.confirmDialog.set({
+      title: options.title,
+      message: options.message,
+      acceptLabel: options.acceptLabel ?? 'Aceptar',
+      onAccept,
+    });
+  }
+
+  protected closeConfirmDialog(): void {
+    this.confirmDialog.set(null);
+  }
+
+  protected acceptConfirmDialog(): void {
+    const dialog = this.confirmDialog();
+    this.confirmDialog.set(null);
+    dialog?.onAccept();
+  }
+
+  private performCancelAgendaReservationFromDetail(): void {
+    const r = this.agendaDetailReservation();
+    if (!r) {
       return;
     }
 
@@ -11565,6 +12343,8 @@ export class AdminPanelComponent implements OnDestroy {
           );
           this.closeAgendaReservationDetail();
           this.loadReservations();
+          this.loadClientCards();
+          this.loadCierreAutoDiario();
         },
         error: (error) => {
           const apiError = error?.error?.error;

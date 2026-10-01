@@ -1,0 +1,515 @@
+[
+  {
+    "id": "client-1790846886184-duz2g4l8",
+    "fullName": "Lucía Martín",
+    "email": "lucia.martin@cliente.local",
+    "phone": "611 100 101",
+    "notes": "Le gusta reservar por la tarde.",
+    "createdAtIso": "2026-09-28T09:28:06.184Z",
+    "createdByEmail": "ferperezsanchez@gmail.com",
+    "treatments": [
+      {
+        "id": "treat-1790846886184-n6bnps86",
+        "name": "Corte + peinado",
+        "note": "Mantenimiento de puntas",
+        "createdAtIso": "2026-09-21T09:28:06.184Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886184-7xv29dxy",
+        "name": "Hidratación profunda",
+        "note": "Cabello seco",
+        "createdAtIso": "2026-09-14T09:28:06.184Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886184-bk3tikz2",
+        "name": "Corte + peinado",
+        "note": "Retoque mensual",
+        "createdAtIso": "2026-09-07T09:28:06.184Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      }
+    ],
+    "birthDateIso": "",
+    "hasAviso": false,
+    "giftVouchers": [],
+    "appointmentNotes": []
+  },
+  {
+    "id": "client-1790846886204-am8jw8rx",
+    "fullName": "Carmen Ruiz",
+    "email": "carmen.ruiz@cliente.local",
+    "phone": "611 100 102",
+    "notes": "Piel sensible en cuero cabelludo.",
+    "createdAtIso": "2026-09-25T09:28:06.204Z",
+    "createdByEmail": "ferperezsanchez@gmail.com",
+    "treatments": [
+      {
+        "id": "treat-1790846886204-xvykzbam",
+        "name": "Tratamiento calmante",
+        "note": "Cuero cabelludo sensible",
+        "createdAtIso": "2026-09-18T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-mdj7s2dx",
+        "name": "Color raíz",
+        "note": "Mantenimiento del color",
+        "createdAtIso": "2026-09-11T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-sds8n8ib",
+        "name": "Matiz",
+        "note": "Neutralizar tonos cálidos",
+        "createdAtIso": "2026-09-04T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-v0ghecly",
+        "name": "Color raíz",
+        "note": "Cobertura de cana",
+        "createdAtIso": "2026-08-28T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      }
+    ],
+    "birthDateIso": "",
+    "hasAviso": false,
+    "giftVouchers": [],
+    "appointmentNotes": []
+  },
+  {
+    "id": "client-1790846886204-m3ift8xe",
+    "fullName": "Marta Alonso",
+    "email": "marta.alonso@cliente.local",
+    "phone": "611 100 103",
+    "notes": "Prefiere tonos fríos.",
+    "createdAtIso": "2026-09-22T09:28:06.204Z",
+    "createdByEmail": "ferperezsanchez@gmail.com",
+    "treatments": [
+      {
+        "id": "treat-1790846886204-q5uj84cu",
+        "name": "Corte + peinado",
+        "note": "Dar forma final",
+        "createdAtIso": "2026-09-15T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-1pwlbcoe",
+        "name": "Balayage",
+        "note": "Refuerzo de medios y puntas",
+        "createdAtIso": "2026-09-08T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-s9mxg3aa",
+        "name": "Matiz",
+        "note": "Tonos fríos",
+        "createdAtIso": "2026-09-01T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-w65rf7ma",
+        "name": "Balayage",
+        "note": "Reflejos suaves",
+        "createdAtIso": "2026-08-25T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      }
+    ],
+    "birthDateIso": "",
+    "hasAviso": false,
+    "giftVouchers": [],
+    "appointmentNotes": []
+  },
+  {
+    "id": "client-1790846886204-ckkgx3hu",
+    "fullName": "Patricia Gómez",
+    "email": "patricia.gomez@cliente.local",
+    "phone": "611 100 104",
+    "notes": "Suele pedir corte + peinado.",
+    "createdAtIso": "2026-09-19T09:28:06.204Z",
+    "createdByEmail": "ferperezsanchez@gmail.com",
+    "treatments": [
+      {
+        "id": "treat-1790846886204-dldrrjba",
+        "name": "Peinado evento",
+        "note": "Boda de tarde",
+        "createdAtIso": "2026-09-12T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-h51jkrl7",
+        "name": "Botox capilar",
+        "note": "Control de encrespado",
+        "createdAtIso": "2026-09-05T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-0fb25ess",
+        "name": "Corte + peinado",
+        "note": "Cambio de look",
+        "createdAtIso": "2026-08-29T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      }
+    ],
+    "birthDateIso": "",
+    "hasAviso": false,
+    "giftVouchers": [],
+    "appointmentNotes": []
+  },
+  {
+    "id": "client-1790846886204-jdlflvsp",
+    "fullName": "Laura Pérez",
+    "email": "laura.perez@cliente.local",
+    "phone": "611 100 105",
+    "notes": "Avisar con antelación para sábados.",
+    "createdAtIso": "2026-09-16T09:28:06.204Z",
+    "createdByEmail": "ferperezsanchez@gmail.com",
+    "treatments": [
+      {
+        "id": "treat-1790846886204-9m6snph2",
+        "name": "Corte + peinado",
+        "note": "Saneado",
+        "createdAtIso": "2026-09-09T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-xbxmwf7o",
+        "name": "Hidratación profunda",
+        "note": "Recuperación post-color",
+        "createdAtIso": "2026-09-02T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-plpl8tx2",
+        "name": "Mechas babylight",
+        "note": "Mantenimiento parcial",
+        "createdAtIso": "2026-08-26T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-s3ivki58",
+        "name": "Matiz",
+        "note": "Ajuste ceniza",
+        "createdAtIso": "2026-08-19T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-pdq8huvk",
+        "name": "Mechas babylight",
+        "note": "Iluminar contorno",
+        "createdAtIso": "2026-08-12T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      }
+    ],
+    "birthDateIso": "",
+    "hasAviso": false,
+    "giftVouchers": [],
+    "appointmentNotes": []
+  },
+  {
+    "id": "client-1790846886204-1ndzqjmv",
+    "fullName": "Ana Torres",
+    "email": "ana.torres@cliente.local",
+    "phone": "611 100 106",
+    "notes": "Cabello muy largo.",
+    "createdAtIso": "2026-09-13T09:28:06.204Z",
+    "createdByEmail": "ferperezsanchez@gmail.com",
+    "treatments": [
+      {
+        "id": "treat-1790846886204-v2kcnaxk",
+        "name": "Hidratación profunda",
+        "note": "Sellado de puntas",
+        "createdAtIso": "2026-09-06T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-268wjqus",
+        "name": "Corte + peinado",
+        "note": "Definir capas largas",
+        "createdAtIso": "2026-08-30T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-ughmos4z",
+        "name": "Alisado keratina",
+        "note": "Reducir volumen",
+        "createdAtIso": "2026-08-23T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      }
+    ],
+    "birthDateIso": "",
+    "hasAviso": false,
+    "giftVouchers": [],
+    "appointmentNotes": []
+  },
+  {
+    "id": "client-1790846886204-7zcxtpil",
+    "fullName": "Elena Navarro",
+    "email": "elena.navarro@cliente.local",
+    "phone": "611 100 107",
+    "notes": "Cliente recurrente mensual.",
+    "createdAtIso": "2026-09-10T09:28:06.204Z",
+    "createdByEmail": "ferperezsanchez@gmail.com",
+    "treatments": [
+      {
+        "id": "treat-1790846886204-n240f5fz",
+        "name": "Tratamiento reparación",
+        "note": "Proteger fibra",
+        "createdAtIso": "2026-09-03T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-nzd444xe",
+        "name": "Color fantasía",
+        "note": "Refresco de intensidad",
+        "createdAtIso": "2026-08-27T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-2vvpvc9h",
+        "name": "Matiz",
+        "note": "Brillo extra",
+        "createdAtIso": "2026-08-20T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-7afbkafo",
+        "name": "Color fantasía",
+        "note": "Tono cereza",
+        "createdAtIso": "2026-08-13T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      }
+    ],
+    "birthDateIso": "",
+    "hasAviso": false,
+    "giftVouchers": [],
+    "appointmentNotes": []
+  },
+  {
+    "id": "client-1790846886204-jlx5kdwk",
+    "fullName": "Sonia Díaz",
+    "email": "sonia.diaz@cliente.local",
+    "phone": "611 100 108",
+    "notes": "Prefiere cita temprana.",
+    "createdAtIso": "2026-09-07T09:28:06.204Z",
+    "createdByEmail": "ferperezsanchez@gmail.com",
+    "treatments": [
+      {
+        "id": "treat-1790846886204-g0lbjoqn",
+        "name": "Peinado express",
+        "note": "Antes del trabajo",
+        "createdAtIso": "2026-08-31T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-wmmr7wnm",
+        "name": "Corte pixie",
+        "note": "Texturizado superior",
+        "createdAtIso": "2026-08-24T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-81eoorc7",
+        "name": "Color raíz",
+        "note": "Cobertura parcial",
+        "createdAtIso": "2026-08-17T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-xva3mjc9",
+        "name": "Corte pixie",
+        "note": "Repaso de nuca",
+        "createdAtIso": "2026-08-10T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      }
+    ],
+    "birthDateIso": "",
+    "hasAviso": false,
+    "giftVouchers": [],
+    "appointmentNotes": []
+  },
+  {
+    "id": "client-1790846886204-6z9rf6fx",
+    "fullName": "Natalia Castro",
+    "email": "natalia.castro@cliente.local",
+    "phone": "611 100 109",
+    "notes": "Mechas cada 8 semanas.",
+    "createdAtIso": "2026-09-04T09:28:06.204Z",
+    "createdByEmail": "ferperezsanchez@gmail.com",
+    "treatments": [
+      {
+        "id": "treat-1790846886204-9kbgtmg8",
+        "name": "Hidratación profunda",
+        "note": "Post decoloración",
+        "createdAtIso": "2026-08-28T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-at2fm123",
+        "name": "Mechas balayage",
+        "note": "Mantenimiento cada 8 semanas",
+        "createdAtIso": "2026-08-21T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-l2is5ffi",
+        "name": "Matiz",
+        "note": "Enfriar reflejo",
+        "createdAtIso": "2026-08-14T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-cnf8iwm3",
+        "name": "Mechas balayage",
+        "note": "Claridad media melena",
+        "createdAtIso": "2026-08-07T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      }
+    ],
+    "birthDateIso": "",
+    "hasAviso": false,
+    "giftVouchers": [],
+    "appointmentNotes": []
+  },
+  {
+    "id": "client-1790846886204-9jwh5eqi",
+    "fullName": "Beatriz Molina",
+    "email": "beatriz.molina@cliente.local",
+    "phone": "611 100 110",
+    "notes": "Suele venir con pack cuidado.",
+    "createdAtIso": "2026-09-01T09:28:06.204Z",
+    "createdByEmail": "ferperezsanchez@gmail.com",
+    "treatments": [
+      {
+        "id": "treat-1790846886204-gje8k11v",
+        "name": "Pack cuidado",
+        "note": "Hidratación intensiva",
+        "createdAtIso": "2026-08-25T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-fo7i96n2",
+        "name": "Brushing",
+        "note": "Acabado de volumen",
+        "createdAtIso": "2026-08-18T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-58im57wh",
+        "name": "Pack cuidado",
+        "note": "Sesión de mantenimiento",
+        "createdAtIso": "2026-08-11T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-wi2zgbxm",
+        "name": "Corte + peinado",
+        "note": "Largo medio",
+        "createdAtIso": "2026-08-04T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886204-5vrs6st3",
+        "name": "Pack cuidado",
+        "note": "Lavado + mascarilla + masaje",
+        "createdAtIso": "2026-07-28T09:28:06.204Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      }
+    ],
+    "birthDateIso": "",
+    "hasAviso": false,
+    "giftVouchers": [],
+    "appointmentNotes": []
+  },
+  {
+    "id": "client-1790846886253-e9y5ybo9",
+    "fullName": "Irene Delgado",
+    "email": "eneridelgado@gmail.com",
+    "phone": "611 200 200",
+    "notes": "Cliente demo para visualización de historial.",
+    "createdAtIso": "2025-09-10T09:00:00.000Z",
+    "createdByEmail": "ferperezsanchez@gmail.com",
+    "passwordHash": "7aa8240cff55ee434f709b5687ac62c8:266b8c8f63ca75481c7dd6121c9d7fa438bf4d2832d02b318acac7bf5deccb4d163ec9f2f1c2e189b3980b826be2ba51c4008aa09b60762551cda65fd2f3a1a1",
+    "treatments": [
+      {
+        "id": "treat-1790846886253-s1d3ned3",
+        "name": "Pack Corte",
+        "note": "[MOCK IRENE] Reserva pasada · febrero · Cobrada desde agenda (2026-10-02 10:00) · final 40.00 € sin método",
+        "createdAtIso": "2026-02-07T17:30:00.000Z",
+        "createdByEmail": "ferperezsanchez@gmail.com",
+        "paymentMethod": "efectivo",
+        "priceEuro": 40
+      },
+      {
+        "id": "treat-1790846886253-xl0io26m",
+        "name": "Pack Invitada · Opción 2",
+        "note": "[MOCK IRENE] Reserva pasada · enero",
+        "createdAtIso": "2026-01-11T09:30:00.000Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886253-0axajgrm",
+        "name": "Pack Ilumina",
+        "note": "[MOCK IRENE] Reserva pasada · noviembre",
+        "createdAtIso": "2025-11-23T11:00:00.000Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886253-z7lw1n2l",
+        "name": "Pack Color",
+        "note": "[MOCK IRENE] Reserva pasada · octubre",
+        "createdAtIso": "2025-10-18T16:00:00.000Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      },
+      {
+        "id": "treat-1790846886253-51nws8gx",
+        "name": "Pack Corte y Peinado",
+        "note": "[MOCK IRENE] Reserva pasada · septiembre",
+        "createdAtIso": "2025-09-12T10:30:00.000Z",
+        "createdByEmail": "ferperezsanchez@gmail.com"
+      }
+    ],
+    "birthDateIso": "",
+    "hasAviso": false,
+    "giftVouchers": [
+      {
+        "id": "bono-1790846963906-cu9nvgj",
+        "initialAmountEuro": 100,
+        "balanceEuro": 48,
+        "issuedAtIso": "2026-10-01T09:29:23.906Z",
+        "issuedByEmail": "ferperezsanchez@gmail.com",
+        "paymentMethod": "efectivo",
+        "ledger": [
+          {
+            "id": "mov-bono-1790847515418-v19ncu",
+            "type": "redeemed",
+            "amountEuro": 12,
+            "createdAtIso": "2026-10-01T09:38:35.418Z",
+            "createdByEmail": "ferperezsanchez@gmail.com",
+            "concept": "Compra de prueba ×1"
+          },
+          {
+            "id": "mov-bono-1790847103545-2dgvt6",
+            "type": "redeemed",
+            "amountEuro": 40,
+            "createdAtIso": "2026-10-01T09:31:43.545Z",
+            "createdByEmail": "ferperezsanchez@gmail.com",
+            "concept": "Cita Pack Corte (2026-10-02 10:00)",
+            "reservationId": "2026-10-02-600-1790847003606"
+          },
+          {
+            "id": "mov-bono-1790846963906-nfsaca",
+            "type": "issued",
+            "amountEuro": 100,
+            "createdAtIso": "2026-10-01T09:29:23.906Z",
+            "createdByEmail": "ferperezsanchez@gmail.com",
+            "concept": "Bono regalo emitido",
+            "paymentMethod": "efectivo"
+          }
+        ]
+      }
+    ],
+    "appointmentNotes": []
+  }
+]

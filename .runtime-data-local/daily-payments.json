@@ -1,0 +1,100 @@
+[
+  {
+    "dateIso": "2026-10-01",
+    "efectivo": 100,
+    "tarjeta": 0,
+    "bizum": 0,
+    "total": 100,
+    "updatedAtIso": "2026-10-01T09:38:35.437Z",
+    "operationDetails": [
+      {
+        "id": "payop_1790847515428_0bo025",
+        "operationType": "stock_sale",
+        "concept": "Venta stock: prueba (1 ud.) · Irene Delgado · Bono: 12.00 € · Precios: prueba: 12,00 €",
+        "amount": 0,
+        "paymentMethod": "efectivo",
+        "paymentBreakdown": [],
+        "paymentType": "stock",
+        "voucherAmountEuro": 12,
+        "totalCoveredAmountEuro": 12,
+        "voucherPayments": [
+          {
+            "voucherId": "bono-1790846963906-cu9nvgj",
+            "amountEuro": 12,
+            "clientName": "Irene Delgado"
+          }
+        ],
+        "clientCardId": "client-1790846886253-e9y5ybo9",
+        "clientName": "Irene Delgado",
+        "lineItems": [
+          {
+            "kind": "stock",
+            "name": "prueba",
+            "quantity": 1,
+            "unitPriceEuro": 12,
+            "amount": 12
+          }
+        ],
+        "performedByEmail": "ferperezsanchez@gmail.com",
+        "createdAtIso": "2026-10-01T09:38:35.429Z"
+      },
+      {
+        "id": "payop_1790847103551_g27oj1",
+        "operationType": "reservation_payment",
+        "concept": "Pago final cita: Irene Delgado · Pack Corte · 2026-10-02 10:00 · Conceptos: Pack Corte · Bono regalo aplicado: 40.00 € · Precios: Pack Corte: 40,00 €",
+        "amount": 0,
+        "paymentMethod": "efectivo",
+        "paymentBreakdown": [],
+        "paymentType": "final",
+        "voucherAmountEuro": 40,
+        "totalCoveredAmountEuro": 40,
+        "voucherPayments": [
+          {
+            "voucherId": "bono-1790846963906-cu9nvgj",
+            "amountEuro": 40,
+            "clientName": "Irene Delgado"
+          }
+        ],
+        "clientCardId": "client-1790846886253-e9y5ybo9",
+        "clientName": "Irene Delgado",
+        "reservationId": "2026-10-02-600-1790847003606",
+        "reservationDateIso": "2026-10-02",
+        "reservationStartTime": "10:00",
+        "appointmentTypeName": "Pack Corte",
+        "lineItems": [
+          {
+            "kind": "service",
+            "name": "Pack Corte",
+            "quantity": 1,
+            "unitPriceEuro": 40,
+            "amount": 40
+          }
+        ],
+        "performedByEmail": "ferperezsanchez@gmail.com",
+        "createdAtIso": "2026-10-01T09:31:43.551Z"
+      },
+      {
+        "id": "payop_1790846963909_tl1m8r",
+        "operationType": "gift_voucher_sale",
+        "concept": "Bono regalo 100.00 € · Precios: Bono regalo: 100,00 €",
+        "amount": 100,
+        "paymentMethod": "efectivo",
+        "voucherAmountEuro": 0,
+        "totalCoveredAmountEuro": 100,
+        "clientCardId": "client-1790846886253-e9y5ybo9",
+        "clientName": "Irene Delgado",
+        "lineItems": [
+          {
+            "kind": "service",
+            "name": "Bono regalo",
+            "quantity": 1,
+            "unitPriceEuro": 100,
+            "amount": 100
+          }
+        ],
+        "performedByEmail": "ferperezsanchez@gmail.com",
+        "createdAtIso": "2026-10-01T09:29:23.909Z"
+      }
+    ]
+  }
+]

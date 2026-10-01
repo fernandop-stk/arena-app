@@ -9,47 +9,47 @@ let child = null;
 let isShuttingDown = false;
 
 const scheduleStart = () => {
-  if (isShuttingDown) {
-    return;
-  }
-
-  if (!existsSync(target)) {
-    process.stdout.write('Esperando build SSR en dist/arena-app/server/server.mjs...\n');
-    setTimeout(scheduleStart, waitIntervalMs);
-    return;
-  }
-
-  child = spawn(process.execPath, ['--watch', target], {
-    stdio: 'inherit',
-    env: {
-      ...process.env,
-      PORT: '4000',
-    },
-  });
-
-  child.on('exit', (code, signal) => {
-    child = null;
-
     if (isShuttingDown) {
-      process.exit(0);
-      return;
+        return;
     }
 
-    const reason = signal ? `signal ${signal}` : `code ${code ?? 0}`;
-    process.stdout.write(`SSR watcher finalizó (${reason}). Reintentando...\n`);
-    setTimeout(scheduleStart, restartDelayMs);
-  });
+    if (!existsSync(target)) {
+        process.stdout.write('Esperando build SSR en dist/arena-app/server/server.mjs...\n');
+        setTimeout(scheduleStart, waitIntervalMs);
+        return;
+    }
+
+    child = spawn(process.execPath, ['--watch', target], {
+        stdio: 'inherit',
+        env: {
+            ...process.env,
+            PORT: '4000',
+        },
+    });
+
+    child.on('exit', (code, signal) => {
+        child = null;
+
+        if (isShuttingDown) {
+            process.exit(0);
+            return;
+        }
+
+        const reason = signal ? `signal ${signal}` : `code ${code ?? 0}`;
+        process.stdout.write(`SSR watcher finalizó (${reason}). Reintentando...\n`);
+        setTimeout(scheduleStart, restartDelayMs);
+    });
 };
 
 const shutdown = () => {
-  isShuttingDown = true;
+    isShuttingDown = true;
 
-  if (!child) {
-    process.exit(0);
-    return;
-  }
+    if (!child) {
+        process.exit(0);
+        return;
+    }
 
-  child.kill('SIGTERM');
+    child.kill('SIGTERM');
 };
 
 process.on('SIGINT', shutdown);

@@ -71,6 +71,42 @@
         />
       </label>
 
+      @if (giftVouchers.length > 0) {
+        <label class="payment-flow__field">
+          Aplicar bono regalo
+          <select
+            class="payment-flow__input"
+            [value]="selectedGiftVoucherId"
+            (change)="giftVoucherChange.emit($any($event.target).value)"
+          >
+            <option value="">No usar bono</option>
+            @for (voucher of giftVouchers; track voucher.id) {
+              <option [value]="voucher.id">
+                Saldo {{ voucher.balanceEuro | number: '1.2-2' }} €
+              </option>
+            }
+          </select>
+        </label>
+      }
+
+      @if (getSelectedGiftVoucher(); as voucher) {
+        <label class="payment-flow__field">
+          Importe del bono · saldo {{ voucher.balanceEuro | number: '1.2-2' }} €
+          <input
+            class="payment-flow__input"
+            type="number"
+            min="0"
+            step="0.01"
+            [max]="voucher.balanceEuro"
+            [value]="giftVoucherAmount"
+            (input)="giftVoucherAmountChange.emit($any($event.target).value)"
+          />
+        </label>
+        <p class="payment-flow__price-line">
+          Restante a cobrar: <strong>{{ getCashAmountRemaining() | number: '1.2-2' }}€</strong>
+        </p>
+      }
+
       @if (paymentError) {
         <div class="payment-flow__error">
           <p>{{ paymentError }}</p>
@@ -93,7 +129,7 @@
         <button
           type="button"
           class="payment-flow__btn payment-flow__btn--primary"
-          [disabled]="paymentLoading || !selectedMethod"
+          [disabled]="paymentLoading || (getCashAmountRemaining() > 0 && !selectedMethod)"
           (click)="confirm.emit()"
         >
           {{ paymentLoading ? '⏳ Guardando...' : '✓ Confirmar pago' }}

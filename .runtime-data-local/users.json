@@ -1,0 +1,21 @@
+[
+  {
+    "id": "user-1790846886130-clzkkbs0",
+    "email": "ferperezsanchez@gmail.com",
+    "username": "admin",
+    "usernameLower": "admin",
+    "passwordHash": "1344793f2fcf79b544bc371e3a2c99c1:6ea2381ed6bc8991703f8ba593bf6a3c5be3d43131d8664b8d7f3f6f97b915593c40a66ec285e946a861db33f6254158b611580065aedbfb481f3654c4bcd139",
+    "role": "superadmin",
+    "createdAtIso": "2026-10-01T09:28:06.183Z",
+    "tracking": {
+      "workStatus": "idle",
+      "lastCheckInIso": "",
+      "lastCheckOutIso": "",
+      "vacationNote": "",
+      "sickLeaveNote": "",
+      "recoveryHoursNote": "",
+      "history": []
+    },
+    "permissions": []
+  }
+]
