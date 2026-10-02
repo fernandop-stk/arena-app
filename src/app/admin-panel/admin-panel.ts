@@ -18,6 +18,7 @@ import {
   requiresReservationSignalByName,
 } from '../../shared/pack-prices';
 import { TratamientosService, type TratamientoItem } from '../tratamientos/tratamientos.service';
+import { silentErrorsContext } from '../shared/app-error/api-error.interceptor';
 import { AgendaPackPickerModalComponent } from './components/agenda-pack-picker-modal/agenda-pack-picker-modal';
 import { PaymentFlowModalComponent } from './components/payment-flow-modal/payment-flow-modal';
 import { ClientReservationModalComponent } from './components/client-reservation-modal/client-reservation-modal';
@@ -7352,6 +7353,7 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected markPaymentReceivedDirect(reservationId: string): void {
     this.paymentMethodReservationId.set(reservationId);
+    this.actionError.set('');
     this.cobroCatalogTab.set('packs');
     this.selectedPaymentMethod.set('efectivo');
     this.paymentSplitEntries.set([]);
@@ -10305,7 +10307,9 @@ export class AdminPanelComponent implements OnDestroy {
 
   private checkForcedCheckIn(): void {
     this.http
-      .get<{ ok: boolean; tracking?: { lastCheckInIso?: string } }>('/api/empleado/fichaje')
+      .get<{ ok: boolean; tracking?: { lastCheckInIso?: string } }>('/api/empleado/fichaje', {
+        context: silentErrorsContext(),
+      })
       .subscribe({
         next: (res) => {
           if (!res.ok) return;

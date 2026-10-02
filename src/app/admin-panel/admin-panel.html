@@ -5986,7 +5986,9 @@
             <label class="admin-panel--container__label" style="margin-top: 0.75rem; display: grid">
                                             Comentario para la ficha de la clienta (opcional)
                                             <textarea class="admin-panel--container__input admin-panel--container__textarea" rows="3" maxlength="500" [disabled]="paymentMethodReservation()?.paymentReceived" [value]="cobroReservationClientComment()" (input)="onCobroReservationClientCommentInput($event)" placeholder="Al confirmar se añade a la ficha con la fecha y la cita de ese día"></textarea>
-                                        </label>
+                                        </label> @if (actionError()) {
+            <p class="admin-panel--container__error" role="alert">{{ actionError() }}</p>
+            }
 
             <div class="admin-panel--container__modal-actions">
                 <button type="button" class="admin-panel--container__button admin-panel--container__button--secondary" (click)="closePaymentMethodModal()">

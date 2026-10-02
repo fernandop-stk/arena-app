@@ -11,12 +11,38 @@ import {
 } from '@angular/router';
 import { filter, fromEvent } from 'rxjs';
 import { AppService } from './app.service';
+import { AppErrorService } from './shared/app-error/app-error.service';
+import { silentErrorsContext } from './shared/app-error/api-error.interceptor';
 
 @Component({
   selector: 'app-root',
   host: { ngSkipHydration: 'true' },
   imports: [RouterOutlet, RouterLink, RouterLinkActive],
   template: `
+    @if (appErrors.toasts().length > 0) {
+      <div class="app-shell--error-toasts" role="region" aria-label="Avisos de error">
+        @for (toast of appErrors.toasts(); track toast.id) {
+          <div class="app-shell--error-toast" role="alert">
+            <span class="app-shell--error-toast__icon" aria-hidden="true">!</span>
+            <div class="app-shell--error-toast__body">
+              <p class="app-shell--error-toast__message">{{ toast.message }}</p>
+              @if (toast.detail) {
+                <p class="app-shell--error-toast__detail">{{ toast.detail }}</p>
+              }
+            </div>
+            <button
+              type="button"
+              class="app-shell--error-toast__close"
+              aria-label="Cerrar aviso"
+              (click)="appErrors.dismiss(toast.id)"
+            >
+              ×
+            </button>
+          </div>
+        }
+      </div>
+    }
+
     <div class="app-shell">
       <header class="app-shell--header">
         <div class="app-shell--header__container">
@@ -276,6 +302,7 @@ import { AppService } from './app.service';
 export class App {
   private readonly appService = inject(AppService);
   private readonly http = inject(HttpClient);
+  protected readonly appErrors = inject(AppErrorService);
   private readonly router = inject(Router);
   private readonly document = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
@@ -466,7 +493,7 @@ export class App {
           lastCheckInIso?: string;
           lastCheckOutIso?: string;
         };
-      }>('/api/empleado/fichaje')
+      }>('/api/empleado/fichaje', { context: silentErrorsContext() })
       .subscribe({
         next: (response) => {
           this.employeeWorkStatus.set(response?.tracking?.workStatus ?? 'idle');
