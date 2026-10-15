@@ -331,7 +331,7 @@
                                 </button>
                             </li>
                             } @empty {
-                            <li class="admin-panel--container__agenda-search-empty">No hay citas con ese nombre.</li>
+                            <li class="admin-panel--container__agenda-search-empty">No hay citas próximas con ese nombre.</li>
                             }
                         </ul>
                         }
@@ -3850,6 +3850,17 @@
               Comparativa
             </button>
           }
+          @if (canAccessCierreManagementTab('registro')) {
+            <button
+              type="button"
+              class="admin-panel--container__employee-subtab admin-panel--container__employee-subtab--expense"
+              [disabled]="cierreAlreadyClosedToday()"
+              [title]="cierreAlreadyClosedToday() ? 'El cierre de hoy ya está registrado' : 'Registrar un gasto que resta de la caja de hoy'"
+              (click)="openExpenseModal()"
+            >
+              − Gastos
+            </button>
+          }
         </div>
 
         @if (cierreError()) {
@@ -3857,6 +3868,65 @@
         }
         @if (cierreMessage()) {
           <p class="admin-panel--container__success-message">{{ cierreMessage() }}</p>
+        }
+
+        @if (showExpenseModal()) {
+          <div class="admin-panel--container__modal-backdrop" (click)="closeExpenseModal()">
+            <section class="admin-panel--container__modal admin-panel--container__modal--compact" role="dialog" aria-modal="true" aria-label="Registrar gasto" (click)="$event.stopPropagation()">
+              <div class="admin-panel--container__modal-head">
+                <div>
+                  <h3 class="admin-panel--container__modal-title">Registrar gasto</h3>
+                  <p class="admin-panel--container__modal-subtitle">Se resta del acumulado de hoy y aparece en el detalle de operaciones.</p>
+                </div>
+                <button type="button" class="admin-panel--container__modal-close" (click)="closeExpenseModal()" aria-label="Cerrar">×</button>
+              </div>
+
+              <label class="admin-panel--container__label">
+                Tipo de gasto / concepto
+                <input class="admin-panel--container__input" type="text" maxlength="200" placeholder="Ej. Café, bombillas, material de limpieza..." [value]="expenseConcept()" (input)="expenseConcept.set($any($event.target).value)" />
+              </label>
+
+              <label class="admin-panel--container__label">
+                Importe (€)
+                <input class="admin-panel--container__input" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" [value]="expenseAmount()" (input)="expenseAmount.set($any($event.target).value)" />
+              </label>
+
+              <label class="admin-panel--container__label">
+                Pagado con
+                <select class="admin-panel--container__input" (change)="expensePaymentMethod.set($any($event.target).value)">
+                  <option value="efectivo" [selected]="expensePaymentMethod() === 'efectivo'">Efectivo (caja)</option>
+                  <option value="tarjeta" [selected]="expensePaymentMethod() === 'tarjeta'">Tarjeta</option>
+                  <option value="bizum" [selected]="expensePaymentMethod() === 'bizum'">Bizum</option>
+                </select>
+              </label>
+
+              <label class="admin-panel--container__label">
+                Quién hizo el gasto
+                <select class="admin-panel--container__input" (change)="expensePaidByEmail.set($any($event.target).value)">
+                  @for (worker of getAgendaAssignableWorkerOptions(); track worker.email) {
+                    <option [value]="worker.email" [selected]="worker.email === expensePaidByEmail()">{{ worker.label }}</option>
+                  }
+                </select>
+              </label>
+
+              @if (getExpenseAmountValue() > 0) {
+                <p class="admin-panel--container__hint admin-panel--container__hint--compact">
+                  Se restarán <strong>{{ getExpenseAmountValue() | number: '1.2-2' }} €</strong> de {{ getPaymentMethodDisplayLabel(expensePaymentMethod()) }} en el cierre de hoy.
+                </p>
+              }
+
+              @if (expenseError()) {
+                <p class="admin-panel--container__error" role="alert">{{ expenseError() }}</p>
+              }
+
+              <div class="admin-panel--container__modal-actions">
+                <button type="button" class="admin-panel--container__button admin-panel--container__button--secondary" [disabled]="expenseLoading()" (click)="closeExpenseModal()">Cancelar</button>
+                <button type="button" class="admin-panel--container__button admin-panel--container__button--primary" [disabled]="expenseLoading() || !expenseConcept().trim() || getExpenseAmountValue() <= 0 || !expensePaidByEmail()" (click)="submitExpense()">
+                  {{ expenseLoading() ? 'Guardando...' : 'Registrar gasto' }}
+                </button>
+              </div>
+            </section>
+          </div>
         }
 
         @if (cierreManagementTab() === 'registro' && canAccessCierreManagementTab('registro')) {
@@ -4229,175 +4299,134 @@
                     </button>
                   </div>
 
-                  <div
-                    class="admin-panel--container__form-row admin-panel--container__form-row--cierre"
-                  >
-                    <div class="admin-panel--container__form-group">
-                      <label class="admin-panel--container__label">Métodos de cobro</label>
-                      <label class="admin-panel--container__checkbox-label">
-                        <input
-                          type="checkbox"
-                          [checked]="cierreDetailsMethodFilters().efectivo"
-                          (change)="onCierreDetailsMethodFilterChange('efectivo', $event)"
-                        />
-                        Efectivo
-                      </label>
-                      <label class="admin-panel--container__checkbox-label">
-                        <input
-                          type="checkbox"
-                          [checked]="cierreDetailsMethodFilters().tarjeta"
-                          (change)="onCierreDetailsMethodFilterChange('tarjeta', $event)"
-                        />
-                        Tarjeta
-                      </label>
-                      <label class="admin-panel--container__checkbox-label">
-                        <input
-                          type="checkbox"
-                          [checked]="cierreDetailsMethodFilters().bizum"
-                          (change)="onCierreDetailsMethodFilterChange('bizum', $event)"
-                        />
-                        Bizum
-                      </label>
-                      <label class="admin-panel--container__checkbox-label">
-                        <input
-                          type="checkbox"
-                          [checked]="cierreDetailsMethodFilters().bono"
-                          (change)="onCierreDetailsMethodFilterChange('bono', $event)"
-                        />
-                        Bono regalo
-                      </label>
-                    </div>
-
-                    <div class="admin-panel--container__form-group">
-                      <label class="admin-panel--container__label" for="cierreDetailsEmployeeFilter"
-                        >Persona que cobró</label
-                      >
-                      <select
-                        id="cierreDetailsEmployeeFilter"
-                        class="admin-panel--container__input"
-                        [value]="cierreDetailsEmployeeFilter()"
-                        (change)="onCierreDetailsEmployeeFilterInput($event)"
-                      >
-                        <option value="all">Todas</option>
-                        @for (email of getCierreDetailsEmployeeOptions(); track email) {
-                          <option [value]="email">{{ getWorkerDisplayName(email) }}</option>
-                        }
-                      </select>
-                      <button
-                        type="button"
-                        class="admin-panel--container__action-button admin-panel--container__action-button--soft"
-                        style="margin-top: 0.5rem"
-                        (click)="clearCierreDetailsFilters()"
-                      >
-                        Limpiar filtros
-                      </button>
-                    </div>
-                  </div>
-
-                  <div class="admin-panel--container__cierre-summary" style="margin-top: 0.5rem">
-                    <div class="admin-panel--container__cierre-summary-row">
-                      <span class="admin-panel--container__cierre-summary-label"
-                        >Operaciones visibles</span
-                      >
-                      <span class="admin-panel--container__cierre-summary-value">{{
-                        getSelectedCierreDetailItems().length
-                      }}</span>
+<div class="admin-panel--container__cierre-details-toolbar">
+                    <span class="admin-panel--container__cierre-details-toolbar-label">Métodos</span>
+                        <label class="admin-panel--container__checkbox-label">
+                      <input type="checkbox" [checked]="cierreDetailsMethodFilters().efectivo" (change)="onCierreDetailsMethodFilterChange('efectivo', $event)" />
+                      Efectivo
+                    </label>
+                        <label class="admin-panel--container__checkbox-label">
+                      <input type="checkbox" [checked]="cierreDetailsMethodFilters().tarjeta" (change)="onCierreDetailsMethodFilterChange('tarjeta', $event)" />
+                      Tarjeta
+                    </label>
+                        <label class="admin-panel--container__checkbox-label">
+                      <input type="checkbox" [checked]="cierreDetailsMethodFilters().bizum" (change)="onCierreDetailsMethodFilterChange('bizum', $event)" />
+                      Bizum
+                    </label>
+                        <label class="admin-panel--container__checkbox-label">
+                      <input type="checkbox" [checked]="cierreDetailsMethodFilters().bono" (change)="onCierreDetailsMethodFilterChange('bono', $event)" />
+                      Bono
+                    </label>
+                        <label class="admin-panel--container__cierre-details-toolbar-label" for="cierreDetailsEmployeeFilter">Cobró</label>
+                        <select id="cierreDetailsEmployeeFilter" class="admin-panel--container__input admin-panel--container__cierre-details-toolbar-select" [value]="cierreDetailsEmployeeFilter()" (change)="onCierreDetailsEmployeeFilterInput($event)">
+                      <option value="all">Todas</option>
+                      @for (email of getCierreDetailsEmployeeOptions(); track email) {
+                        <option [value]="email">{{ getWorkerDisplayName(email) }}</option>
+                      }
+                    </select>
+                        <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--soft admin-panel--container__cierre-details-toolbar-clear" (click)="clearCierreDetailsFilters()">Limpiar</button>
     </div>
-    <div class="admin-panel--container__cierre-summary-row">
-        <span class="admin-panel--container__cierre-summary-label">Importe visible</span
-                      >
-                      <span class="admin-panel--container__cierre-summary-value"
-                        >{{ getSelectedCierreDetailsFilteredTotal() | number: '1.2-2' }} €</span
-                      >
-                    </div>
-                    @if (getSelectedCierreDetailsVoucherTotal() > 0) {
-                      <div class="admin-panel--container__cierre-summary-row">
-                        <span class="admin-panel--container__cierre-summary-label">Pagado con bono regalo</span>
-        <span class="admin-panel--container__cierre-summary-value">{{ getSelectedCierreDetailsVoucherTotal() | number: '1.2-2' }} €</span
-                        >
-                      </div>
-                    }
-                  </div>
 
-                  <div class="admin-panel--container__table-wrapper admin-panel--container__cierre-details-table-wrapper" style="margin-top: 0.75rem">
-                    <table class="admin-panel--container__table admin-panel--container__cierre-details-table">
-                      <thead>
-                        <tr>
-                          <th>Fecha y hora</th>
-                          <th>Operación</th>
-                          <th>Método</th>
-                          <th>Importe</th>
-                          <th>Realizada por</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        @if (getSelectedCierreDetailItems().length === 0) {
-                          <tr>
-                            <td colspan="5">No hay operaciones para los filtros seleccionados.</td>
-                          </tr>
-                        } @else {
-                          @for (item of getSelectedCierreDetailItems(); track item.id) {
-                            <tr>
-                              <td>{{ formatDateTime(item.createdAtIso) }}</td>
-                              <td>
-                                {{ item.concept }}
-                                @if (item.clientName || item.appointmentTypeName || (item.lineItems?.length ?? 0) > 0 || (item.voucherAmountEuro ?? 0) > 0) {
-                                  <details class="admin-panel--container__cierre-operation-breakdown">
-                                    <summary>Ver desglose</summary>
-                                    <div class="admin-panel--container__cierre-operation-breakdown-content">
-                                      @if (item.clientName) {
-                                        <p><strong>Clienta:</strong> {{ item.clientName }}</p>
-                                      }
-                                      @if (item.appointmentTypeName) {
-                                        <p>
-                                          <strong>Cita:</strong> {{ item.appointmentTypeName }}
-                                          @if (item.reservationDateIso) { · {{ item.reservationDateIso }} }
-                                          @if (item.reservationStartTime) { · {{ item.reservationStartTime }} }
-                                        </p>
-                                      }
-                                      @if (item.lineItems?.length) {
-                                        <ul class="admin-panel--container__cierre-operation-lines">
-                                          @for (line of item.lineItems; track $index) {
-                                            <li>
-                                              <span>
+    <div class="admin-panel--container__cierre-details-summary">
+        <span class="admin-panel--container__employee-stat-chip">Operaciones: <strong>{{ getSelectedCierreDetailItems().length }}</strong></span>
+        <span class="admin-panel--container__employee-stat-chip">Importe visible: <strong>{{ getSelectedCierreDetailsFilteredTotal() | number: '1.2-2' }} €</strong></span> @if (getSelectedCierreDetailsVoucherTotal() > 0) {
+        <span class="admin-panel--container__employee-stat-chip">Bono regalo: <strong>{{ getSelectedCierreDetailsVoucherTotal() | number: '1.2-2' }} €</strong></span> } @if (getSelectedCierreDetailsExpenseTotal() > 0) {
+        <span class="admin-panel--container__employee-stat-chip">Gastos: <strong>−{{ getSelectedCierreDetailsExpenseTotal() | number: '1.2-2' }} €</strong></span> } @if (editCierreOperationError()) {
+        <span class="admin-panel--container__error" role="alert">{{ editCierreOperationError() }}</span> }
+    </div>
+
+    <div class="admin-panel--container__table-wrapper admin-panel--container__cierre-details-table-wrapper" style="margin-top: 0.75rem">
+        <table class="admin-panel--container__table admin-panel--container__cierre-details-table">
+            <thead class="admin-panel--container__cierre-details-table-head">
+                <tr>
+                    <th>Fecha y hora</th>
+                    <th>Operación</th>
+                    <th>Método</th>
+                    <th>Importe</th>
+                    <th>Realizada por</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (getSelectedCierreDetailItems().length === 0) {
+                <tr>
+                    <td colspan="5">No hay operaciones para los filtros seleccionados.</td>
+                </tr>
+                } @else { @for (item of getSelectedCierreDetailItems(); track item.id) {
+                <tr [class.admin-panel--container__cierre-row--expense]="item.operationType === 'expense'">
+                    <td>{{ formatDateTime(item.createdAtIso) }}</td>
+                    <td>
+                        {{ item.concept }} @if (item.clientName || item.appointmentTypeName || (item.lineItems?.length ?? 0) > 0 || (item.voucherAmountEuro ?? 0) > 0) {
+                        <details class="admin-panel--container__cierre-operation-breakdown">
+                            <summary>Ver desglose</summary>
+                            <div class="admin-panel--container__cierre-operation-breakdown-content">
+                                @if (item.clientName) {
+                                <p><strong>Clienta:</strong> {{ item.clientName }}</p>
+                                } @if (item.appointmentTypeName) {
+                                <p>
+                                    <strong>Cita:</strong> {{ item.appointmentTypeName }} @if (item.reservationDateIso) { · {{ item.reservationDateIso }} } @if (item.reservationStartTime) { · {{ item.reservationStartTime }} }
+                                </p>
+                                } @if (item.lineItems?.length) {
+                                <ul class="admin-panel--container__cierre-operation-lines">
+                                    @for (line of item.lineItems; track $index) {
+                                    <li>
+                                        <span>
                                                 <strong>{{ line.kind === 'stock' ? 'Producto' : line.kind === 'other' ? 'Ajuste' : 'Servicio' }}:</strong>
                                                 {{ line.name }} · {{ line.quantity }} ud ×
                                                 {{ line.unitPriceEuro | number: '1.2-2' }} €
                                               </span>
-        <strong>{{ line.amount | number: '1.2-2' }} €</strong>
-        </li>
-        }
-        </ul>
-        } @if (item.paymentBreakdown?.length) {
-        <p><strong>Reparto del pago:</strong> {{ getCierreOperationPaymentLabel(item) }}</p>
-        } @if ((item.voucherAmountEuro ?? 0) > 0) { @if (item.operationType === 'gift_voucher_refund') {
-        <p>
-            <strong>Reintegrado al bono:</strong> {{ item.voucherAmountEuro | number: '1.2-2' }} € · No afecta a efectivo, tarjeta ni Bizum.
-        </p>
-        } @else {
-        <p>
-            <strong>Cubierto con bono:</strong> {{ item.voucherAmountEuro | number: '1.2-2' }} €
-        </p>
-        <p>
-            <strong>Dinero recibido:</strong> {{ item.amount | number: '1.2-2' }} €
-        </p>
-        } } @if (item.operationType !== 'gift_voucher_refund') {
-        <p class="admin-panel--container__cierre-operation-total">
-            Total cubierto: <strong>{{ (item.totalCoveredAmountEuro ?? item.amount) | number: '1.2-2' }} €</strong>
-        </p>
-        }
+                                        <strong>{{ line.amount | number: '1.2-2' }} €</strong>
+                                    </li>
+                                    }
+                                </ul>
+                                } @if (item.paymentBreakdown?.length) {
+                                <p><strong>Reparto del pago:</strong> {{ getCierreOperationPaymentLabel(item) }}</p>
+                                } @if ((item.voucherAmountEuro ?? 0) > 0) { @if (item.operationType === 'gift_voucher_refund') {
+                                <p>
+                                    <strong>Reintegrado al bono:</strong> {{ item.voucherAmountEuro | number: '1.2-2' }} € · No afecta a efectivo, tarjeta ni Bizum.
+                                </p>
+                                } @else {
+                                <p>
+                                    <strong>Cubierto con bono:</strong> {{ item.voucherAmountEuro | number: '1.2-2' }} €
+                                </p>
+                                <p>
+                                    <strong>Dinero recibido:</strong> {{ item.amount | number: '1.2-2' }} €
+                                </p>
+                                } } @if (item.operationType !== 'gift_voucher_refund' && item.operationType !== 'expense') {
+                                <p class="admin-panel--container__cierre-operation-total">
+                                    Total cubierto: <strong>{{ (item.totalCoveredAmountEuro ?? item.amount) | number: '1.2-2' }} €</strong>
+                                </p>
+                                }
+                            </div>
+                        </details>
+                        }
+                    </td>
+                    <td>
+                        @if (editingCierreOperationId() === item.id) {
+                        <select class="admin-panel--container__input admin-panel--container__cierre-op-edit-input" (change)="editCierreOperationMethod.set($any($event.target).value)" aria-label="Método de pago">
+                        <option value="efectivo" [selected]="editCierreOperationMethod() === 'efectivo'">Efectivo</option>
+                        <option value="tarjeta" [selected]="editCierreOperationMethod() === 'tarjeta'">Tarjeta</option>
+                        <option value="bizum" [selected]="editCierreOperationMethod() === 'bizum'">Bizum</option>
+                    </select> } @else { {{ getCierreOperationPaymentLabel(item) }} }
+                    </td>
+                    <td>
+                        @if (editingCierreOperationId() === item.id) {
+                        <input class="admin-panel--container__input admin-panel--container__cierre-op-edit-input" type="number" min="0" step="0.01" inputmode="decimal" [value]="editCierreOperationAmount()" (input)="editCierreOperationAmount.set($any($event.target).value)" aria-label="Importe"
+                        /> } @else if (item.operationType === 'gift_voucher_refund') { — } @else if (item.operationType === 'expense') { <strong>−{{ item.amount | number: '1.2-2' }} €</strong> } @else { {{ item.amount | number:
+                        '1.2-2' }} € }
+                    </td>
+                    <td>
+                        <div class="admin-panel--container__cierre-op-actions">
+                            <span>{{ getWorkerDisplayName(item.performedByEmail) }}</span> @if (editingCierreOperationId() === item.id) {
+                            <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--accept admin-panel--container__cierre-op-btn" [disabled]="editCierreOperationLoading()" (click)="saveEditCierreOperation()">{{ editCierreOperationLoading() ? '…' : 'Guardar' }}</button>
+                            <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--soft admin-panel--container__cierre-op-btn" [disabled]="editCierreOperationLoading()" (click)="cancelEditCierreOperation()">Cancelar</button>                            } @else if (canEditCierreOperation(item)) {
+                            <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--soft admin-panel--container__cierre-op-btn" title="Corregir método de pago o importe" (click)="startEditCierreOperation(item)">✏️ Corregir</button>                            }
+                        </div>
+                    </td>
+                </tr>
+                } }
+            </tbody>
+        </table>
     </div>
-    </details>
-    }
-    </td>
-    <td>{{ getCierreOperationPaymentLabel(item) }}</td>
-    <td>{{ item.operationType === 'gift_voucher_refund' ? '—' : (item.amount | number: '1.2-2') + ' €' }}</td>
-    <td>{{ getWorkerDisplayName(item.performedByEmail) }}</td>
-    </tr>
-    } }
-    </tbody>
-    </table>
-</div>
 </div>
 </div>
 } }

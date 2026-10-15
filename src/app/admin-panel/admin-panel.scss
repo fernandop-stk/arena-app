@@ -2599,6 +2599,18 @@
                 line-height: 1.4;
                 overflow-wrap: anywhere;
             }
+            // Cabecera fija: fondo opaco para que las filas no se vean a través al hacer scroll.
+            thead th {
+                position: sticky;
+                top: 0;
+                z-index: 3;
+                background: #fbf3ef;
+                box-shadow: inset 0 -1px 0 rgba(201, 123, 99, 0.25);
+            }
+            td {
+                position: relative;
+                z-index: 0;
+            }
             th:nth-child(1),
             td:nth-child(1) {
                 width: 9rem;
@@ -2624,6 +2636,80 @@
             display: flex;
             gap: 0.35rem;
             white-space: nowrap;
+        }
+        &__cierre-row--expense td {
+            background: rgba(154, 76, 76, 0.07);
+            color: #6b2f2f;
+        }
+        // Barra compacta de filtros del detalle de operaciones: todo en una línea para dejar sitio al listado.
+        &__cierre-details-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.45rem 0.9rem;
+            padding: 0.55rem 0.8rem;
+            border-radius: layout.$radius-md;
+            border: 1px solid rgba(201, 123, 99, 0.18);
+            background: rgba(255, 255, 255, 0.82);
+            .admin-panel--container__checkbox-label {
+                margin: 0;
+            }
+        }
+        &__cierre-details-toolbar-label {
+            font-size: 0.78rem;
+            font-weight: 800;
+            color: colors.$color-primary-dark;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        &__cierre-details-toolbar-select {
+            min-height: 2.1rem;
+            padding: 0.2rem 0.5rem;
+            font-size: 0.84rem;
+            width: auto;
+            max-width: 14rem;
+        }
+        &__cierre-details-toolbar-clear {
+            margin-left: auto;
+            min-height: 2.1rem;
+            padding: 0 0.7rem;
+            font-size: 0.8rem;
+        }
+        &__cierre-details-summary {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.4rem;
+            .admin-panel--container__error {
+                margin: 0;
+                font-size: 0.8rem;
+            }
+        }
+        &__cierre-op-actions {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.3rem;
+        }
+        &__cierre-op-btn {
+            min-height: 1.8rem;
+            padding: 0 0.55rem;
+            font-size: 0.74rem;
+        }
+        &__cierre-op-edit-input {
+            min-height: 2rem;
+            padding: 0.2rem 0.45rem;
+            font-size: 0.82rem;
+            width: 100%;
+        }
+        &__employee-subtab--expense {
+            margin-left: auto;
+            border-color: rgba(154, 76, 76, 0.45);
+            color: #8a3c3c;
+            &:disabled {
+                opacity: 0.55;
+                cursor: not-allowed;
+            }
         }
         &__client-stats-filters--compare {
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

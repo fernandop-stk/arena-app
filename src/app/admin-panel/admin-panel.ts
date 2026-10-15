@@ -390,7 +390,8 @@ interface CierreOperationDetailItem {
     | 'client_pack_payment'
     | 'reservation_payment'
     | 'gift_voucher_sale'
-    | 'gift_voucher_refund';
+    | 'gift_voucher_refund'
+    | 'expense';
   concept: string;
   amount: number;
   paymentMethod: 'efectivo' | 'tarjeta' | 'bizum';
@@ -848,6 +849,14 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly cierreMessage = signal('');
   protected readonly cierreAlreadyClosedToday = signal(false);
   protected readonly cierreManagementTab = signal<CierreManagementTab>('registro');
+  // Gastos de caja
+  protected readonly showExpenseModal = signal(false);
+  protected readonly expenseConcept = signal('');
+  protected readonly expenseAmount = signal('');
+  protected readonly expensePaymentMethod = signal<'efectivo' | 'tarjeta' | 'bizum'>('efectivo');
+  protected readonly expensePaidByEmail = signal('');
+  protected readonly expenseLoading = signal(false);
+  protected readonly expenseError = signal('');
   protected readonly cierreHistorial = signal<CierreCajaItem[]>([]);
   protected readonly isLoadingCierres = signal(false);
   protected readonly cierreAutoDiario = signal<CierreAutoDiario | null>(null);
@@ -878,6 +887,12 @@ export class AdminPanelComponent implements OnDestroy {
     bono: true,
   });
   protected readonly cierreDetailsEmployeeFilter = signal('all');
+  // Corrección inline de una operación del detalle del cierre
+  protected readonly editingCierreOperationId = signal('');
+  protected readonly editCierreOperationMethod = signal<'efectivo' | 'tarjeta' | 'bizum'>('efectivo');
+  protected readonly editCierreOperationAmount = signal('');
+  protected readonly editCierreOperationLoading = signal(false);
+  protected readonly editCierreOperationError = signal('');
   // Edición de cierre
   protected readonly editingCierre = signal<CierreCajaItem | null>(null);
   protected readonly editCierreEfectivo = signal('');
@@ -1406,6 +1421,80 @@ export class AdminPanelComponent implements OnDestroy {
     }
   }
 
+  protected openExpenseModal(): void {
+    this.expenseConcept.set('');
+    this.expenseAmount.set('');
+    this.expensePaymentMethod.set('efectivo');
+    this.expensePaidByEmail.set(this.ownerEmail().trim().toLowerCase());
+    this.expenseError.set('');
+    this.cierreError.set('');
+    this.cierreMessage.set('');
+    this.showExpenseModal.set(true);
+  }
+
+  protected closeExpenseModal(): void {
+    if (this.expenseLoading()) {
+      return;
+    }
+    this.showExpenseModal.set(false);
+  }
+
+  protected getExpenseAmountValue(): number {
+    const parsed = Number(this.expenseAmount().trim().replace(',', '.'));
+    return Number.isFinite(parsed) && parsed > 0 ? Number(parsed.toFixed(2)) : 0;
+  }
+
+  protected submitExpense(): void {
+    const concept = this.expenseConcept().trim();
+    const amountEuro = this.getExpenseAmountValue();
+    const paidByEmail = this.expensePaidByEmail().trim().toLowerCase();
+
+    if (!concept) {
+      this.expenseError.set('Indica el tipo o concepto del gasto.');
+      return;
+    }
+    if (amountEuro <= 0) {
+      this.expenseError.set('El importe debe ser mayor que 0.');
+      return;
+    }
+    if (!paidByEmail) {
+      this.expenseError.set('Selecciona quién hizo el gasto.');
+      return;
+    }
+
+    this.expenseError.set('');
+    this.expenseLoading.set(true);
+
+    this.http
+      .post<{ ok: boolean; error?: string }>('/api/admin/gastos', {
+        concept,
+        amountEuro,
+        paymentMethod: this.expensePaymentMethod(),
+        paidByEmail,
+      })
+      .subscribe({
+        next: (response) => {
+          this.expenseLoading.set(false);
+          if (!response.ok) {
+            this.expenseError.set(response.error ?? 'No se pudo registrar el gasto.');
+            return;
+          }
+          this.showExpenseModal.set(false);
+          this.cierreMessage.set(
+            `Gasto registrado: ${concept} · ${amountEuro.toFixed(2)} € (${this.getPaymentMethodDisplayLabel(this.expensePaymentMethod())}). Se ha restado del acumulado de hoy.`,
+          );
+          this.loadCierreAutoDiario();
+        },
+        error: (error) => {
+          this.expenseLoading.set(false);
+          const apiError = error?.error?.error;
+          this.expenseError.set(
+            typeof apiError === 'string' && apiError ? apiError : 'No se pudo registrar el gasto.',
+          );
+        },
+      });
+  }
+
   private closeTransientOverlaysBeforeHomeNavigation(): void {
     this.closeAgendaPackPicker();
     this.closeAgendaReservationDetail();
@@ -1694,10 +1783,19 @@ export class AdminPanelComponent implements OnDestroy {
       return [];
     }
 
+    const todayIso = this.getTodayIso();
+    const now = new Date();
+    const nowTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
     return this.getAgendaCalendarReservations()
-      .filter((reservation) =>
-        this.normalizeSearchText(reservation.customerName ?? '').includes(query),
-      )
+      .filter((reservation) => {
+        const isUpcoming =
+          reservation.dateIso > todayIso ||
+          (reservation.dateIso === todayIso && reservation.startTime >= nowTime);
+        return (
+          isUpcoming && this.normalizeSearchText(reservation.customerName ?? '').includes(query)
+        );
+      })
       .sort((a, b) => {
         const byDate = a.dateIso.localeCompare(b.dateIso);
         return byDate !== 0 ? byDate : a.startTime.localeCompare(b.startTime);
@@ -9479,6 +9577,105 @@ export class AdminPanelComponent implements OnDestroy {
     this.showCierreDetailsModal.set(false);
     this.selectedCierreForDetails.set(null);
     this.cierreDetailsEmployeeFilter.set('all');
+    this.cancelEditCierreOperation();
+  }
+
+  protected canEditCierreOperation(detail: CierreOperationDetailItem): boolean {
+    return detail.operationType !== 'gift_voucher_refund' && detail.amount > 0;
+  }
+
+  protected startEditCierreOperation(detail: CierreOperationDetailItem): void {
+    this.editingCierreOperationId.set(detail.id);
+    this.editCierreOperationMethod.set(detail.paymentBreakdown?.[0]?.method ?? detail.paymentMethod);
+    this.editCierreOperationAmount.set(detail.amount.toFixed(2));
+    this.editCierreOperationError.set('');
+  }
+
+  protected cancelEditCierreOperation(): void {
+    if (this.editCierreOperationLoading()) {
+      return;
+    }
+    this.editingCierreOperationId.set('');
+    this.editCierreOperationAmount.set('');
+    this.editCierreOperationError.set('');
+  }
+
+  protected saveEditCierreOperation(): void {
+    const cierre = this.selectedCierreForDetails();
+    const operationId = this.editingCierreOperationId();
+    const amountEuro = Number(this.editCierreOperationAmount().trim().replace(',', '.'));
+
+    if (!cierre || !operationId) {
+      return;
+    }
+    if (!Number.isFinite(amountEuro) || amountEuro < 0) {
+      this.editCierreOperationError.set('El importe debe ser un número igual o mayor que 0.');
+      return;
+    }
+
+    this.editCierreOperationError.set('');
+    this.editCierreOperationLoading.set(true);
+
+    this.http
+      .patch<{
+        ok: boolean;
+        error?: string;
+        today?: CierreAutoDiario | null;
+        cierres?: CierreCajaItem[];
+      }>(`/api/admin/cierre-caja/operaciones/${encodeURIComponent(operationId)}`, {
+        dateIso: cierre.fechaIso,
+        paymentMethod: this.editCierreOperationMethod(),
+        amountEuro: Number(amountEuro.toFixed(2)),
+      })
+      .subscribe({
+        next: (response) => {
+          this.editCierreOperationLoading.set(false);
+          if (!response.ok) {
+            this.editCierreOperationError.set(response.error ?? 'No se pudo guardar la corrección.');
+            return;
+          }
+
+          if (response.today) {
+            this.cierreAutoDiario.set(response.today);
+          }
+          const updatedCierres = response.cierres ?? [];
+          if (updatedCierres.length > 0) {
+            this.cierreHistorial.update((items) =>
+              items.map((item) => updatedCierres.find((updated) => updated.id === item.id) ?? item),
+            );
+          }
+
+          // Refresca el modal con los datos ya corregidos (acumulado de hoy o cierre guardado).
+          if (cierre.isDailyPreview && response.today) {
+            const today = response.today;
+            this.selectedCierreForDetails.set({
+              ...cierre,
+              efectivo: today.efectivo,
+              tarjeta: today.tarjeta,
+              bizum: today.bizum,
+              total: today.total,
+              createdAtIso: today.updatedAtIso,
+              operationDetails: today.operationDetails,
+            });
+          } else {
+            const refreshed = updatedCierres.find((updated) => updated.id === cierre.id);
+            if (refreshed) {
+              this.selectedCierreForDetails.set({ ...refreshed, isDailyPreview: false });
+            }
+          }
+
+          this.editingCierreOperationId.set('');
+          this.editCierreOperationAmount.set('');
+          this.cierreMessage.set('Operación corregida. Los totales del día se han recalculado.');
+        },
+        error: (error) => {
+          this.editCierreOperationLoading.set(false);
+          const apiError = error?.error?.error;
+          this.editCierreOperationError.set(
+            typeof apiError === 'string' && apiError ? apiError : 'No se pudo guardar la corrección.',
+          );
+        },
+      });
   }
 
   protected onCierreDetailsMethodFilterChange(
@@ -9554,15 +9751,23 @@ export class AdminPanelComponent implements OnDestroy {
   protected getSelectedCierreDetailsFilteredTotal(): number {
     const filters = this.cierreDetailsMethodFilters();
     return this.getSelectedCierreDetailItems().reduce((sum, detail) => {
+      const sign = detail.operationType === 'expense' ? -1 : 1;
       if (!detail.paymentBreakdown?.length) {
-        return filters[detail.paymentMethod] ? sum + detail.amount : sum;
+        return filters[detail.paymentMethod] ? sum + sign * detail.amount : sum;
       }
 
       const visibleAmount = detail.paymentBreakdown
         .filter((entry) => filters[entry.method])
         .reduce((methodSum, entry) => methodSum + entry.amount, 0);
-      return sum + visibleAmount;
+      return sum + sign * visibleAmount;
     }, 0);
+  }
+
+  protected getSelectedCierreDetailsExpenseTotal(): number {
+    return this.getSelectedCierreDetailItems().reduce(
+      (sum, detail) => (detail.operationType === 'expense' ? sum + detail.amount : sum),
+      0,
+    );
   }
 
   protected getSelectedCierreDetailsVoucherTotal(): number {
@@ -9596,6 +9801,10 @@ export class AdminPanelComponent implements OnDestroy {
     const voucherAmount = Math.max(0, Number(detail.voucherAmountEuro ?? 0));
     if (detail.operationType === 'gift_voucher_refund') {
       return `Reintegro a bono regalo ${voucherAmount.toFixed(2)} €`;
+    }
+    if (detail.operationType === 'expense') {
+      const method = detail.paymentBreakdown?.[0]?.method ?? detail.paymentMethod;
+      return `Gasto · ${this.getPaymentMethodDisplayLabel(method)}`;
     }
     if (!detail.paymentBreakdown?.length) {
       return voucherAmount > 0

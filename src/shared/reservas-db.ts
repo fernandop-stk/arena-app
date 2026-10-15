@@ -3632,7 +3632,8 @@ export interface DbPaymentOperationDetail {
     | 'client_pack_payment'
     | 'reservation_payment'
     | 'gift_voucher_sale'
-    | 'gift_voucher_refund';
+    | 'gift_voucher_refund'
+    | 'expense';
   concept: string;
   amount: number;
   paymentMethod: 'efectivo' | 'tarjeta' | 'bizum';

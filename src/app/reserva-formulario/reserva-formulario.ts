@@ -279,10 +279,8 @@ export class ReservaFormularioComponent {
   }
 
   private isTreatmentPhoneOnly(): boolean {
-    // Pack Color (4), Pack Color Plus (5), Pack Ilumina (6), Pack Full Color (7) → recomendar teléfono
-    const phoneOnlyIds = [4, 5, 6, 7];
-    const id = this.reservationSelection?.appointmentTypeId ?? 0;
-    return phoneOnlyIds.includes(id);
+    // El aviso de señal solo aplica a los packs que la requieren (Pack Ilumina y Pack Full Color).
+    return this.isReservationSignalRequired();
   }
 
   private isReservationSignalRequired(): boolean {

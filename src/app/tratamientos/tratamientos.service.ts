@@ -72,6 +72,15 @@ export class TratamientosService {
         appointmentTypeId: 4,
       },
       {
+        id: 14,
+        nombre: 'Pack Color Express',
+        descripcion: '• Técnica de color en raíz • Lavado • Secado',
+        imagen: '/assets/branding/espuma.jpeg',
+        precio: 'Desde 50€',
+        duracionMinutos: 90,
+        appointmentTypeId: 14,
+      },
+      {
         id: 5,
         nombre: 'Pack Color Plus',
         descripcion:
@@ -163,9 +172,9 @@ export class TratamientosService {
         nombre: 'Blindaje de Color',
         categoria: 'Tratamientos Arena',
         descripcion:
-          '• Mantiene tu color perfecto durante más tiempo • Aporta un brillo extra espectacular',
+          '• Mantén tu color perfecto por más tiempo • Aporta un brillo extra espectacular con colágeno',
         imagen: '/assets/branding/espuma.jpeg',
-        precio: 'Suplemento: +10€',
+        precio: 'Suplemento: +30€',
         duracionMinutos: 20,
       },
       {

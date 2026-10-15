@@ -130,6 +130,12 @@ export class CitasService {
         duracionMinutos: 90,
         descripcion: 'Subida de extensiones + terapia capilar + secado y acabado.',
       },
+      {
+        id: 14,
+        nombre: 'Pack Color Express',
+        duracionMinutos: 90,
+        descripcion: 'Técnica de color en raíz + lavado + secado.',
+      },
     ];
   }
 

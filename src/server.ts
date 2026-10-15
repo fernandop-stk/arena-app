@@ -1416,13 +1416,15 @@ type PaymentOperationType =
   | 'client_pack_payment'
   | 'reservation_payment'
   | 'gift_voucher_sale'
-  | 'gift_voucher_refund';
+  | 'gift_voucher_refund'
+  | 'expense';
 
 const normalizePaymentOperationType = (value: unknown): PaymentOperationType =>
   value === 'stock_sale' ||
   value === 'reservation_payment' ||
   value === 'gift_voucher_sale' ||
-  value === 'gift_voucher_refund'
+  value === 'gift_voucher_refund' ||
+  value === 'expense'
     ? value
     : 'client_pack_payment';
 
@@ -3324,8 +3326,12 @@ const addPaymentToDailySummary = (
     operationDetails: [detail, ...(current.operationDetails ?? [])],
   };
 
+  // Los gastos se guardan con importe positivo pero restan del método con el que se pagaron.
+  const sign = operationDetail.operationType === 'expense' ? -1 : 1;
   paymentAllocations.forEach((allocation) => {
-    next[allocation.method] = Number((next[allocation.method] + allocation.amount).toFixed(2));
+    next[allocation.method] = Number(
+      (next[allocation.method] + sign * allocation.amount).toFixed(2),
+    );
   });
 
   const normalized = normalizeDailyPaymentSummary(next);
@@ -5740,6 +5746,64 @@ app.get('/api/admin/cierre-caja/auto-diario', (req, res) => {
   });
 });
 
+app.post('/api/admin/gastos', (req, res) => {
+  seedAuthUsers();
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const concept = `${req.body?.concept ?? ''}`.trim().slice(0, 200);
+  const amountRaw = `${req.body?.amountEuro ?? ''}`.trim().replace(',', '.');
+  const amountEuro = amountRaw === '' ? NaN : Number(Number(amountRaw).toFixed(2));
+  const paymentMethod = `${req.body?.paymentMethod ?? 'efectivo'}`.trim().toLowerCase();
+  const paidByEmail = normalizeWorkerEmail(req.body?.paidByEmail) || normalizeWorkerEmail(session.email);
+
+  if (!concept) {
+    return res.status(400).json({ ok: false, error: 'Indica el tipo o concepto del gasto.' });
+  }
+
+  if (!Number.isFinite(amountEuro) || amountEuro <= 0) {
+    return res.status(400).json({ ok: false, error: 'El importe del gasto debe ser mayor que 0.' });
+  }
+
+  if (!['efectivo', 'tarjeta', 'bizum'].includes(paymentMethod)) {
+    return res.status(400).json({ ok: false, error: 'Selecciona con qué se pagó el gasto.' });
+  }
+
+  if (!isAssignableWorkerUser(usersByEmail.get(paidByEmail))) {
+    return res.status(400).json({ ok: false, error: 'Selecciona quién hizo el gasto.' });
+  }
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  if (getLatestCierreForDate(todayIso)) {
+    return res.status(409).json({
+      ok: false,
+      error: 'El cierre de hoy ya está registrado. Edítalo desde Historial para reflejar este gasto.',
+    });
+  }
+
+  const paidByUser = usersByEmail.get(paidByEmail);
+  const paidByLabel = paidByUser?.username || paidByEmail;
+  const registeredBySuffix =
+    normalizeWorkerEmail(session.email) !== paidByEmail
+      ? ` · Registrado por ${usersByEmail.get(session.email)?.username || session.email}`
+      : '';
+  const method = paymentMethod as 'efectivo' | 'tarjeta' | 'bizum';
+
+  const summary = addPaymentToDailySummary(todayIso, method, amountEuro, {
+    operationType: 'expense',
+    concept: `Gasto: ${concept} · ${amountEuro.toFixed(2)} € pagados en ${method} por ${paidByLabel}${registeredBySuffix}`,
+    performedByEmail: paidByEmail,
+    paymentBreakdown: [{ method, amount: amountEuro }],
+    totalCoveredAmountEuro: amountEuro,
+  });
+
+  return res.status(200).json({ ok: true, today: summary });
+});
+
 app.post('/api/admin/cierre-caja', async (req, res) => {
   seedAuthUsers();
   const session = isAdminRequest(req.headers.cookie);
@@ -5893,6 +5957,135 @@ app.patch('/api/admin/cierre-caja/:id', async (req, res) => {
   void persistCierreCajaToDisk();
 
   return res.status(200).json({ ok: true, cierre: updated });
+});
+
+// Corrige método de pago e importe de una operación ya registrada; ajusta el acumulado del día y el cierre si existe.
+app.patch('/api/admin/cierre-caja/operaciones/:operationId', async (req, res) => {
+  seedAuthUsers();
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const operationId = `${req.params['operationId'] ?? ''}`.trim();
+  const dateIso = `${req.body?.dateIso ?? ''}`.trim();
+  const paymentMethod = `${req.body?.paymentMethod ?? ''}`.trim().toLowerCase();
+  const amountRaw = `${req.body?.amountEuro ?? ''}`.trim().replace(',', '.');
+  const amountEuro = amountRaw === '' ? NaN : Number(Number(amountRaw).toFixed(2));
+
+  if (!operationId || !/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
+    return res.status(400).json({ ok: false, error: 'Operación o fecha inválida.' });
+  }
+
+  if (!['efectivo', 'tarjeta', 'bizum'].includes(paymentMethod)) {
+    return res.status(400).json({ ok: false, error: 'Selecciona efectivo, tarjeta o bizum.' });
+  }
+
+  if (!Number.isFinite(amountEuro) || amountEuro < 0) {
+    return res.status(400).json({ ok: false, error: 'El importe debe ser un número igual o mayor que 0.' });
+  }
+
+  const method = paymentMethod as 'efectivo' | 'tarjeta' | 'bizum';
+  const dailySummary = dailyPaymentsByDateIso.get(dateIso);
+  const cierresForDate = Array.from(cierreCajaById.values()).filter(
+    (cierre) => cierre.fechaIso === dateIso,
+  );
+  const sourceDetail =
+    dailySummary?.operationDetails.find((detail) => detail.id === operationId) ??
+    cierresForDate
+      .flatMap((cierre) => cierre.operationDetails)
+      .find((detail) => detail.id === operationId);
+
+  if (!sourceDetail) {
+    return res.status(404).json({ ok: false, error: 'Operación no encontrada en ese día.' });
+  }
+
+  if (sourceDetail.operationType === 'gift_voucher_refund') {
+    return res.status(400).json({ ok: false, error: 'Los reintegros de bono no se pueden editar.' });
+  }
+
+  const sign = sourceDetail.operationType === 'expense' ? -1 : 1;
+  const previousAllocations = sourceDetail.paymentBreakdown?.length
+    ? sourceDetail.paymentBreakdown
+    : sourceDetail.amount > 0
+      ? [{ method: sourceDetail.paymentMethod, amount: sourceDetail.amount }]
+      : [];
+  const nextAllocations = amountEuro > 0 ? [{ method, amount: amountEuro }] : [];
+
+  const applyDelta = (totals: { efectivo: number; tarjeta: number; bizum: number }) => {
+    const next = { ...totals };
+    previousAllocations.forEach((entry) => {
+      next[entry.method] = Number((next[entry.method] - sign * entry.amount).toFixed(2));
+    });
+    nextAllocations.forEach((entry) => {
+      next[entry.method] = Number((next[entry.method] + sign * entry.amount).toFixed(2));
+    });
+    return next;
+  };
+
+  const editedByLabel = usersByEmail.get(session.email)?.username || session.email;
+  const previousLabel = previousAllocations
+    .map((entry) => `${entry.method} ${entry.amount.toFixed(2)} €`)
+    .join(' + ') || 'sin importe';
+  const patchDetail = (detail: PaymentOperationDetail): PaymentOperationDetail =>
+    detail.id !== operationId
+      ? detail
+      : normalizePaymentOperationDetail({
+          ...detail,
+          amount: amountEuro,
+          paymentMethod: method,
+          paymentBreakdown: nextAllocations,
+          totalCoveredAmountEuro: Number(
+            (amountEuro + Math.max(0, Number(detail.voucherAmountEuro ?? 0))).toFixed(2),
+          ),
+          concept: `${detail.concept} · Corregido por ${editedByLabel}: antes ${previousLabel}`,
+        });
+
+  let updatedSummary: DailyPaymentSummaryItem | null = null;
+  if (dailySummary && dailySummary.operationDetails.some((detail) => detail.id === operationId)) {
+    updatedSummary = normalizeDailyPaymentSummary({
+      ...dailySummary,
+      ...applyDelta(dailySummary),
+      updatedAtIso: new Date().toISOString(),
+      operationDetails: dailySummary.operationDetails.map(patchDetail),
+    });
+    dailyPaymentsByDateIso.set(dateIso, updatedSummary);
+    void persistDailyPaymentsToDisk();
+    try {
+      await saveDailyPaymentToDb(updatedSummary);
+    } catch (error) {
+      console.error('Error persistiendo corrección de operación en acumulado diario:', error);
+      return res.status(500).json({ ok: false, error: 'No se pudo guardar la corrección.' });
+    }
+  }
+
+  const updatedCierres: CierreCajaItem[] = [];
+  for (const cierre of cierresForDate) {
+    if (!cierre.operationDetails.some((detail) => detail.id === operationId)) {
+      continue;
+    }
+    const totals = applyDelta(cierre);
+    const updatedCierre = normalizeCierre({
+      ...cierre,
+      ...totals,
+      total: Number((totals.efectivo + totals.tarjeta + totals.bizum).toFixed(2)),
+      operationDetails: cierre.operationDetails.map(patchDetail),
+    });
+    try {
+      await saveCierreCajaToDb(updatedCierre);
+    } catch (error) {
+      console.error('Error persistiendo corrección de operación en cierre:', error);
+      return res.status(500).json({ ok: false, error: 'No se pudo guardar la corrección en el cierre.' });
+    }
+    cierreCajaById.set(updatedCierre.id, updatedCierre);
+    updatedCierres.push(updatedCierre);
+  }
+  if (updatedCierres.length > 0) {
+    void persistCierreCajaToDisk();
+  }
+
+  return res.status(200).json({ ok: true, today: updatedSummary, cierres: updatedCierres });
 });
 
 app.delete('/api/admin/cierre-caja/:id', async (req, res) => {
