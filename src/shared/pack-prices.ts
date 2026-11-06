@@ -14,6 +14,7 @@ export const PACK_PRICE_BY_NAME: Record<string, number> = {
   'Pack Novia': 300,
   'Brushing Plus': 10,
   'Blindaje de Color': 30,
+  Colágeno: 70,
   'Tratamiento Exprés': 15,
   'Tratamiento Personalizado': 60,
   'Nutrición Extrema': 80,

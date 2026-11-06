@@ -51,7 +51,7 @@ type AdminTab =
 type AgendaManagementTab = 'listado' | 'gestion' | 'bloqueos';
 type AgendaRange = 'hoy' | 'semana' | 'mes';
 type ReservationListRangeTab = 'none' | 'dia' | 'semana' | 'mes' | 'total';
-type StockManagementTab = 'crear' | 'ver' | 'vender' | 'historial';
+type StockManagementTab = 'crear' | 'ver' | 'vender' | 'historial' | 'movimientos';
 type CierreManagementTab = 'registro' | 'historial' | 'estadisticas' | 'comparativa';
 type CierreStatsRange = 'semana' | 'mes' | 'anio';
 type CierreStatsMetric = 'efectivo' | 'tarjeta' | 'bizum' | 'digital' | 'total';
@@ -149,6 +149,15 @@ interface AdminReservationItem {
   paymentSummary?: ReservationPaymentSummary;
 }
 
+interface DiscountMetadata {
+  type: 'percentage' | 'fixed';
+  amount: number;
+  originalAmountEuro: number;
+  finalAmountEuro: number;
+  reason?: string;
+  code?: string;
+}
+
 interface ReservationPaymentSummary {
   paidItemIds: string[];
   paidItems: Array<{
@@ -165,6 +174,22 @@ interface ReservationPaymentSummary {
   finalPaymentAmountEuro: number;
   registeredAtIso: string;
   registeredByEmail?: string;
+  discount?: DiscountMetadata | null;
+}
+
+interface PromoCodeRecord {
+  id: string;
+  code: string;
+  type: 'percentage' | 'fixed';
+  amount: number;
+  startsAtIso?: string;
+  endsAtIso?: string;
+  usageLimit?: number;
+  usageCount: number;
+  reason?: string;
+  active: boolean;
+  createdAtIso: string;
+  updatedAtIso: string;
 }
 
 interface ReservationServiceLineItem {
@@ -368,6 +393,19 @@ interface StockProductItem {
   isSellable: boolean;
   createdAtIso: string;
   createdByEmail: string;
+}
+
+interface StockMovementItem {
+  id: string;
+  productId: string;
+  productName: string;
+  type: 'alta' | 'baja';
+  quantity: number;
+  reason: 'alta_producto' | 'ajuste' | 'venta' | 'reserva' | 'baja_producto';
+  previousQuantity: number;
+  nextQuantity: number;
+  performedByEmail: string;
+  createdAtIso: string;
 }
 
 interface StockSaleHistoryItem {
@@ -666,10 +704,13 @@ export class AdminPanelComponent implements OnDestroy {
     return [currentName, ...optionNames];
   });
   protected readonly agendaTreatmentCatalog = this.tratamientosService.getTratamientos();
-  protected readonly agendaTreatmentOptions = this.agendaTreatmentCatalog.map((t) => ({
+  protected readonly agendaReservableTreatmentOptions = this.agendaTreatmentCatalog
+    .filter((treatment) => treatment.duracionMinutos > 0)
+    .map((t) => ({
     id: t.id,
     nombre: t.nombre,
-  }));
+    }));
+  protected readonly agendaTreatmentOptions = this.agendaReservableTreatmentOptions;
   protected readonly agendaSelectedPackTypeId = signal<number>(
     this.citasService.getAppointmentTypes()[0]?.id ?? 1,
   );
@@ -838,6 +879,8 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly stockSalesHistoryMethodFilter = signal<
     'all' | 'efectivo' | 'tarjeta' | 'bizum' | 'bono'
   >('all');
+  protected readonly stockMovements = signal<StockMovementItem[]>([]);
+  protected readonly stockMovementsLoading = signal(false);
 
   // ── Cierre de caja ──────────────────────────────────────────────────────────
   protected readonly cierreEfectivo = signal('');
@@ -1007,6 +1050,20 @@ export class AdminPanelComponent implements OnDestroy {
   protected readonly paymentVoucherClientId = signal('');
   protected readonly paymentVoucherId = signal('');
   protected readonly paymentVoucherAmount = signal('0');
+  protected readonly manualDiscountType = signal<'percentage' | 'fixed'>('percentage');
+  protected readonly manualDiscountAmount = signal('');
+  protected readonly manualDiscountReason = signal('');
+  protected readonly promoCodes = signal<PromoCodeRecord[]>([]);
+  protected readonly promoError = signal('');
+  protected readonly promoMessage = signal('');
+  protected readonly promoEditingCode = signal('');
+  protected readonly promoFormCode = signal('');
+  protected readonly promoFormType = signal<'percentage' | 'fixed'>('percentage');
+  protected readonly promoFormAmount = signal('');
+  protected readonly promoFormStartsAt = signal('');
+  protected readonly promoFormEndsAt = signal('');
+  protected readonly promoFormUsageLimit = signal('');
+  protected readonly promoFormReason = signal('');
   protected readonly selectedReservationPaymentLineIds = signal<string[]>([]);
   protected readonly cobroReservationStockProductId = signal('');
   protected readonly cobroReservationStockSearch = signal('');
@@ -1048,14 +1105,24 @@ export class AdminPanelComponent implements OnDestroy {
     if (hasPreviousFinalPayment) {
       // Charge only the delta: new total minus what was already paid and the signal
       const allLinesTotal = lines.reduce((acc, line) => acc + line.amountEuro, 0);
-      return Math.max(0, Number((allLinesTotal - previousFinalPayment - signalAmount).toFixed(2)));
+      const beforeDiscount = Math.max(0, allLinesTotal - previousFinalPayment - signalAmount);
+      const input = Math.max(0, Number(this.manualDiscountAmount().replace(',', '.')) || 0);
+      const discount = this.manualDiscountType() === 'percentage'
+        ? beforeDiscount * Math.min(100, input) / 100
+        : Math.min(beforeDiscount, input);
+      return Math.max(0, Number((beforeDiscount - discount).toFixed(2)));
     }
 
     const selectedIds = this.selectedReservationPaymentLineIds();
     const totalPrice = lines
       .filter((line) => selectedIds.includes(line.id))
       .reduce((acc, line) => acc + line.amountEuro, 0);
-    return Math.max(0, Number((totalPrice - signalAmount).toFixed(2)));
+    const beforeDiscount = Math.max(0, totalPrice - signalAmount);
+    const discountInput = Math.max(0, Number(this.manualDiscountAmount().replace(',', '.')) || 0);
+    const discount = this.manualDiscountType() === 'percentage'
+      ? beforeDiscount * Math.min(100, discountInput) / 100
+      : Math.min(beforeDiscount, discountInput);
+    return Math.max(0, Number((beforeDiscount - discount).toFixed(2)));
   });
   protected readonly paymentSplitTotalEuro = computed(() =>
     this.paymentSplitEntries().reduce((acc, item) => acc + item.amount, 0),
@@ -1369,6 +1436,7 @@ export class AdminPanelComponent implements OnDestroy {
     this.closeAgendaCalendarModal();
     this.employeeSearch.set('');
     this.employeeRoleFilter.set('all');
+    if (tab === 'cobro') this.loadPromoCodes();
 
     if (tab === 'empleados' && this.isSuperadmin()) {
       this.employeeManagementTab.set('crear');
@@ -1399,6 +1467,80 @@ export class AdminPanelComponent implements OnDestroy {
         this.loadCierreAutoDiario();
       }
     }
+  }
+
+  protected loadPromoCodes(): void {
+    this.http.get<{ ok: boolean; promociones: PromoCodeRecord[] }>('/api/admin/promociones').subscribe({
+      next: (response) => this.promoCodes.set(response.promociones ?? []),
+      error: (error) => this.promoError.set(error?.error?.error ?? 'No se pudieron cargar las promociones.'),
+    });
+  }
+
+  protected resetPromoForm(): void {
+    this.promoEditingCode.set('');
+    this.promoFormCode.set('');
+    this.promoFormType.set('percentage');
+    this.promoFormAmount.set('');
+    this.promoFormStartsAt.set('');
+    this.promoFormEndsAt.set('');
+    this.promoFormUsageLimit.set('');
+    this.promoFormReason.set('');
+  }
+
+  protected editPromoCode(promo: PromoCodeRecord): void {
+    this.promoEditingCode.set(promo.code);
+    this.promoFormCode.set(promo.code);
+    this.promoFormType.set(promo.type);
+    this.promoFormAmount.set(`${promo.amount}`);
+    this.promoFormStartsAt.set(promo.startsAtIso?.slice(0, 10) ?? '');
+    this.promoFormEndsAt.set(promo.endsAtIso?.slice(0, 10) ?? '');
+    this.promoFormUsageLimit.set(promo.usageLimit ? `${promo.usageLimit}` : '');
+    this.promoFormReason.set(promo.reason ?? '');
+  }
+
+  protected savePromoCode(): void {
+    const code = this.promoFormCode().trim().toUpperCase();
+    const amount = Number(this.promoFormAmount().replace(',', '.'));
+    if (!code || !Number.isFinite(amount) || amount <= 0 ||
+      (this.promoFormType() === 'percentage' && amount > 100)) {
+      this.promoError.set('Código e importe válidos requeridos (porcentaje entre 0 y 100).');
+      return;
+    }
+    const payload = {
+      code,
+      type: this.promoFormType(),
+      amount,
+      startsAtIso: this.promoFormStartsAt() || undefined,
+      endsAtIso: this.promoFormEndsAt() || undefined,
+      usageLimit: this.promoFormUsageLimit() ? Number(this.promoFormUsageLimit()) : undefined,
+      reason: this.promoFormReason().trim() || undefined,
+      active: true,
+    };
+    const request = this.promoEditingCode()
+      ? this.http.patch(`/api/admin/promociones/${encodeURIComponent(this.promoEditingCode())}`, payload)
+      : this.http.post('/api/admin/promociones', payload);
+    request.subscribe({
+      next: () => {
+        this.promoMessage.set('Promoción guardada.');
+        this.promoError.set('');
+        this.resetPromoForm();
+        this.loadPromoCodes();
+      },
+      error: (error) => this.promoError.set(error?.error?.error ?? 'No se pudo guardar la promoción.'),
+    });
+  }
+
+  protected deletePromoCode(promo: PromoCodeRecord): void {
+    if (!window.confirm(`¿Eliminar el código ${promo.code}?`)) {
+      return;
+    }
+    this.http.delete(`/api/admin/promociones/${encodeURIComponent(promo.code)}`).subscribe({
+      next: () => {
+        this.promoMessage.set('Promoción eliminada.');
+        this.loadPromoCodes();
+      },
+      error: (error) => this.promoError.set(error?.error?.error ?? 'No se pudo eliminar la promoción.'),
+    });
   }
 
   protected setCierreManagementTab(tab: CierreManagementTab): void {
@@ -2342,7 +2484,7 @@ export class AdminPanelComponent implements OnDestroy {
     this.stockManagementTab.set(tab);
     this.stockSaleError.set('');
 
-    if (tab === 'ver' || tab === 'vender' || tab === 'historial') {
+    if (tab === 'ver' || tab === 'vender' || tab === 'historial' || tab === 'movimientos') {
       this.loadStockProducts();
 
       if (tab === 'vender' && !this.stockSaleProductId()) {
@@ -2352,6 +2494,10 @@ export class AdminPanelComponent implements OnDestroy {
 
       if (tab === 'historial') {
         this.loadStockSalesHistory();
+      }
+
+      if (tab === 'movimientos') {
+        this.loadStockMovements();
       }
     }
   }
@@ -3083,6 +3229,51 @@ export class AdminPanelComponent implements OnDestroy {
           this.stockSalesHistoryLoading.set(false);
         },
       });
+  }
+
+  protected loadStockMovements(): void {
+    this.stockMovementsLoading.set(true);
+
+    this.http
+      .get<{ ok: boolean; movements?: StockMovementItem[]; error?: string }>(
+        '/api/admin/almacen/movements',
+      )
+      .subscribe({
+        next: (response) => {
+          if (!response.ok) {
+            this.stockError.set(response.error ?? 'No se pudo cargar el historial de stock.');
+            return;
+          }
+
+          this.stockMovements.set(response.movements ?? []);
+        },
+        error: (error) => {
+          const apiError = error?.error?.error;
+          this.stockError.set(
+            typeof apiError === 'string' && apiError
+              ? apiError
+              : 'No se pudo cargar el historial de stock.',
+          );
+        },
+        complete: () => {
+          this.stockMovementsLoading.set(false);
+        },
+      });
+  }
+
+  protected getStockMovementReasonLabel(reason: StockMovementItem['reason']): string {
+    switch (reason) {
+      case 'alta_producto':
+        return 'Alta de producto';
+      case 'baja_producto':
+        return 'Baja de producto';
+      case 'venta':
+        return 'Venta';
+      case 'reserva':
+        return 'Producto usado en cita';
+      default:
+        return 'Ajuste manual';
+    }
   }
 
   private getAgendaReservationsInRange(): AdminReservationItem[] {
@@ -6024,7 +6215,8 @@ export class AdminPanelComponent implements OnDestroy {
 
     const params = new HttpParams()
       .set('dateIso', dateIso)
-      .set('durationMinutes', `${service.duracionMinutos}`);
+      .set('durationMinutes', `${service.duracionMinutos}`)
+      .set('soloAdmin', 'true');
 
     this.http
       .get<{ ok: boolean; slots: string[] }>('/api/reservas/disponibilidad', { params })
@@ -7466,6 +7658,9 @@ export class AdminPanelComponent implements OnDestroy {
     this.paymentVoucherClientId.set('');
     this.paymentVoucherId.set('');
     this.paymentVoucherAmount.set('0');
+    this.manualDiscountType.set('percentage');
+    this.manualDiscountAmount.set('');
+    this.manualDiscountReason.set('');
 
     const reservation = this.reservations().find((item) => item.id === reservationId) ?? null;
 
@@ -8117,6 +8312,13 @@ export class AdminPanelComponent implements OnDestroy {
             ? { voucherId: selectedVoucher.id, amountEuro: voucherAmount }
             : undefined,
         paidItemIds: selectedLineIds,
+        discount: Number(this.manualDiscountAmount().replace(',', '.')) > 0
+          ? {
+              type: this.manualDiscountType(),
+              amount: Number(this.manualDiscountAmount().replace(',', '.')),
+              reason: this.manualDiscountReason().trim() || undefined,
+            }
+          : undefined,
       })
       .subscribe({
         next: (response) => {
@@ -8185,6 +8387,8 @@ export class AdminPanelComponent implements OnDestroy {
     this.paymentMethodReservationId.set('');
     this.selectedPaymentMethod.set('');
     this.paymentSplitEntries.set([]);
+    this.manualDiscountAmount.set('');
+    this.manualDiscountReason.set('');
     this.paymentSplitEditorMethod.set('efectivo');
     this.paymentSplitCustomAmount.set('');
     this.paymentVoucherClientId.set('');
@@ -9355,6 +9559,16 @@ export class AdminPanelComponent implements OnDestroy {
 
   protected hasCierreAutoDiario(): boolean {
     return !!this.cierreAutoDiario();
+  }
+
+  protected getCierreAutoDiarioExpenses(): CierreOperationDetailItem[] {
+    return (this.cierreAutoDiario()?.operationDetails ?? [])
+      .filter((detail) => detail.operationType === 'expense' && detail.amount > 0)
+      .sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso));
+  }
+
+  protected getCierreAutoDiarioExpenseTotal(): number {
+    return this.getCierreAutoDiarioExpenses().reduce((total, expense) => total + expense.amount, 0);
   }
 
   protected applyCierreAutoDiarioToForm(): void {

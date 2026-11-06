@@ -212,7 +212,12 @@
                 >
                   <strong>{{ option.nombre }}</strong>
                   <span>{{ option.descripcion }}</span>
-                  <small>{{ option.precio }} · {{ option.duracionMinutos }} min</small>
+                  <small>
+                    {{ option.precio }}
+                    @if (option.duracionMinutos > 0) {
+                      · {{ option.duracionMinutos }} min
+                    }
+                  </small>
                 </button>
               }
             </div>

@@ -287,6 +287,16 @@ export class TratamientosService {
         precio: 'Consultar según diagnóstico',
         duracionMinutos: 90,
       },
+      {
+        id: 114,
+        nombre: 'Colágeno',
+        categoria: 'Cuidados y prevención',
+        descripcion:
+          '• Tratamiento de colágeno para aportar cuerpo, suavidad y elasticidad al cabello',
+        imagen: '/assets/branding/espuma.jpeg',
+        precio: '70€',
+        duracionMinutos: 0,
+      },
     ];
   }
 }

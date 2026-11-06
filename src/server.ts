@@ -63,6 +63,7 @@ import {
   updateReservationByAdmin,
   updateReservationDetailsByAdmin,
   createWaitlistReservation,
+  type DiscountMetadata,
 } from './shared/reservas-db';
 import {
   getPackPriceByName,
@@ -667,7 +668,7 @@ const buildAdminReservationEventEmailHtml = (data: {
               <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Tipo de reserva</strong><br><span style="color:#7a675d;">${reservationKind}</span></td></tr>
               <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>${reservationKind}</strong><br><span style="color:#7a675d;">${appointmentTypeName}</span></td></tr>
               <tr><td style="padding:14px 16px;border-bottom:1px solid #f1e4d9;font-size:14px;"><strong>Fecha</strong><br><span style="color:#7a675d;">${dateLabel}</span></td></tr>
-              <tr><td style="padding:14px 16px;font-size:14px;"><strong>Hora</strong><br><span style="color:#7a675d;">${time}</span></td></tr>
+              <tr>              <td style="padding:14px 16px;font-size:14px;"><strong>Hora (España)</strong><br><span style="color:#7a675d;">${time}</span></td></tr>
             </table>
             <p style="margin:16px 0 0;font-size:12px;line-height:1.55;color:#8f7b6f;">${footer}</p>
           </td>
@@ -973,7 +974,37 @@ const buildReservationDecisionResultHtml = (
 
 const getReservationStartMs = (dateIso: string, startTime: string): number | null => {
   const normalizedStartTime = normalizeReservationStartTimeForComparison(startTime);
-  const value = new Date(`${dateIso}T${normalizedStartTime}:00`).getTime();
+  const utcGuessMs = Date.parse(`${dateIso}T${normalizedStartTime}:00Z`);
+
+  if (Number.isNaN(utcGuessMs)) {
+    return null;
+  }
+
+  const madridParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Madrid',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(utcGuessMs));
+  const parts = Object.fromEntries(
+    madridParts
+      .filter(({ type }) => type !== 'literal')
+      .map(({ type, value }) => [type, Number(value)]),
+  ) as Record<string, number>;
+  const madridGuessMs = Date.UTC(
+    parts['year'],
+    parts['month'] - 1,
+    parts['day'],
+    parts['hour'],
+    parts['minute'],
+    parts['second'],
+  );
+  const value = utcGuessMs - (madridGuessMs - utcGuessMs);
+
   return Number.isNaN(value) ? null : value;
 };
 
@@ -1475,6 +1506,7 @@ interface PaymentOperationDetail {
   }>;
   performedByEmail: string;
   createdAtIso: string;
+  discount?: DiscountMetadata | null;
 }
 
 interface ClientCardItem {
@@ -1503,6 +1535,19 @@ interface StockProductItem {
   isSellable: boolean;
   createdAtIso: string;
   createdByEmail: string;
+}
+
+interface StockMovementItem {
+  id: string;
+  productId: string;
+  productName: string;
+  type: 'alta' | 'baja';
+  quantity: number;
+  reason: 'alta_producto' | 'ajuste' | 'venta' | 'reserva' | 'baja_producto';
+  previousQuantity: number;
+  nextQuantity: number;
+  performedByEmail: string;
+  createdAtIso: string;
 }
 
 interface StockSaleHistoryItem {
@@ -1539,6 +1584,7 @@ interface ReservationStockMetaItem {
 interface ReservationMetaPayload {
   version: 1;
   linkedClientId?: string;
+  discount?: DiscountMetadata | null;
   services: ReservationServiceMetaItem[];
   stock: ReservationStockMetaItem[];
   paymentSummary?: {
@@ -1557,6 +1603,7 @@ interface ReservationMetaPayload {
     finalPaymentAmountEuro: number;
     registeredAtIso: string;
     registeredByEmail?: string;
+    discount?: DiscountMetadata | null;
   };
 }
 
@@ -1580,6 +1627,7 @@ const usersByEmail = new Map<string, AppUser>();
 const usersByUsername = new Map<string, AppUser>();
 const clientCardsById = new Map<string, ClientCardItem>();
 const stockProductsById = new Map<string, StockProductItem>();
+const stockMovementsById = new Map<string, StockMovementItem>();
 const stockSalesById = new Map<string, StockSaleHistoryItem>();
 const cierreCajaById = new Map<string, CierreCajaItem>();
 const dailyPaymentsByDateIso = new Map<string, DailyPaymentSummaryItem>();
@@ -1590,9 +1638,104 @@ const runtimeDataDir = join(process.cwd(), '.runtime-data');
 const usersBackupFilePath = join(runtimeDataDir, 'users.json');
 const clientCardsBackupFilePath = join(runtimeDataDir, 'client-cards.json');
 const stockProductsBackupFilePath = join(runtimeDataDir, 'stock-products.json');
+const stockMovementsBackupFilePath = join(runtimeDataDir, 'stock-movements.json');
 const stockSalesBackupFilePath = join(runtimeDataDir, 'stock-sales.json');
 const cierreCajaBackupFilePath = join(runtimeDataDir, 'cierre-caja.json');
 const dailyPaymentsBackupFilePath = join(runtimeDataDir, 'daily-payments.json');
+const promoCodesBackupFilePath = join(runtimeDataDir, 'promo-codes.json');
+
+interface PromoCodeRecord {
+  id: string;
+  code: string;
+  type: 'percentage' | 'fixed';
+  amount: number;
+  startsAtIso?: string;
+  endsAtIso?: string;
+  usageLimit?: number;
+  usageCount: number;
+  reason?: string;
+  active: boolean;
+  createdAtIso: string;
+  updatedAtIso: string;
+}
+
+const promoCodesByCode = new Map<string, PromoCodeRecord>();
+let promoCodesLoaded = false;
+const normalizePromoCode = (value: unknown): string => `${value ?? ''}`.trim().toUpperCase();
+const normalizePromoRecord = (value: Partial<PromoCodeRecord>): PromoCodeRecord | null => {
+  const code = normalizePromoCode(value.code);
+  const type = value.type === 'percentage' || value.type === 'fixed' ? value.type : null;
+  const amount = Number(value.amount);
+  const normalizeDate = (raw: unknown): string | undefined => {
+    if (!raw) return undefined;
+    const date = new Date(`${raw}`);
+    return Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
+  };
+  const startsAtIso = normalizeDate(value.startsAtIso);
+  const endsAtIso = normalizeDate(value.endsAtIso);
+  if ((value.startsAtIso && !startsAtIso) || (value.endsAtIso && !endsAtIso)) return null;
+  if (!code || !type || !Number.isFinite(amount) || amount <= 0 ||
+      (type === 'percentage' && amount > 100)) return null;
+  return {
+    id: `${value.id ?? randomBytes(8).toString('hex')}`,
+    code,
+    type,
+    amount: Number(amount.toFixed(2)),
+    startsAtIso,
+    endsAtIso,
+    usageLimit: Number.isFinite(Number(value.usageLimit)) && Number(value.usageLimit) > 0
+      ? Math.floor(Number(value.usageLimit)) : undefined,
+    usageCount: Math.max(0, Math.floor(Number(value.usageCount) || 0)),
+    reason: `${value.reason ?? ''}`.trim().slice(0, 200) || undefined,
+    active: value.active !== false,
+    createdAtIso: value.createdAtIso || new Date().toISOString(),
+    updatedAtIso: value.updatedAtIso || new Date().toISOString(),
+  };
+};
+const ensurePromoCodesLoaded = async (): Promise<void> => {
+  if (promoCodesLoaded) return;
+  promoCodesLoaded = true;
+  try {
+    const parsed = JSON.parse(await readFile(promoCodesBackupFilePath, 'utf8')) as unknown;
+    if (Array.isArray(parsed)) parsed.forEach((item) => {
+      const promo = normalizePromoRecord(item as Partial<PromoCodeRecord>);
+      if (promo) promoCodesByCode.set(promo.code, promo);
+    });
+  } catch { /* first run */ }
+};
+const persistPromoCodes = async (): Promise<void> => {
+  await ensureRuntimeDataDir();
+  await writeFile(promoCodesBackupFilePath, JSON.stringify(Array.from(promoCodesByCode.values()), null, 2), 'utf8');
+};
+const validatePromoCode = async (rawCode: unknown, originalAmountEuro: number): Promise<
+  { ok: true; discount: DiscountMetadata; promo: PromoCodeRecord } |
+  { ok: false; error: string }
+> => {
+  await ensurePromoCodesLoaded();
+  const code = normalizePromoCode(rawCode);
+  const promo = promoCodesByCode.get(code);
+  const now = Date.now();
+  if (!promo || !promo.active || (promo.startsAtIso && now < new Date(promo.startsAtIso).getTime()) ||
+      (promo.endsAtIso && now > new Date(promo.endsAtIso).getTime()) ||
+      (promo.usageLimit !== undefined && promo.usageCount >= promo.usageLimit)) {
+    return { ok: false, error: 'El código promocional no es válido o ha caducado.' };
+  }
+  const original = Math.max(0, Number(originalAmountEuro) || 0);
+  const discountAmount = Math.min(original, promo.type === 'percentage'
+    ? original * promo.amount / 100 : promo.amount);
+  return {
+    ok: true,
+    promo,
+    discount: {
+      type: promo.type,
+      amount: Number(discountAmount.toFixed(2)),
+      originalAmountEuro: Number(original.toFixed(2)),
+      finalAmountEuro: Number((original - discountAmount).toFixed(2)),
+      reason: promo.reason,
+      code: promo.code,
+    },
+  };
+};
 
 const escapeHtml = (value: string): string =>
   value
@@ -1922,6 +2065,38 @@ const buildStockProductId = (): string =>
   `stock-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const buildStockSaleId = (): string =>
   `stock-sale-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+const buildStockMovementId = (): string =>
+  `stock-movement-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+const recordStockMovement = (
+  product: StockProductItem,
+  previousQuantity: number,
+  nextQuantity: number,
+  reason: StockMovementItem['reason'],
+  performedByEmail: string,
+): void => {
+  const quantity = Math.abs(nextQuantity - previousQuantity);
+
+  if (quantity === 0 && reason !== 'alta_producto' && reason !== 'baja_producto') {
+    return;
+  }
+
+  const movement: StockMovementItem = {
+    id: buildStockMovementId(),
+    productId: product.id,
+    productName: product.productName,
+    type: nextQuantity >= previousQuantity ? 'alta' : 'baja',
+    quantity: quantity || Math.max(previousQuantity, nextQuantity),
+    reason,
+    previousQuantity,
+    nextQuantity,
+    performedByEmail,
+    createdAtIso: new Date().toISOString(),
+  };
+
+  stockMovementsById.set(movement.id, movement);
+  void persistStockMovementsToDisk();
+};
 
 const normalizeBirthDateIso = (value: unknown): string => {
   const raw = `${value ?? ''}`.trim();
@@ -2376,6 +2551,7 @@ const parseReservationMetaFromComments = (
         ? {
             version: 1,
             linkedClientId: `${parsed.linkedClientId ?? ''}`.trim() || undefined,
+            discount: normalizeDiscountMetadata(parsed.discount),
             services,
             stock,
             paymentSummary: registeredAtIso
@@ -2388,6 +2564,7 @@ const parseReservationMetaFromComments = (
                   finalPaymentAmountEuro: Number(finalPaymentAmountEuro.toFixed(2)),
                   registeredAtIso,
                   registeredByEmail: registeredByEmail || undefined,
+                  discount: normalizeDiscountMetadata(paymentSummaryRaw?.discount),
                 }
               : undefined,
           }
@@ -2588,11 +2765,15 @@ const sanitizeReservationMetaFromRequest = (
   return {
     version: 1,
     linkedClientId: `${parsed.linkedClientId ?? fallback.linkedClientId ?? ''}`.trim() || undefined,
+    discount: normalizeDiscountMetadata(parsed.discount),
     services,
     stock,
     paymentSummary:
       parsed.paymentSummary && typeof parsed.paymentSummary === 'object'
-        ? parsed.paymentSummary
+        ? {
+            ...parsed.paymentSummary,
+            discount: normalizeDiscountMetadata(parsed.paymentSummary.discount),
+          }
         : undefined,
   };
 };
@@ -2658,6 +2839,18 @@ const persistStockProductsToDisk = async (): Promise<void> => {
     await writeFile(stockProductsBackupFilePath, JSON.stringify(products, null, 2), 'utf8');
   } catch (error) {
     console.error('Error guardando backup local de almacén:', error);
+  }
+};
+
+const persistStockMovementsToDisk = async (): Promise<void> => {
+  try {
+    await ensureRuntimeDataDir();
+    const movements = Array.from(stockMovementsById.values()).sort((a, b) =>
+      b.createdAtIso.localeCompare(a.createdAtIso),
+    );
+    await writeFile(stockMovementsBackupFilePath, JSON.stringify(movements, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Error guardando historial local de movimientos de stock:', error);
   }
 };
 
@@ -2753,6 +2946,18 @@ const loadStockSalesFromDisk = async (): Promise<StockSaleHistoryItem[]> => {
   }
 };
 
+const loadStockMovementsFromDisk = async (): Promise<StockMovementItem[]> => {
+  try {
+    const raw = await readFile(stockMovementsBackupFilePath, 'utf8');
+    const parsed = JSON.parse(raw) as StockMovementItem[];
+    return Array.isArray(parsed)
+      ? parsed.filter((movement) => Boolean(movement?.id && movement?.productId))
+      : [];
+  } catch {
+    return [];
+  }
+};
+
 // ── Cierre de caja helpers ────────────────────────────────────────────────────
 
 const buildCierreId = (): string =>
@@ -2809,6 +3014,29 @@ const formatPaymentOperationLineItem = (
   }
 
   return `${item.name}: ${formatEuro(item.amount)} €`;
+};
+
+const normalizeDiscountMetadata = (value: unknown): DiscountMetadata | null => {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const candidate = value as Partial<DiscountMetadata>;
+  const type = candidate.type === 'percentage' || candidate.type === 'fixed' ? candidate.type : null;
+  const amount = Number(candidate.amount);
+  const original = Number(candidate.originalAmountEuro);
+  const final = Number(candidate.finalAmountEuro);
+  if (!type || !Number.isFinite(amount) || amount < 0 || !Number.isFinite(original) || original < 0 ||
+      !Number.isFinite(final) || final < 0) {
+    return null;
+  }
+  return {
+    type,
+    amount: Number(amount.toFixed(2)),
+    originalAmountEuro: Number(original.toFixed(2)),
+    finalAmountEuro: Number(final.toFixed(2)),
+    reason: `${candidate.reason ?? ''}`.trim().slice(0, 200) || undefined,
+    code: `${candidate.code ?? ''}`.trim().toUpperCase().slice(0, 40) || undefined,
+  };
 };
 
 const normalizePaymentOperationDetail = (
@@ -2875,6 +3103,7 @@ const normalizePaymentOperationDetail = (
     lineItems,
     performedByEmail: `${detail.performedByEmail ?? ''}`.trim().toLowerCase(),
     createdAtIso: `${detail.createdAtIso ?? new Date().toISOString()}`,
+    discount: normalizeDiscountMetadata(detail.discount),
   };
 };
 
@@ -2913,6 +3142,7 @@ const normalizePaymentOperationDetails = (value: unknown): PaymentOperationDetai
         lineItems: candidate.lineItems,
         performedByEmail: `${candidate.performedByEmail ?? ''}`,
         createdAtIso: `${candidate.createdAtIso ?? new Date().toISOString()}`,
+        discount: candidate.discount,
       });
     })
     .filter(
@@ -5018,6 +5248,46 @@ app.patch('/api/admin/alertas/:id/rechazar', async (req, res) => {
   }
 });
 
+app.get('/api/promociones/validar', async (req, res) => {
+  const appointmentTypeName = `${req.query['appointmentTypeName'] ?? ''}`;
+  const amount = Number(req.query['amountEuro'] ?? getPackPriceByName(appointmentTypeName));
+  const result = await validatePromoCode(req.query['code'], amount);
+  return result.ok ? res.status(200).json(result) : res.status(400).json(result);
+});
+
+app.get('/api/admin/promociones', async (req, res) => {
+  if (!isAdminRequest(req.headers.cookie).isAdmin) return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  await ensurePromoCodesLoaded();
+  return res.json({ ok: true, promociones: Array.from(promoCodesByCode.values()) });
+});
+app.post('/api/admin/promociones', async (req, res) => {
+  if (!isAdminRequest(req.headers.cookie).isAdmin) return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  await ensurePromoCodesLoaded();
+  const promo = normalizePromoRecord({ ...req.body, id: randomBytes(8).toString('hex'), usageCount: 0,
+    createdAtIso: new Date().toISOString(), updatedAtIso: new Date().toISOString() });
+  if (!promo) return res.status(400).json({ ok: false, error: 'Datos de promoción inválidos.' });
+  if (promoCodesByCode.has(promo.code)) return res.status(409).json({ ok: false, error: 'El código ya existe.' });
+  promoCodesByCode.set(promo.code, promo); await persistPromoCodes();
+  return res.status(201).json({ ok: true, promocion: promo });
+});
+app.patch('/api/admin/promociones/:code', async (req, res) => {
+  if (!isAdminRequest(req.headers.cookie).isAdmin) return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  await ensurePromoCodesLoaded();
+  const key = normalizePromoCode(req.params['code']); const existing = promoCodesByCode.get(key);
+  if (!existing) return res.status(404).json({ ok: false, error: 'Promoción no encontrada.' });
+  const promo = normalizePromoRecord({ ...existing, ...req.body, code: key, usageCount: existing.usageCount,
+    updatedAtIso: new Date().toISOString() });
+  if (!promo) return res.status(400).json({ ok: false, error: 'Datos de promoción inválidos.' });
+  promoCodesByCode.set(key, promo); await persistPromoCodes();
+  return res.json({ ok: true, promocion: promo });
+});
+app.delete('/api/admin/promociones/:code', async (req, res) => {
+  if (!isAdminRequest(req.headers.cookie).isAdmin) return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  await ensurePromoCodesLoaded(); const key = normalizePromoCode(req.params['code']);
+  if (!promoCodesByCode.delete(key)) return res.status(404).json({ ok: false, error: 'Promoción no encontrada.' });
+  await persistPromoCodes(); return res.json({ ok: true });
+});
+
 app.post('/api/admin/request-link', async (req, res) => {
   const email = `${req.body?.email ?? ''}`.trim().toLowerCase();
   const isProd = process.env['NODE_ENV'] === 'production';
@@ -5283,6 +5553,22 @@ app.get('/api/admin/almacen/sales', (req, res) => {
   return res.status(200).json({ ok: true, sales });
 });
 
+app.get('/api/admin/almacen/movements', (req, res) => {
+  seedAuthUsers();
+  const session = isAdminRequest(req.headers.cookie);
+
+  if (!session.isAdmin) {
+    return res.status(401).json({ ok: false, error: 'No autorizado.' });
+  }
+
+  const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
+  const movements = Array.from(stockMovementsById.values())
+    .filter((movement) => Date.parse(movement.createdAtIso) >= cutoff)
+    .sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso));
+
+  return res.status(200).json({ ok: true, movements });
+});
+
 app.post('/api/admin/almacen', async (req, res) => {
   seedAuthUsers();
   const session = isAdminRequest(req.headers.cookie);
@@ -5343,6 +5629,7 @@ app.post('/api/admin/almacen', async (req, res) => {
   }
 
   stockProductsById.set(product.id, product);
+  recordStockMovement(product, 0, product.quantity, 'alta_producto', session.email);
   void persistStockProductsToDisk();
   console.log(`[persistencia] stock guardado en DB id=${product.id}`);
 
@@ -5417,6 +5704,9 @@ app.patch('/api/admin/almacen/:id', async (req, res) => {
   }
 
   stockProductsById.set(id, updated);
+  if (updated.quantity !== product.quantity) {
+    recordStockMovement(updated, product.quantity, updated.quantity, 'ajuste', session.email);
+  }
   void persistStockProductsToDisk();
 
   return res.status(200).json({ ok: true, product: normalizeStockProduct(updated) });
@@ -5464,6 +5754,9 @@ app.patch('/api/admin/almacen/:id/quantity', async (req, res) => {
   }
 
   stockProductsById.set(id, updated);
+  if (updated.quantity !== product.quantity) {
+    recordStockMovement(updated, product.quantity, updated.quantity, 'ajuste', session.email);
+  }
   void persistStockProductsToDisk();
   await triggerLowStockNotificationIfNeeded(updated, product.quantity);
 
@@ -5585,6 +5878,7 @@ app.post('/api/admin/almacen/:id/sell', async (req, res) => {
   }
 
   stockProductsById.set(id, updated);
+  recordStockMovement(updated, product.quantity, updated.quantity, 'venta', session.email);
   void persistStockProductsToDisk();
   await triggerLowStockNotificationIfNeeded(updated, product.quantity);
 
@@ -5681,6 +5975,7 @@ app.delete('/api/admin/almacen/:id', async (req, res) => {
     });
   }
 
+  recordStockMovement(product, product.quantity, 0, 'baja_producto', session.email);
   stockProductsById.delete(id);
   void persistStockProductsToDisk();
 
@@ -7484,6 +7779,39 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
         ? availablePaymentItems.filter((item) => paidItemIdsRaw.includes(item.id))
         : availablePaymentItems;
     const selectedItemsAmount = selectedItems.reduce((acc, item) => acc + item.amount, 0);
+    const discountRaw =
+      req.body?.discount && typeof req.body.discount === 'object'
+        ? (req.body.discount as { type?: unknown; amount?: unknown; reason?: unknown })
+        : null;
+    const discountType =
+      discountRaw?.type === 'percentage' || discountRaw?.type === 'fixed'
+        ? discountRaw.type
+        : null;
+    const discountInputAmount = Number(discountRaw?.amount ?? 0);
+    const discountReason = `${discountRaw?.reason ?? ''}`.trim().slice(0, 200);
+    const discountOriginalAmount = Math.max(0, selectedItemsAmount - Math.max(0, Number(reservation.signalAmountEuro ?? 0)));
+    const manualDiscountAmount =
+      discountType && Number.isFinite(discountInputAmount) && discountInputAmount > 0
+        ? Math.min(
+            discountOriginalAmount,
+            discountType === 'percentage'
+              ? (discountOriginalAmount * discountInputAmount) / 100
+              : discountInputAmount,
+          )
+        : 0;
+    if (discountRaw && (!discountType || !Number.isFinite(discountInputAmount) || discountInputAmount < 0 ||
+      (discountType === 'percentage' && discountInputAmount > 100))) {
+      return res.status(400).json({ ok: false, error: 'El descuento manual no es válido.' });
+    }
+    const manualDiscount: DiscountMetadata | null = discountType && manualDiscountAmount > 0
+      ? {
+          type: discountType,
+          amount: Number(manualDiscountAmount.toFixed(2)),
+          originalAmountEuro: Number(discountOriginalAmount.toFixed(2)),
+          finalAmountEuro: Number((discountOriginalAmount - manualDiscountAmount).toFixed(2)),
+          reason: discountReason || undefined,
+        }
+      : null;
     const splitPayments: Array<{ method: 'efectivo' | 'tarjeta' | 'bizum'; amount: number }> =
       splitPaymentsRaw
         .map(
@@ -7510,10 +7838,17 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
           ): entry is { method: 'efectivo' | 'tarjeta' | 'bizum'; amount: number } => !!entry,
         );
 
+    const expectedPaymentAmountEuro = Number(
+      (selectedItemsAmount - Math.max(0, Number(reservation.signalAmountEuro ?? 0)) - manualDiscountAmount)
+        .toFixed(2),
+    );
     const paymentAmountEuro =
       Number.isFinite(paymentAmountEuroRaw) && paymentAmountEuroRaw >= 0
         ? Number(paymentAmountEuroRaw.toFixed(2))
-        : Number(selectedItemsAmount.toFixed(2));
+        : expectedPaymentAmountEuro;
+    if (manualDiscount && Math.abs(paymentAmountEuro - expectedPaymentAmountEuro) > 0.01) {
+      return res.status(400).json({ ok: false, error: 'El importe no coincide con el descuento aplicado.' });
+    }
     const giftVoucherAmountEuro = Number.isFinite(giftVoucherAmountRaw) && giftVoucherAmountRaw >= 0
       ? Number(giftVoucherAmountRaw.toFixed(2))
       : -1;
@@ -7706,6 +8041,7 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
             finalPaymentAmountEuro: nextFinalPaymentAmountEuro,
             registeredAtIso: nowIso,
             registeredByEmail: session.email || undefined,
+            discount: manualDiscount,
           }
         : undefined,
     };
@@ -7801,6 +8137,7 @@ app.patch('/api/admin/reservas/:id/payment', async (req, res) => {
         reservationStartTime: reservation.startTime,
         appointmentTypeName: reservation.appointmentTypeName,
         lineItems: receiptLineItems,
+        discount: manualDiscount,
         voucherAmountEuro: giftVoucherAmountEuro,
         totalCoveredAmountEuro: finalChargeEuro,
         voucherPayments: redeemedVoucher && voucherClient
@@ -8040,6 +8377,13 @@ app.patch('/api/admin/reservas/:id/stock-line', async (req, res) => {
     }
 
     stockProductsById.set(product.id, updatedProduct);
+    recordStockMovement(
+      updatedProduct,
+      product.quantity,
+      updatedProduct.quantity,
+      'reserva',
+      session.email,
+    );
     void persistStockProductsToDisk();
     await triggerLowStockNotificationIfNeeded(updatedProduct, product.quantity);
 
@@ -8188,6 +8532,13 @@ app.patch('/api/admin/reservas/:id/stock-line/:productId', async (req, res) => {
       }
 
       stockProductsById.set(updatedProduct.id, updatedProduct);
+      recordStockMovement(
+        updatedProduct,
+        product.quantity,
+        updatedProduct.quantity,
+        'reserva',
+        session.email,
+      );
       void persistStockProductsToDisk();
     }
 
@@ -8284,6 +8635,13 @@ app.delete('/api/admin/reservas/:id/stock-line/:productId', async (req, res) => 
       }
 
       stockProductsById.set(updatedProduct.id, updatedProduct);
+      recordStockMovement(
+        updatedProduct,
+        product.quantity,
+        updatedProduct.quantity,
+        'reserva',
+        session.email,
+      );
       void persistStockProductsToDisk();
     }
 
@@ -8957,6 +9315,7 @@ app.post('/api/admin/reservas', async (req, res) => {
         bookedByEmail: session.email,
       },
       {
+        allowAdminEarlyStart: true,
         allowClosedSchedule: isSuperadmin,
         maxConcurrentReservations: getMaxConcurrentReservationsForSlot(),
       },
@@ -9509,7 +9868,9 @@ app.post('/api/admin/logout', (_req, res) => {
 app.get('/api/reservas/disponibilidad', async (req, res) => {
   const dateIso = `${req.query['dateIso'] ?? ''}`;
   const durationMinutes = Number(req.query['durationMinutes']);
-  const soloAdmin = `${req.query['soloAdmin'] ?? ''}`.trim().toLowerCase() === 'true';
+  const session = getAuthSession(req.headers.cookie);
+  const soloAdmin =
+    `${req.query['soloAdmin'] ?? ''}`.trim().toLowerCase() === 'true' && session.isAdmin;
 
   if (!dateIso || Number.isNaN(durationMinutes)) {
     return res.status(400).json({
@@ -9524,6 +9885,7 @@ app.get('/api/reservas/disponibilidad', async (req, res) => {
       durationMinutes,
       soloAdmin ? 1 : getMaxConcurrentReservationsForSlot(),
       soloAdmin ? adminOwnerEmail : undefined,
+      soloAdmin,
     );
     const blockedSlots = await getManuallyBlockedSlotsForDate(dateIso);
 
@@ -9717,6 +10079,7 @@ app.post('/api/reservas/email', async (req, res) => {
     establishmentAddress,
     establishmentPhone,
     observaciones,
+    promoCode,
   } = req.body ?? {};
 
   if (
@@ -9741,8 +10104,26 @@ app.post('/api/reservas/email', async (req, res) => {
   const provisionalHoldHours = shouldRequireReservationSignal
     ? getProvisionalReservationHoursByName(`${appointmentTypeName ?? ''}`) || 48
     : 0;
+  let reservationDiscount: DiscountMetadata | null = null;
+  if (promoCode) {
+    const originalAmountEuro = getPackPriceByName(`${appointmentTypeName}`) ||
+      getServicePriceByName(`${appointmentTypeName}`, false);
+    const promoResult = await validatePromoCode(promoCode, originalAmountEuro);
+    if (!promoResult.ok) return res.status(400).json(promoResult);
+    reservationDiscount = promoResult.discount;
+  }
 
   try {
+    const reservationComments = reservationDiscount
+      ? composeReservationCommentsWithMeta(typeof observaciones === 'string' ? observaciones : '', {
+          ...buildDefaultReservationMeta({
+            appointmentTypeName,
+            durationMinutes: Number(durationMinutes),
+            requiresReservationSignal: shouldRequireReservationSignal,
+          }),
+          discount: reservationDiscount,
+        })
+      : (typeof observaciones === 'string' ? observaciones : undefined);
     const created = await createReservationWithSlots(
       {
         dateIso,
@@ -9752,6 +10133,8 @@ app.post('/api/reservas/email', async (req, res) => {
         customerName,
         customerPhone,
         appointmentTypeName,
+        additionalComments: reservationComments,
+        discount: reservationDiscount,
         requiresReservationSignal: shouldRequireReservationSignal,
         createdByEmail: adminOwnerEmail,
         bookingSource: 'online',
@@ -9770,6 +10153,14 @@ app.post('/api/reservas/email', async (req, res) => {
     }
 
     reservationId = created.reservationId;
+    if (reservationDiscount) {
+      const promo = promoCodesByCode.get(reservationDiscount.code ?? '');
+      if (promo) {
+        promo.usageCount += 1;
+        promo.updatedAtIso = new Date().toISOString();
+        await persistPromoCodes();
+      }
+    }
 
     // Crear notificación para el admin
     const notificationMessage = `Nueva reserva de ${customerName} (${customerPhone}) para ${appointmentTypeName} el ${dateIso} a las ${time}`;
@@ -9797,7 +10188,7 @@ app.post('/api/reservas/email', async (req, res) => {
     });
 
     if (emailConfigError || !apiKey) {
-      return res.status(200).json({ ok: true, emailSent: false, emailError: emailConfigError });
+      return res.status(200).json({ ok: true, emailSent: false, emailError: emailConfigError, discount: reservationDiscount });
     }
 
     const subject = `Confirmación de cita - ${appointmentTypeName} (${dateIso} ${time})`;
@@ -9857,7 +10248,7 @@ app.post('/api/reservas/email', async (req, res) => {
       console.error('Error procesando alertas:', alertError);
     }
 
-    return res.status(200).json({ ok: true, emailSent: true });
+    return res.status(200).json({ ok: true, emailSent: true, discount: reservationDiscount });
   } catch (error) {
     if (reservationId) {
       await deleteReservationById(reservationId);
@@ -10293,6 +10684,7 @@ const initializeFromDb = async (): Promise<void> => {
   const diskUsers = await loadUsersFromDisk();
   const diskCards = await loadClientCardsFromDisk();
   const diskStockProducts = await loadStockProductsFromDisk();
+  const diskStockMovements = await loadStockMovementsFromDisk();
   const diskStockSales = await loadStockSalesFromDisk();
   const diskCierres = await loadCierreCajaFromDisk();
   const diskDailyPayments = await loadDailyPaymentsFromDisk();
@@ -10319,6 +10711,12 @@ const initializeFromDb = async (): Promise<void> => {
   for (const sale of diskStockSales) {
     if (!stockSalesById.has(sale.id)) {
       stockSalesById.set(sale.id, normalizeStockSale(sale));
+    }
+
+    for (const movement of diskStockMovements) {
+      if (!stockMovementsById.has(movement.id)) {
+        stockMovementsById.set(movement.id, movement);
+      }
     }
   }
 
@@ -10375,6 +10773,10 @@ const initializeFromDb = async (): Promise<void> => {
 
   if (stockSalesById.size > 0) {
     void persistStockSalesToDisk();
+  }
+
+  if (stockMovementsById.size > 0) {
+    void persistStockMovementsToDisk();
   }
 
   if (cierreCajaById.size > 0) {

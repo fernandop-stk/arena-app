@@ -601,6 +601,65 @@
             display: grid;
             gap: 0.75rem;
         }
+        &__discount-card {
+            margin: 1rem 0;
+            border: 1px solid rgba(184, 92, 92, 0.28);
+            border-radius: layout.$radius-md;
+            padding: 1rem;
+            background: linear-gradient(135deg, rgba(201, 123, 99, 0.1), rgba(255, 250, 246, 0.96));
+            display: grid;
+            gap: 0.85rem;
+        }
+        &__discount-heading {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+        }
+        &__discount-icon {
+            display: grid;
+            place-items: center;
+            width: 2rem;
+            height: 2rem;
+            flex: 0 0 2rem;
+            border-radius: 50%;
+            background: colors.$color-primary-dark;
+            color: #fff;
+            font-weight: 800;
+        }
+        &__discount-title {
+            margin: 0;
+            color: colors.$color-primary-dark;
+            font-weight: 800;
+        }
+        &__discount-help {
+            margin: 0.15rem 0 0;
+            color: colors.$color-text-soft;
+            font-size: 0.8rem;
+        }
+        &__discount-fields {
+            display: grid;
+            grid-template-columns: minmax(0, 0.85fr) minmax(0, 0.75fr);
+            gap: 0.6rem;
+            align-items: end;
+        }
+        &__discount-fields label:last-child {
+            grid-column: 1 / -1;
+        }
+        &__discount-preview {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.65rem 0.8rem;
+            border-radius: layout.$radius-sm;
+            background: rgba(255, 255, 255, 0.72);
+            color: colors.$color-text-soft;
+            font-size: 0.9rem;
+        }
+        &__discount-preview strong {
+            color: colors.$color-primary-dark;
+            font-size: 1.08rem;
+        }
         &__calendar-card {
             margin-top: layout.$space-2;
             border: 1px solid colors.$color-border;
@@ -2545,6 +2604,28 @@
             line-height: 1.3;
             word-break: break-word;
         }
+        &__cierre-expenses {
+            display: grid;
+            gap: 0.35rem;
+            margin-top: 0.45rem;
+            padding-top: 0.55rem;
+            border-top: 1px solid rgba(201, 123, 99, 0.16);
+        }
+        &__cierre-expense-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.8rem;
+            color: colors.$color-text;
+            font-size: 0.78rem;
+            line-height: 1.35;
+
+            strong {
+                flex: 0 0 auto;
+                color: colors.$color-primary-dark;
+                white-space: nowrap;
+            }
+        }
         &__cierre-operation-breakdown {
             margin-top: 0.35rem;
             font-size: 0.78rem;
@@ -3321,6 +3402,9 @@
         }
         @media (max-width: 640px) {
             padding: layout.$space-2;
+            &__discount-fields {
+                grid-template-columns: 1fr 1fr;
+            }
             &__module-card {
                 min-height: 10rem;
             }

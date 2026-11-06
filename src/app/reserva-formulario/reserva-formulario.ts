@@ -1,4 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -9,7 +10,7 @@ import { NotificationService } from '../admin-panel/services/notification.servic
 
 @Component({
   selector: 'app-reserva-formulario',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, DecimalPipe],
   templateUrl: './reserva-formulario.html',
   styleUrl: './reserva-formulario.scss',
 })
@@ -50,6 +51,9 @@ export class ReservaFormularioComponent {
   protected readonly showUrgentWarning = signal(this.isSelectionLessThan24Hours());
   protected readonly establishmentPhone = this.reservaFormularioService.getEstablishmentPhone();
   protected readonly showTreatmentPhoneWarning = signal(this.isTreatmentPhoneOnly());
+  protected readonly promoDiscount = signal<{ amount: number; finalAmountEuro: number } | null>(null);
+  protected readonly promoError = signal('');
+  protected readonly promoLoading = signal(false);
 
   protected getSummaryDateLabel(): string {
     const dateIso = this.reservationSelection?.dateIso;
@@ -70,6 +74,43 @@ export class ReservaFormularioComponent {
   protected closeSuccessModal(): Promise<boolean> {
     this.successMessage.set('');
     return this.router.navigate(['/']);
+  }
+
+  protected validatePromoCode(): void {
+    const code = `${this.form.get('promoCode')?.value ?? ''}`.trim().toUpperCase();
+    this.promoError.set('');
+    this.promoDiscount.set(null);
+
+    if (!code || this.isWaitlist || this.appointmentTypePrice <= 0) {
+      return;
+    }
+
+    this.promoLoading.set(true);
+    this.http
+      .get<{ ok: boolean; discount?: { amount: number; finalAmountEuro: number }; error?: string }>(
+        '/api/promociones/validar',
+        {
+          params: {
+            code,
+            appointmentTypeName: this.appointmentTypeName,
+            amountEuro: `${this.appointmentTypePrice}`,
+          },
+        },
+      )
+      .subscribe({
+        next: (response) => {
+          if (!response.ok || !response.discount) {
+            this.promoError.set(response.error ?? 'Código promocional no válido.');
+            return;
+          }
+
+          this.promoDiscount.set(response.discount);
+        },
+        error: (error) => {
+          this.promoError.set(error?.error?.error ?? 'Código promocional no válido.');
+        },
+        complete: () => this.promoLoading.set(false),
+      });
   }
 
   constructor() {
@@ -109,6 +150,7 @@ export class ReservaFormularioComponent {
       this.reservationSelection,
       observaciones,
       this.requiresReservationSignal,
+      `${this.form.get('promoCode')?.value ?? ''}`,
     );
 
     this.errorMessage.set('');

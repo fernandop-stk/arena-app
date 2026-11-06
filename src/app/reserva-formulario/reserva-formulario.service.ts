@@ -16,6 +16,7 @@ export interface ReservationEmailPayload {
   establishmentAddress: string;
   establishmentPhone: string;
   observaciones?: string;
+  promoCode?: string;
 }
 
 @Injectable({
@@ -53,6 +54,7 @@ export class ReservaFormularioService {
       telefono: ['', [Validators.required, Validators.pattern(/^[0-9+\s-]{9,15}$/)]],
       email: ['', [Validators.required, Validators.email]],
       observaciones: [''],
+      promoCode: [''],
     });
   }
 
@@ -78,6 +80,7 @@ export class ReservaFormularioService {
     reservationSelection: ReservationSelection,
     observaciones?: string,
     requiresReservationSignal?: boolean,
+    promoCode?: string,
   ): ReservationEmailPayload {
     return {
       customerEmail,
@@ -91,6 +94,7 @@ export class ReservaFormularioService {
       establishmentAddress: this.getEstablishmentAddress(),
       establishmentPhone: this.getEstablishmentPhone(),
       observaciones: observaciones ?? '',
+      promoCode: promoCode?.trim().toUpperCase() || undefined,
     };
   }
 

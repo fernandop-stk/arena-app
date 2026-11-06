@@ -44,6 +44,32 @@
         placeholder="Alergias, preferencias, aclaraciones..."
       ></textarea>
 
+      <label class="reserva-formulario--container__label" for="promoCode">
+        Código promocional
+        <span class="reserva-formulario--container__label--optional">(opcional)</span>
+      </label>
+      <input
+        id="promoCode"
+        type="text"
+        class="reserva-formulario--container__input"
+        formControlName="promoCode"
+        maxlength="40"
+        autocomplete="off"
+        placeholder="Introduce tu código"
+        (blur)="validatePromoCode()"
+      />
+      @if (promoLoading()) {
+        <p class="reserva-formulario--container__hint">Comprobando código...</p>
+      } @else if (promoError()) {
+        <p class="reserva-formulario--container__error">{{ promoError() }}</p>
+      } @else if (promoDiscount(); as discount) {
+        <p class="reserva-formulario--container__summary reserva-formulario--container__summary--price">
+          Precio original: <s>{{ appointmentTypePrice }} €</s> · Descuento:
+          <strong>-{{ discount.amount | number: '1.2-2' }} €</strong> · Total:
+          <strong>{{ discount.finalAmountEuro | number: '1.2-2' }} €</strong>
+        </p>
+      }
+
       <button
         type="submit"
         class="reserva-formulario--container__button reserva-formulario--container__button--primary"

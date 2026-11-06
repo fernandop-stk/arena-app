@@ -18,9 +18,19 @@ export interface ReservaPersistRequest {
   bookingSource?: ReservationBookingSource;
   // Email de la trabajadora que registró la cita (solo reservas hechas en el salón).
   bookedByEmail?: string | null;
+  discount?: DiscountMetadata | null;
 }
 
 export type ReservationBookingSource = 'online' | 'salon';
+export type DiscountType = 'percentage' | 'fixed';
+export interface DiscountMetadata {
+  type: DiscountType;
+  amount: number;
+  originalAmountEuro: number;
+  finalAmountEuro: number;
+  reason?: string;
+  code?: string;
+}
 
 export type AdminReservationStatus = 'pending' | 'accepted' | 'rejected';
 export type ClientConfirmationStatus = 'pending' | 'confirmed';
@@ -56,6 +66,7 @@ export interface AdminReservationItem {
   expiresAtIso?: string | null;
   bookingSource?: ReservationBookingSource | null;
   bookedByEmail?: string | null;
+  discount?: DiscountMetadata | null;
 }
 
 export interface AdminBlockedPeriodItem {
@@ -75,7 +86,8 @@ export const STEP_MINUTES = 30;
 const MONDAY_WEEKDAY = 1;
 const SUNDAY_WEEKDAY = 0;
 const SATURDAY_WEEKDAY = 6;
-const WEEKDAY_FIRST_START_MINUTES = 10 * 60;
+const WEEKDAY_FIRST_START_MINUTES = 10 * 60 + 30;
+const ADMIN_WEEKDAY_FIRST_START_MINUTES = 10 * 60;
 const WEEKDAY_LAST_START_MINUTES = 18 * 60;
 const WEEKDAY_CLOSING_MINUTES = 19 * 60;
 const SATURDAY_FIRST_START_MINUTES = 9 * 60;
@@ -119,6 +131,7 @@ export const isAdminOpenedDay = (dateIso: string): boolean => openDaysCache.has(
 
 const getServiceWindowByDate = (
   dateIso: string,
+  allowAdminEarlyStart = false,
 ): { firstStartMinutes: number; lastStartMinutes: number; closingMinutes: number } | null => {
   const date = new Date(`${dateIso}T00:00:00`);
 
@@ -142,7 +155,9 @@ const getServiceWindowByDate = (
   }
 
   return {
-    firstStartMinutes: WEEKDAY_FIRST_START_MINUTES,
+    firstStartMinutes: allowAdminEarlyStart
+      ? ADMIN_WEEKDAY_FIRST_START_MINUTES
+      : WEEKDAY_FIRST_START_MINUTES,
     lastStartMinutes: WEEKDAY_LAST_START_MINUTES,
     closingMinutes: WEEKDAY_CLOSING_MINUTES,
   };
@@ -195,6 +210,7 @@ interface MemoryReservation {
   expiresAtIso?: string | null;
   bookingSource?: ReservationBookingSource | null;
   bookedByEmail?: string | null;
+  discount?: DiscountMetadata | null;
   slots: string[];
 }
 
@@ -634,6 +650,7 @@ const ensureSchema = async (): Promise<void> => {
         client_confirmation_reminder_sent_at TIMESTAMPTZ NULL,
         signal_payment_reminder_sent_at TIMESTAMPTZ NULL,
         expires_at TIMESTAMPTZ NULL,
+        discount_metadata JSONB NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
@@ -721,6 +738,11 @@ const ensureSchema = async (): Promise<void> => {
     await db.query(`
       ALTER TABLE reservations
       ADD COLUMN IF NOT EXISTS booked_by_email TEXT NULL;
+    `);
+
+    await db.query(`
+      ALTER TABLE reservations
+      ADD COLUMN IF NOT EXISTS discount_metadata JSONB NULL;
     `);
 
     await db.query(`
@@ -1200,6 +1222,7 @@ const createReservationWithSlotsInMemory = (
     }),
     bookingSource: payload.bookingSource ?? null,
     bookedByEmail: payload.bookedByEmail?.trim().toLowerCase() || null,
+    discount: payload.discount ?? null,
     slots: slotTimes,
   });
 
@@ -1360,6 +1383,7 @@ export const getAvailableSlotsForDate = async (
   durationMinutes: number,
   maxConcurrentReservations = 1,
   workerEmail?: string,
+  allowAdminEarlyStart = false,
 ): Promise<string[]> => {
   seedMockReservationsInMemory();
   await cleanupExpiredProvisionalReservations();
@@ -1368,7 +1392,7 @@ export const getAvailableSlotsForDate = async (
     return [];
   }
 
-  const serviceWindow = getServiceWindowByDate(dateIso);
+  const serviceWindow = getServiceWindowByDate(dateIso, allowAdminEarlyStart);
 
   if (!serviceWindow) {
     return [];
@@ -1502,6 +1526,7 @@ export const createReservationWithSlots = async (
   payload: ReservaPersistRequest,
   options?: {
     allowClosedSchedule?: boolean;
+    allowAdminEarlyStart?: boolean;
     maxConcurrentReservations?: number;
   },
 ): Promise<ReservationCreateResult> => {
@@ -1510,7 +1535,7 @@ export const createReservationWithSlots = async (
 
   const startMinutes = toMinutes(payload.time);
   const endMinutes = startMinutes + payload.durationMinutes;
-  const serviceWindow = getServiceWindowByDate(payload.dateIso);
+  const serviceWindow = getServiceWindowByDate(payload.dateIso, options?.allowAdminEarlyStart === true);
 
   if (
     !serviceWindow ||
@@ -1651,9 +1676,10 @@ export const createReservationWithSlots = async (
         created_by_email,
         expires_at,
         booking_source,
-        booked_by_email
+        booked_by_email,
+        discount_metadata
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
       `,
       [
         reservationId,
@@ -1675,6 +1701,7 @@ export const createReservationWithSlots = async (
         expiresAtIso,
         payload.bookingSource ?? null,
         payload.bookedByEmail?.trim().toLowerCase() || null,
+        payload.discount ? JSON.stringify(payload.discount) : null,
       ],
     );
 
@@ -1877,6 +1904,7 @@ const mapMemoryReservationToAdminItem = (reservation: MemoryReservation): AdminR
   createdAtIso: reservation.createdAtIso,
   bookingSource: reservation.bookingSource ?? null,
   bookedByEmail: reservation.bookedByEmail ?? null,
+  discount: reservation.discount ?? null,
 });
 
 export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]> => {
@@ -1922,6 +1950,7 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
       created_at: string;
       booking_source: string | null;
       booked_by_email: string | null;
+      discount_metadata: unknown;
     }>(`
       SELECT
         id,
@@ -1951,6 +1980,7 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
         created_at,
         booking_source,
         booked_by_email
+        , discount_metadata
       FROM reservations
       ORDER BY date_iso ASC, start_time ASC, created_at DESC
     `);
@@ -2000,6 +2030,10 @@ export const listReservationsForAdmin = async (): Promise<AdminReservationItem[]
           ? row.booking_source
           : null,
       bookedByEmail: row.booked_by_email,
+      discount:
+        row.discount_metadata && typeof row.discount_metadata === 'object'
+          ? (row.discount_metadata as DiscountMetadata)
+          : null,
     }));
   } catch (error) {
     if (enableRuntimeMemoryMode(error)) {
@@ -2864,7 +2898,7 @@ export const updateReservationByAdmin = async (
 
   const startMinutes = toMinutes(payload.startTime);
   const endMinutes = startMinutes + payload.durationMinutes;
-  const serviceWindow = getServiceWindowByDate(payload.dateIso);
+  const serviceWindow = getServiceWindowByDate(payload.dateIso, true);
 
   if (
     !serviceWindow ||

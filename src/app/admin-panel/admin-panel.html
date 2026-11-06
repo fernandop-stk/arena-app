@@ -84,6 +84,34 @@
         <p class="admin-panel--container__hint">
             Revisa las citas por día, añade productos del almacén y cobra con señal o sin ella.
         </p>
+        <section class="admin-panel--container__block-form" aria-labelledby="promo-title">
+            <h3 id="promo-title" class="admin-panel--container__section-title">Códigos promocionales</h3>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.5rem">
+                <input class="admin-panel--container__input" placeholder="Código" [value]="promoFormCode()" (input)="promoFormCode.set($any($event.target).value)" />
+                <select class="admin-panel--container__input" [value]="promoFormType()" (change)="promoFormType.set($any($event.target).value)">
+                    <option value="percentage">Porcentaje</option><option value="fixed">Importe fijo</option>
+                </select>
+                <input class="admin-panel--container__input" type="number" min="0.01" step="0.01" placeholder="Importe" [value]="promoFormAmount()" (input)="promoFormAmount.set($any($event.target).value)" />
+                <input class="admin-panel--container__input" type="date" [value]="promoFormStartsAt()" aria-label="Válido desde" (input)="promoFormStartsAt.set($any($event.target).value)" />
+                <input class="admin-panel--container__input" type="date" [value]="promoFormEndsAt()" aria-label="Válido hasta" (input)="promoFormEndsAt.set($any($event.target).value)" />
+                <input class="admin-panel--container__input" type="number" min="1" step="1" placeholder="Límite de usos" [value]="promoFormUsageLimit()" (input)="promoFormUsageLimit.set($any($event.target).value)" />
+                <input class="admin-panel--container__input" placeholder="Motivo (opcional)" [value]="promoFormReason()" (input)="promoFormReason.set($any($event.target).value)" />
+            </div>
+            <div class="admin-panel--container__reservation-actions">
+                <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--accept" (click)="savePromoCode()">{{ promoEditingCode() ? 'Guardar cambios' : 'Crear código' }}</button>
+                @if (promoEditingCode()) { <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--soft" (click)="resetPromoForm()">Cancelar edición</button> }
+            </div>
+            @if (promoError()) { <p class="admin-panel--container__error">{{ promoError() }}</p> }
+            @if (promoMessage()) { <p class="admin-panel--container__hint">{{ promoMessage() }}</p> }
+            <div style="display:grid;gap:.35rem;margin-top:.5rem">
+                @for (promo of promoCodes(); track promo.code) {
+                    <div class="admin-panel--container__reservation-actions" style="justify-content:space-between;border-top:1px solid #eadbd2;padding-top:.45rem">
+                        <span><strong>{{ promo.code }}</strong> · {{ promo.type === 'percentage' ? promo.amount + '%' : (promo.amount | number:'1.2-2') + ' €' }} · usos {{ promo.usageCount }}{{ promo.usageLimit ? '/' + promo.usageLimit : '' }}</span>
+                        <span><button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--soft" (click)="editPromoCode(promo)">Editar</button> <button type="button" class="admin-panel--container__action-button admin-panel--container__action-button--danger" (click)="deletePromoCode(promo)">Eliminar</button></span>
+                    </div>
+                }
+            </div>
+        </section>
 
         <div class="admin-panel--container__month-nav" aria-label="Navegación de día" style="margin-bottom: 0.9rem">
             <button type="button" class="admin-panel--container__month-nav-button" (click)="goToPreviousCobroDay()" aria-label="Día anterior">
@@ -416,7 +444,7 @@
                 }
 
                 <p class="admin-panel--container__hint" style="margin: 0">
-                    @if (isAgendaOpenedDay(agendaDayScheduleDateIso())) { Este día está abierto excepcionalmente con el horario habitual (10:00 a 18:00, cierre de 14:00 a 15:00). Las clientas ya pueden reservar online. } @else if (canToggleAgendaOpenDay(agendaDayScheduleDateIso()))
+                    @if (isAgendaOpenedDay(agendaDayScheduleDateIso())) { Este día está abierto excepcionalmente para la agenda interna desde las 10:00 y para reservas online desde las 10:30 (cierre de 14:00 a 15:00). Las clientas ya pueden reservar online. } @else if (canToggleAgendaOpenDay(agendaDayScheduleDateIso()))
                     { Este día está cerrado. Pulsa «Abrir día» para habilitarlo con el horario habitual y permitir reservas online y manuales. } @else { Arrastra una cita a otra hora para recolocarla. @if (isSuperadmin()) { También puedes ajustar la duración
                     y permitir solapes. } }
                 </p>
@@ -878,7 +906,7 @@
                         <option [value]="option.id">{{ option.nombre }}</option>
                       }
                     } @else {
-                      @for (option of agendaTreatmentCatalog; track option.id) {
+                      @for (option of agendaReservableTreatmentOptions; track option.id) {
                         <option [value]="option.id">{{ option.nombre }}</option>
                       }
                     }
@@ -3437,6 +3465,16 @@
           >
             Historial ventas
           </button>
+          <button
+            type="button"
+            class="admin-panel--container__employee-subtab"
+            [class.admin-panel--container__employee-subtab--active]="
+              stockManagementTab() === 'movimientos'
+            "
+            (click)="setStockManagementTab('movimientos')"
+          >
+            Altas y bajas (3 meses)
+          </button>
         </div>
 
         @if (stockManagementTab() === 'crear') {
@@ -3723,6 +3761,44 @@
               }
             </div>
           }
+
+          @if (stockManagementTab() === 'movimientos') {
+            <div class="admin-panel--container__block-form">
+              <h3 class="admin-panel--container__reservation-title">
+                Historial de altas y bajas de stock
+              </h3>
+              <p class="admin-panel--container__hint">
+                Solo se muestran los movimientos registrados durante los últimos 3 meses.
+              </p>
+
+              @if (stockMovementsLoading()) {
+                <p class="admin-panel--container__hint">Cargando movimientos...</p>
+              } @else if (stockMovements().length === 0) {
+                <p class="admin-panel--container__hint">
+                  No hay movimientos de stock en los últimos 3 meses.
+                </p>
+              } @else {
+                <div class="admin-panel--container__employee-history-list admin-panel--container__employee-history-list--compact">
+                  @for (movement of stockMovements(); track movement.id) {
+                    <article class="admin-panel--container__employee-history-item">
+                      <p class="admin-panel--container__employee-history-text">
+                        <strong [style.color]="movement.type === 'alta' ? '#3d8b63' : '#b14d4d'">
+                          {{ movement.type === 'alta' ? 'ALTA' : 'BAJA' }}
+                          · {{ movement.quantity }} ud · {{ movement.productName }}
+                        </strong>
+                      </p>
+                      <p class="admin-panel--container__employee-history-note">
+                        {{ getStockMovementReasonLabel(movement.reason) }} ·
+                        {{ movement.previousQuantity }} → {{ movement.nextQuantity }} ud ·
+                        {{ formatDateTime(movement.createdAtIso) }} ·
+                        {{ getWorkerDisplayName(movement.performedByEmail) }}
+                      </p>
+                    </article>
+                  }
+                </div>
+              }
+            </div>
+          }
         }
 
         @if (stockManagementTab() === 'historial') {
@@ -4000,6 +4076,28 @@
                   <span class="admin-panel--container__cierre-summary-label">TOTAL AUTO</span>
             <span class="admin-panel--container__cierre-summary-value">{{ auto.total | number: '1.2-2' }} €</span
                   >
+                </div>
+                <div class="admin-panel--container__cierre-expenses">
+                  <div class="admin-panel--container__cierre-expense-row">
+                    <strong class="admin-panel--container__cierre-summary-label">Gastos del día</strong>
+                    <strong>-{{ getCierreAutoDiarioExpenseTotal() | number: '1.2-2' }} €</strong>
+                  </div>
+                  @if (getCierreAutoDiarioExpenses().length > 0) {
+                    @for (expense of getCierreAutoDiarioExpenses(); track expense.id) {
+                      <div class="admin-panel--container__cierre-expense-row">
+                        <span>
+                          {{ expense.concept }}
+                          · {{ getWorkerDisplayName(expense.performedByEmail) }}
+                          · {{ getCierreOperationPaymentLabel(expense) }}
+                        </span>
+                        <strong>-{{ expense.amount | number: '1.2-2' }} €</strong>
+                      </div>
+                    }
+                  } @else {
+                    <span class="admin-panel--container__hint admin-panel--container__hint--compact">
+                      No hay gastos registrados hoy.
+                    </span>
+                  }
                 </div>
                 <div class="admin-panel--container__reservation-actions admin-panel--container__reservation-actions--compact">
                   <button
@@ -5889,6 +5987,36 @@
                 </p>
                 } @if (cobroReservationStockError()) {
                 <p class="admin-panel--container__error" style="margin: 0.4rem 0 0">{{ cobroReservationStockError() }}</p>
+                }
+            </div>
+
+            <div class="admin-panel--container__discount-card">
+                <div class="admin-panel--container__discount-heading">
+                    <span class="admin-panel--container__discount-icon" aria-hidden="true">%</span>
+                    <div>
+                        <p class="admin-panel--container__discount-title">Aplicar descuento</p>
+                        <p class="admin-panel--container__discount-help">Se aplicará únicamente al importe pendiente de esta cita.</p>
+                    </div>
+                </div>
+                <div class="admin-panel--container__discount-fields">
+                    <label class="admin-panel--container__label">Tipo
+                        <select class="admin-panel--container__input" [value]="manualDiscountType()" (change)="manualDiscountType.set($any($event.target).value)">
+                            <option value="percentage">Porcentaje</option>
+                            <option value="fixed">Importe fijo</option>
+                        </select>
+                    </label>
+                    <label class="admin-panel--container__label">Cantidad
+                        <input class="admin-panel--container__input" type="number" min="0" step="0.01" [value]="manualDiscountAmount()" (input)="manualDiscountAmount.set($any($event.target).value)" />
+                    </label>
+                    <label class="admin-panel--container__label">Motivo
+                        <input class="admin-panel--container__input" placeholder="Ej.: clienta habitual" [value]="manualDiscountReason()" (input)="manualDiscountReason.set($any($event.target).value)" />
+                    </label>
+                </div>
+                @if (manualDiscountAmount()) {
+                <div class="admin-panel--container__discount-preview">
+                    <span>Total con descuento</span>
+                    <strong>{{ paymentMethodReservationPriceEuro() | number: '1.2-2' }} €</strong>
+                </div>
                 }
             </div>
 
