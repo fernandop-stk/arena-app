@@ -272,13 +272,9 @@ const authCookieName = 'arena_auth_session';
 const clientCookieName = 'arena_client_session';
 const configuredAuthSessionSecret = process.env['AUTH_SESSION_SECRET']?.trim() ?? '';
 const isProductionEnvironment = process.env['NODE_ENV'] === 'production';
-
-if (isProductionEnvironment && !configuredAuthSessionSecret) {
-  throw new Error('AUTH_SESSION_SECRET es obligatorio en producción.');
-}
-
 const authSessionSecret =
-  configuredAuthSessionSecret || adminMagicSecret.trim() || 'arena-dev-auth-secret';
+  configuredAuthSessionSecret ||
+  (isProductionEnvironment ? '' : adminMagicSecret.trim() || 'arena-dev-auth-secret');
 const reservationConfirmationSecret =
   process.env['RESERVATION_CONFIRMATION_SECRET']?.trim() || authSessionSecret;
 const adminEmployeeEmails = new Set(
@@ -10892,6 +10888,10 @@ const startReservationReminderScheduler = (): void => {
 };
 
 if (isMainModule(import.meta.url) || process.env['pm_id']) {
+  if (isProductionEnvironment && !configuredAuthSessionSecret) {
+    throw new Error('AUTH_SESSION_SECRET es obligatorio en producción.');
+  }
+
   const port = process.env['PORT'] || 4000;
   const allowMemoryFallback = process.env['ALLOW_MEMORY_RESERVAS_FALLBACK'] === 'true';
   const initMaxAttemptsRaw = Number(process.env['DB_INIT_MAX_ATTEMPTS'] ?? '3');
