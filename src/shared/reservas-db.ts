@@ -1004,12 +1004,21 @@ const normalizeWorkerEmail = (value: string | null | undefined): string =>
 const getSlotUsageCountsFromMemory = (
   dateIso: string,
   workerEmail?: string,
+  excludedWorkerEmails: string[] = [],
 ): Map<string, number> => {
   const counts = new Map<string, number>();
   const normalizedWorker = workerEmail ? normalizeWorkerEmail(workerEmail) : '';
+  const excludedWorkers = new Set(excludedWorkerEmails.map(normalizeWorkerEmail).filter(Boolean));
 
   Array.from(memoryReservations.values()).forEach((reservation) => {
     if (reservation.dateIso !== dateIso || reservation.adminStatus === 'rejected') {
+      return;
+    }
+
+    if (
+      !normalizedWorker &&
+      excludedWorkers.has(normalizeWorkerEmail(reservation.createdByEmail))
+    ) {
       return;
     }
 
@@ -1098,16 +1107,20 @@ const getBlockedSlotsFromMemory = (dateIso: string, workerEmail?: string): Set<s
   return result;
 };
 
-const getWorkerBlockCountsFromMemory = (dateIso: string): Map<string, number> => {
+const getWorkerBlockCountsFromMemory = (
+  dateIso: string,
+  excludedWorkerEmails: string[] = [],
+): Map<string, number> => {
   const perWorkerMap = memoryBlockedSlotsByDate.get(dateIso);
   const counts = new Map<string, number>();
+  const excludedWorkers = new Set(excludedWorkerEmails.map(normalizeWorkerEmail).filter(Boolean));
 
   if (!perWorkerMap) {
     return counts;
   }
 
   perWorkerMap.forEach((slots, workerKey) => {
-    if (!workerKey) {
+    if (!workerKey || excludedWorkers.has(workerKey)) {
       return;
     }
 
@@ -1144,6 +1157,7 @@ const createReservationWithSlotsInMemory = (
   options?: {
     allowClosedSchedule?: boolean;
     maxConcurrentReservations?: number;
+    excludedWorkerEmails?: string[];
   },
 ): ReservationCreateResult => {
   purgeExpiredProvisionalReservationsInMemory();
@@ -1151,7 +1165,11 @@ const createReservationWithSlotsInMemory = (
   const reservationId = `${payload.dateIso}-${startMinutes}-${Date.now()}`;
   const slotTimes = buildSlotTimes(startMinutes, payload.durationMinutes);
   const maxConcurrent = Math.max(1, Math.floor(options?.maxConcurrentReservations ?? 1));
-  const slotUsage = getSlotUsageCountsFromMemory(payload.dateIso);
+  const slotUsage = getSlotUsageCountsFromMemory(
+    payload.dateIso,
+    undefined,
+    options?.excludedWorkerEmails ?? [],
+  );
   const assigneeWorker = normalizeWorkerEmail(payload.createdByEmail);
   const blockedSlots = getBlockedSlotsFromMemory(payload.dateIso, assigneeWorker || undefined);
   const hasRecurringClosedConflict =
@@ -1159,7 +1177,10 @@ const createReservationWithSlotsInMemory = (
     hasRecurringClosureConflict(payload.dateIso, slotTimes, payload.durationMinutes);
 
   if (!assigneeWorker) {
-    const workerBlockCounts = getWorkerBlockCountsFromMemory(payload.dateIso);
+    const workerBlockCounts = getWorkerBlockCountsFromMemory(
+      payload.dateIso,
+      options?.excludedWorkerEmails ?? [],
+    );
     workerBlockCounts.forEach((count, slot) => {
       slotUsage.set(slot, (slotUsage.get(slot) ?? 0) + count);
     });
@@ -1384,6 +1405,7 @@ export const getAvailableSlotsForDate = async (
   maxConcurrentReservations = 1,
   workerEmail?: string,
   allowAdminEarlyStart = false,
+  excludedWorkerEmails: string[] = [],
 ): Promise<string[]> => {
   seedMockReservationsInMemory();
   await cleanupExpiredProvisionalReservations();
@@ -1399,6 +1421,9 @@ export const getAvailableSlotsForDate = async (
   }
 
   const normalizedWorkerEmail = workerEmail ? normalizeWorkerEmail(workerEmail) : '';
+  const normalizedExcludedWorkers = excludedWorkerEmails
+    .map(normalizeWorkerEmail)
+    .filter(Boolean);
   const maxConcurrent = normalizedWorkerEmail
     ? 1
     : Math.max(1, Math.floor(maxConcurrentReservations));
@@ -1427,9 +1452,10 @@ export const getAvailableSlotsForDate = async (
             FROM reservation_slots rs
             INNER JOIN reservations r ON r.id = rs.reservation_id
             WHERE rs.date_iso = $1 AND r.admin_status <> 'rejected'
+              AND NOT (LOWER(COALESCE(r.created_by_email, '')) = ANY($2::text[]))
             GROUP BY rs.slot_time
             `,
-            [dateIso],
+            [dateIso, normalizedExcludedWorkers],
           );
 
       bookedCountBySlot = booked.rows.reduce((acc, row) => {
@@ -1447,7 +1473,10 @@ export const getAvailableSlotsForDate = async (
           blockedSet.add(row.slot_time);
         } else if (normalizedWorkerEmail && row.worker_email === normalizedWorkerEmail) {
           blockedSet.add(row.slot_time);
-        } else if (!normalizedWorkerEmail) {
+        } else if (
+          !normalizedWorkerEmail &&
+          !normalizedExcludedWorkers.includes(normalizeWorkerEmail(row.worker_email))
+        ) {
           bookedCountBySlot.set(row.slot_time, (bookedCountBySlot.get(row.slot_time) ?? 0) + 1);
         }
       });
@@ -1456,21 +1485,29 @@ export const getAvailableSlotsForDate = async (
         throw error;
       }
 
-      bookedCountBySlot = getSlotUsageCountsFromMemory(dateIso, normalizedWorkerEmail);
+      bookedCountBySlot = getSlotUsageCountsFromMemory(
+        dateIso,
+        normalizedWorkerEmail,
+        normalizedExcludedWorkers,
+      );
       blockedSet = getBlockedSlotsFromMemory(dateIso, normalizedWorkerEmail || undefined);
 
       if (!normalizedWorkerEmail) {
-        getWorkerBlockCountsFromMemory(dateIso).forEach((count, slot) => {
+        getWorkerBlockCountsFromMemory(dateIso, normalizedExcludedWorkers).forEach((count, slot) => {
           bookedCountBySlot.set(slot, (bookedCountBySlot.get(slot) ?? 0) + count);
         });
       }
     }
   } else {
-    bookedCountBySlot = getSlotUsageCountsFromMemory(dateIso, normalizedWorkerEmail);
+    bookedCountBySlot = getSlotUsageCountsFromMemory(
+      dateIso,
+      normalizedWorkerEmail,
+      normalizedExcludedWorkers,
+    );
     blockedSet = getBlockedSlotsFromMemory(dateIso, normalizedWorkerEmail || undefined);
 
     if (!normalizedWorkerEmail) {
-      getWorkerBlockCountsFromMemory(dateIso).forEach((count, slot) => {
+      getWorkerBlockCountsFromMemory(dateIso, normalizedExcludedWorkers).forEach((count, slot) => {
         bookedCountBySlot.set(slot, (bookedCountBySlot.get(slot) ?? 0) + count);
       });
     }
@@ -1528,6 +1565,7 @@ export const createReservationWithSlots = async (
     allowClosedSchedule?: boolean;
     allowAdminEarlyStart?: boolean;
     maxConcurrentReservations?: number;
+    excludedWorkerEmails?: string[];
   },
 ): Promise<ReservationCreateResult> => {
   seedMockReservationsInMemory();
@@ -1601,7 +1639,11 @@ export const createReservationWithSlots = async (
     );
 
     const hasBlockedConflict = blockedConflict.rows.some(
-      (row) => !row.worker_email || (normalizedWorkerEmail && row.worker_email === normalizedWorkerEmail),
+      (row) =>
+        !row.worker_email ||
+        (normalizedWorkerEmail && row.worker_email === normalizedWorkerEmail) ||
+        (!normalizedWorkerEmail &&
+          !options?.excludedWorkerEmails?.includes(normalizeWorkerEmail(row.worker_email))),
     );
 
     if (hasBlockedConflict) {
@@ -1620,9 +1662,19 @@ export const createReservationWithSlots = async (
       WHERE rs.date_iso = $1
         AND rs.slot_time = ANY($2::text[])
         AND r.admin_status <> 'rejected'
+        AND (
+          $4::boolean OR NOT (
+            LOWER(COALESCE(r.created_by_email, '')) = ANY($3::text[])
+          )
+        )
       GROUP BY rs.slot_time
       `,
-      [payload.dateIso, slotTimes],
+      [
+        payload.dateIso,
+        slotTimes,
+        options?.excludedWorkerEmails ?? [],
+        Boolean(normalizedWorkerEmail),
+      ],
     );
 
     const hasCapacityConflict = activeReservationConflict.rows.some(

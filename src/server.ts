@@ -270,8 +270,15 @@ const adminMagicSecret = process.env['ADMIN_MAGIC_SECRET'] ?? process.env['RESEN
 const adminCookieName = 'arena_admin_session';
 const authCookieName = 'arena_auth_session';
 const clientCookieName = 'arena_client_session';
+const configuredAuthSessionSecret = process.env['AUTH_SESSION_SECRET']?.trim() ?? '';
+const isProductionEnvironment = process.env['NODE_ENV'] === 'production';
+
+if (isProductionEnvironment && !configuredAuthSessionSecret) {
+  throw new Error('AUTH_SESSION_SECRET es obligatorio en producción.');
+}
+
 const authSessionSecret =
-  process.env['AUTH_SESSION_SECRET']?.trim() || adminMagicSecret.trim() || 'arena-dev-auth-secret';
+  configuredAuthSessionSecret || adminMagicSecret.trim() || 'arena-dev-auth-secret';
 const reservationConfirmationSecret =
   process.env['RESERVATION_CONFIRMATION_SECRET']?.trim() || authSessionSecret;
 const adminEmployeeEmails = new Set(
@@ -2154,6 +2161,13 @@ const normalizeClientCard = (card: ClientCardItem): ClientCardItem => ({
     .slice()
     .sort((a, b) => `${b.createdAtIso}`.localeCompare(`${a.createdAtIso}`)),
 });
+
+type ClientCardResponse = Omit<ClientCardItem, 'passwordHash'>;
+
+const serializeClientCardForResponse = (card: ClientCardItem): ClientCardResponse => {
+  const { passwordHash: _passwordHash, ...safeCard } = normalizeClientCard(card);
+  return safeCard;
+};
 
 const normalizeClientGiftVouchers = (value: unknown): ClientGiftVoucherItem[] => {
   if (!Array.isArray(value)) {
@@ -4242,8 +4256,30 @@ const listAssignableWorkerEmails = (): string[] => {
     .sort((a, b) => a.localeCompare(b));
 };
 
+const listPublicBookingExcludedWorkerEmails = (): string[] => {
+  seedAuthUsers();
+
+  return Array.from(usersByEmail.values())
+    .filter((user) => {
+      if (!isAssignableWorkerUser(user)) {
+        return false;
+      }
+
+      const identity = `${user.username} ${user.email}`.toLowerCase();
+      return identity.includes('paco');
+    })
+    .map((user) => normalizeWorkerEmail(user.email))
+    .filter(Boolean);
+};
+
+const listPublicBookingWorkerEmails = (): string[] => {
+  const excludedWorkers = new Set(listPublicBookingExcludedWorkerEmails());
+
+  return listAssignableWorkerEmails().filter((email) => !excludedWorkers.has(email));
+};
+
 const getMaxConcurrentReservationsForSlot = (): number =>
-  Math.max(1, listAssignableWorkerEmails().length);
+  Math.max(1, listPublicBookingWorkerEmails().length);
 
 const buildAdminMagicLinkEmailHtml = (magicLink: string): string => {
   const safeLink = escapeHtml(magicLink);
@@ -6426,7 +6462,7 @@ app.get('/api/admin/clientes', (req, res) => {
   }
 
   const cards = Array.from(clientCardsById.values())
-    .map((card) => normalizeClientCard(card))
+    .map((card) => serializeClientCardForResponse(card))
     .sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso));
 
   return res.status(200).json({ ok: true, cards });
@@ -6505,7 +6541,7 @@ app.post('/api/admin/clientes', async (req, res) => {
   void persistClientCardsToDisk();
   console.log(`[persistencia] ficha guardada en DB id=${normalizedCard.id}`);
 
-  return res.status(200).json({ ok: true, card: normalizedCard });
+  return res.status(200).json({ ok: true, card: serializeClientCardForResponse(normalizedCard) });
 });
 
 app.patch('/api/admin/clientes/:id', async (req, res) => {
@@ -6582,7 +6618,7 @@ app.patch('/api/admin/clientes/:id', async (req, res) => {
   clientCardsById.set(id, nextCard);
   void persistClientCardsToDisk();
 
-  return res.status(200).json({ ok: true, card: nextCard });
+  return res.status(200).json({ ok: true, card: serializeClientCardForResponse(nextCard) });
 });
 
 app.delete('/api/admin/clientes/:id', async (req, res) => {
@@ -6707,7 +6743,7 @@ app.post('/api/admin/clientes/:id/packs', async (req, res) => {
   clientCardsById.set(card.id, nextCard);
   void persistClientCardsToDisk();
 
-  return res.status(200).json({ ok: true, card: nextCard });
+  return res.status(200).json({ ok: true, card: serializeClientCardForResponse(nextCard) });
 });
 
 app.post('/api/admin/clientes/:id/comentarios', async (req, res) => {
@@ -6764,7 +6800,7 @@ app.post('/api/admin/clientes/:id/comentarios', async (req, res) => {
   clientCardsById.set(card.id, nextCard);
   void persistClientCardsToDisk();
 
-  return res.status(200).json({ ok: true, card: nextCard });
+  return res.status(200).json({ ok: true, card: serializeClientCardForResponse(nextCard) });
 });
 
 app.patch('/api/admin/clientes/:clientId/packs/:treatmentId/payment', async (req, res) => {
@@ -6925,7 +6961,7 @@ app.patch('/api/admin/clientes/:clientId/packs/:treatmentId/payment', async (req
     },
   );
 
-  return res.status(200).json({ ok: true, card: updatedCard });
+  return res.status(200).json({ ok: true, card: serializeClientCardForResponse(updatedCard) });
 });
 
 app.post('/api/admin/clientes/:id/bonos', async (req, res) => {
@@ -7002,7 +7038,11 @@ app.post('/api/admin/clientes/:id/bonos', async (req, res) => {
       },
     );
 
-    return res.status(200).json({ ok: true, card, voucher });
+    return res.status(200).json({
+      ok: true,
+      card: serializeClientCardForResponse(card),
+      voucher,
+    });
   } catch (error) {
     console.error('Error emitiendo bono regalo:', error);
     return res.status(500).json({ ok: false, error: 'No se pudo emitir el bono regalo.' });
@@ -7074,7 +7114,11 @@ app.post('/api/admin/clientes/:id/bonos/:voucherId/canjear', async (req, res) =>
       });
     }
 
-    return res.status(200).json({ ok: true, card, voucher: result.voucher });
+    return res.status(200).json({
+      ok: true,
+      card: serializeClientCardForResponse(card),
+      voucher: result.voucher,
+    });
   } catch (error) {
     console.error('Error canjeando bono regalo:', error);
     return res.status(500).json({ ok: false, error: 'No se pudo descontar el bono regalo.' });
@@ -9886,6 +9930,7 @@ app.get('/api/reservas/disponibilidad', async (req, res) => {
       soloAdmin ? 1 : getMaxConcurrentReservationsForSlot(),
       soloAdmin ? adminOwnerEmail : undefined,
       soloAdmin,
+      soloAdmin ? [] : listPublicBookingExcludedWorkerEmails(),
     );
     const blockedSlots = await getManuallyBlockedSlotsForDate(dateIso);
 
@@ -10136,12 +10181,12 @@ app.post('/api/reservas/email', async (req, res) => {
         additionalComments: reservationComments,
         discount: reservationDiscount,
         requiresReservationSignal: shouldRequireReservationSignal,
-        createdByEmail: adminOwnerEmail,
         bookingSource: 'online',
         bookedByEmail: null,
       },
       {
-        maxConcurrentReservations: 1,
+        maxConcurrentReservations: getMaxConcurrentReservationsForSlot(),
+        excludedWorkerEmails: listPublicBookingExcludedWorkerEmails(),
       },
     );
 
