@@ -10887,7 +10887,7 @@ const startReservationReminderScheduler = (): void => {
   );
 };
 
-if (isMainModule(import.meta.url) || process.env['pm_id']) {
+if (isMainModule(import.meta.url)) {
   if (isProductionEnvironment && !configuredAuthSessionSecret) {
     throw new Error('AUTH_SESSION_SECRET es obligatorio en producción.');
   }
