@@ -1356,6 +1356,7 @@ type EmployeePermission =
   | 'agenda_ver'
   | 'agenda_gestionar'
   | 'citas_asignar'
+  | 'reservas_online'
   | 'bloqueos_gestionar'
   | 'reservas_ver'
   | 'reservas_gestionar'
@@ -1371,6 +1372,7 @@ const ALL_EMPLOYEE_PERMISSIONS: EmployeePermission[] = [
   'agenda_ver',
   'agenda_gestionar',
   'citas_asignar',
+  'reservas_online',
   'bloqueos_gestionar',
   'reservas_ver',
   'reservas_gestionar',
@@ -4252,7 +4254,7 @@ const listAssignableWorkerEmails = (): string[] => {
     .sort((a, b) => a.localeCompare(b));
 };
 
-const listPublicBookingExcludedWorkerEmails = (): string[] => {
+const listPublicBookingWorkerEmails = (): string[] => {
   seedAuthUsers();
 
   return Array.from(usersByEmail.values())
@@ -4261,21 +4263,23 @@ const listPublicBookingExcludedWorkerEmails = (): string[] => {
         return false;
       }
 
-      const identity = `${user.username} ${user.email}`.toLowerCase();
-      return identity.includes('paco');
+      return getEffectiveUserRole(user) === 'superadmin' ||
+        Boolean(user.permissions?.includes('reservas_online'));
     })
     .map((user) => normalizeWorkerEmail(user.email))
     .filter(Boolean);
 };
 
-const listPublicBookingWorkerEmails = (): string[] => {
-  const excludedWorkers = new Set(listPublicBookingExcludedWorkerEmails());
-
-  return listAssignableWorkerEmails().filter((email) => !excludedWorkers.has(email));
-};
-
 const getMaxConcurrentReservationsForSlot = (): number =>
-  Math.max(1, listPublicBookingWorkerEmails().length);
+  Math.max(1, listAssignableWorkerEmails().length);
+
+const getMaxConcurrentPublicReservationsForSlot = (): number =>
+  listPublicBookingWorkerEmails().length;
+
+const listPublicBookingExcludedWorkerEmails = (): string[] => {
+  const publicWorkers = new Set(listPublicBookingWorkerEmails());
+  return listAssignableWorkerEmails().filter((email) => !publicWorkers.has(email));
+};
 
 const buildAdminMagicLinkEmailHtml = (magicLink: string): string => {
   const safeLink = escapeHtml(magicLink);
@@ -5231,7 +5235,7 @@ app.patch('/api/admin/alertas/:id/aprobar', async (req, res) => {
     const availableSlots = await getAvailableSlotsForDate(
       alert.dateIso,
       durationMinutes,
-      getMaxConcurrentReservationsForSlot(),
+      getMaxConcurrentPublicReservationsForSlot(),
     );
     const slotIsAvailable = availableSlots.includes(alert.startTime);
 
@@ -9923,7 +9927,7 @@ app.get('/api/reservas/disponibilidad', async (req, res) => {
     const slots = await getAvailableSlotsForDate(
       dateIso,
       durationMinutes,
-      soloAdmin ? 1 : getMaxConcurrentReservationsForSlot(),
+      soloAdmin ? 1 : getMaxConcurrentPublicReservationsForSlot(),
       soloAdmin ? adminOwnerEmail : undefined,
       soloAdmin,
       soloAdmin ? [] : listPublicBookingExcludedWorkerEmails(),
@@ -10181,7 +10185,7 @@ app.post('/api/reservas/email', async (req, res) => {
         bookedByEmail: null,
       },
       {
-        maxConcurrentReservations: getMaxConcurrentReservationsForSlot(),
+        maxConcurrentReservations: getMaxConcurrentPublicReservationsForSlot(),
         excludedWorkerEmails: listPublicBookingExcludedWorkerEmails(),
       },
     );

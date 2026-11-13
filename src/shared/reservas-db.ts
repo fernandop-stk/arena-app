@@ -1164,7 +1164,7 @@ const createReservationWithSlotsInMemory = (
 
   const reservationId = `${payload.dateIso}-${startMinutes}-${Date.now()}`;
   const slotTimes = buildSlotTimes(startMinutes, payload.durationMinutes);
-  const maxConcurrent = Math.max(1, Math.floor(options?.maxConcurrentReservations ?? 1));
+  const maxConcurrent = Math.max(0, Math.floor(options?.maxConcurrentReservations ?? 1));
   const slotUsage = getSlotUsageCountsFromMemory(
     payload.dateIso,
     undefined,
@@ -1426,7 +1426,7 @@ export const getAvailableSlotsForDate = async (
     .filter(Boolean);
   const maxConcurrent = normalizedWorkerEmail
     ? 1
-    : Math.max(1, Math.floor(maxConcurrentReservations));
+    : Math.max(0, Math.floor(maxConcurrentReservations));
   let bookedCountBySlot = new Map<string, number>();
   let blockedSet: Set<string>;
 
@@ -1586,7 +1586,7 @@ export const createReservationWithSlots = async (
   }
 
   const effectiveAllowClosedSchedule = options?.allowClosedSchedule === true;
-  const maxConcurrent = Math.max(1, Math.floor(options?.maxConcurrentReservations ?? 1));
+  const maxConcurrent = Math.max(0, Math.floor(options?.maxConcurrentReservations ?? 1));
   const normalizedWorkerEmail = normalizeWorkerEmail(payload.createdByEmail);
 
   if (

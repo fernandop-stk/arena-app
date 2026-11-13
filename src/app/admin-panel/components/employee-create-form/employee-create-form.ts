@@ -6,6 +6,7 @@ export type EmployeePermission =
   | 'agenda_ver'
   | 'agenda_gestionar'
   | 'citas_asignar'
+  | 'reservas_online'
   | 'bloqueos_gestionar'
   | 'reservas_ver'
   | 'reservas_gestionar'
@@ -21,6 +22,7 @@ export const PERMISSION_LABELS: Record<EmployeePermission, string> = {
   agenda_ver: 'Ver agenda',
   agenda_gestionar: 'Gestionar agenda (mover/editar citas)',
   citas_asignar: 'Asignar citas a trabajadoras',
+  reservas_online: 'Recibir reservas online',
   bloqueos_gestionar: 'Bloquear horas y días',
   reservas_ver: 'Ver listado de reservas',
   reservas_gestionar: 'Aceptar / rechazar reservas',
