@@ -213,14 +213,6 @@
             " (click)="setAgendaManagementTab('bloqueos')">
             Bloquear horas
           </button>
-            <button type="button" class="admin-panel--container__employee-subtab" [class.admin-panel--container__employee-subtab--active]="
-              showAgendaUnassignedReservationsModal()
-            " [disabled]="!canAssignReservationToWorker()" (click)="openAgendaUnassignedReservationsModal()">
-            Citas sin asignar
-            <span class="admin-panel--container__agenda-day-count" style="margin-left: 0.4rem">
-              {{ getAgendaUnassignedReservationsCount() }}
-            </span>
-          </button>
         </div>
 
         <div class="admin-panel--container__block-form admin-panel--container__block-form--compact">
@@ -5989,6 +5981,32 @@
                 <p class="admin-panel--container__error" style="margin: 0.4rem 0 0">{{ cobroReservationStockError() }}</p>
                 }
             </div>
+
+            @if (reservation.discount) {
+            <div class="admin-panel--container__discount-card" style="margin-top: 1rem">
+                <div class="admin-panel--container__discount-heading">
+                    <span class="admin-panel--container__discount-icon" aria-hidden="true">%</span>
+                    <div>
+                        <p class="admin-panel--container__discount-title">Promoción aplicada en la reserva</p>
+                        <p class="admin-panel--container__discount-help">
+                            Descuento aplicado al reservar online:
+                            <strong>{{ reservation.discount.amount | number: '1.2-2' }}{{ reservation.discount.type === 'percentage' ? '%' : ' €' }}</strong>
+                            @if (reservation.discount.code) { · Código: <strong>{{ reservation.discount.code }}</strong> }
+                        </p>
+                        @if (reservation.discount.reason) {
+                        <p class="admin-panel--container__discount-help">Motivo: {{ reservation.discount.reason }}</p>
+                        }
+                    </div>
+                </div>
+                <div class="admin-panel--container__discount-preview">
+                    <span>Importe original · Total con promoción</span>
+                    <strong>
+                        {{ reservation.discount.originalAmountEuro | number: '1.2-2' }} € ·
+                        {{ reservation.discount.finalAmountEuro | number: '1.2-2' }} €
+                    </strong>
+                </div>
+            </div>
+            }
 
             <div class="admin-panel--container__discount-card">
                 <div class="admin-panel--container__discount-heading">

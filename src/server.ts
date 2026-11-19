@@ -47,7 +47,6 @@ import {
   saveStockProductToDb,
   saveUserToDb,
   updateClientGiftVouchersInDb,
-  assignReservationToWorker,
   updateReservationAdminStatus,
   updateReservationClientConfirmationStatus,
   updateReservationPaymentReceived,
@@ -493,6 +492,70 @@ async function notifyFreedSlotAlerts(reservation: {
   } catch (alertError) {
     console.error('Error notificando alertas al liberar reserva:', alertError);
   }
+}
+
+async function notifyFreedSlotWaitlist(reservation: {
+  dateIso: string;
+  startTime: string;
+  endTime: string;
+  appointmentTypeName: string;
+}): Promise<void> {
+  try {
+    const apiKey = process.env['RESEND_API_KEY'];
+    if (!apiKey) {
+      return;
+    }
+
+    const waitlistReservations = (await listReservationsForAdmin()).filter(
+      (item) =>
+        item.additionalComments.trim().startsWith('[LISTA_DE_ESPERA]') &&
+        item.adminStatus !== 'rejected' &&
+        item.dateIso === reservation.dateIso &&
+        item.startTime === reservation.startTime,
+    );
+
+    if (waitlistReservations.length === 0) {
+      return;
+    }
+
+    const fromEmail = process.env['RESEND_FROM_EMAIL'] ?? 'onboarding@resend.dev';
+    const resend = new Resend(apiKey);
+
+    for (const waitlistReservation of waitlistReservations) {
+      const emailTarget = resolveEmailRecipient(waitlistReservation.customerEmail);
+      const bookingUrl = `${getPublicAppBaseUrl()}/reservas/calendario?date=${encodeURIComponent(
+        reservation.dateIso,
+      )}`;
+      const html = buildAlertFreedEmailHtml({
+        customerName: waitlistReservation.customerName,
+        appointmentTypeName: waitlistReservation.appointmentTypeName,
+        dateIso: reservation.dateIso,
+        startTime: reservation.startTime,
+        bookingUrl,
+      });
+      const sendResult = await resend.emails.send({
+        from: fromEmail,
+        to: emailTarget,
+        subject: `Disponibilidad para reservar - ${waitlistReservation.appointmentTypeName} (${reservation.dateIso} ${reservation.startTime})`,
+        html,
+      });
+
+      if (!sendResult.error) {
+        await deleteReservationById(waitlistReservation.id);
+      }
+    }
+  } catch (error) {
+    console.error('Error notificando solicitudes de lista de espera:', error);
+  }
+}
+
+async function notifyFreedAvailability(reservation: {
+  dateIso: string;
+  startTime: string;
+  endTime: string;
+  appointmentTypeName: string;
+}): Promise<void> {
+  await Promise.all([notifyFreedSlotAlerts(reservation), notifyFreedSlotWaitlist(reservation)]);
 }
 
 async function notifyRejectedReservation(reservation: {
@@ -1355,7 +1418,6 @@ interface EmployeeTrackingInfo {
 type EmployeePermission =
   | 'agenda_ver'
   | 'agenda_gestionar'
-  | 'citas_asignar'
   | 'reservas_online'
   | 'bloqueos_gestionar'
   | 'reservas_ver'
@@ -1371,7 +1433,6 @@ type EmployeePermission =
 const ALL_EMPLOYEE_PERMISSIONS: EmployeePermission[] = [
   'agenda_ver',
   'agenda_gestionar',
-  'citas_asignar',
   'reservas_online',
   'bloqueos_gestionar',
   'reservas_ver',
@@ -1872,11 +1933,13 @@ const buildAlertFreedEmailHtml = (data: {
   appointmentTypeName: string;
   dateIso: string;
   startTime: string;
+  bookingUrl?: string;
 }): string => {
   const customerName = escapeHtml(data.customerName);
   const appointmentTypeName = escapeHtml(data.appointmentTypeName);
   const dateIso = escapeHtml(data.dateIso);
   const startTime = escapeHtml(data.startTime);
+  const bookingUrl = data.bookingUrl ? escapeHtml(data.bookingUrl) : '';
 
   return `
     <div style="background:#fcf3ea;padding:24px;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;color:#3b2f2a;">
@@ -1902,7 +1965,12 @@ const buildAlertFreedEmailHtml = (data: {
                 <td style="padding:14px 16px;font-size:14px;"><strong>Hora</strong><br><span style="color:#7a675d;">${startTime}</span></td>
               </tr>
             </table>
-            <p style="margin:0;font-size:14px;line-height:1.6;color:#7a675d;">Reserva cuanto antes para asegurarlo.</p>
+            <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#7a675d;">Reserva cuanto antes para asegurarlo.</p>
+            ${
+              bookingUrl
+                ? `<a href="${bookingUrl}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#7e9f7d;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;">Ir al calendario de reservas</a>`
+                : ''
+            }
           </td>
         </tr>
       </table>
@@ -4279,6 +4347,29 @@ const getMaxConcurrentPublicReservationsForSlot = (): number =>
 const listPublicBookingExcludedWorkerEmails = (): string[] => {
   const publicWorkers = new Set(listPublicBookingWorkerEmails());
   return listAssignableWorkerEmails().filter((email) => !publicWorkers.has(email));
+};
+
+const findPublicBookingWorkerForSlot = async (
+  dateIso: string,
+  time: string,
+  durationMinutes: number,
+): Promise<string | null> => {
+  for (const workerEmail of listPublicBookingWorkerEmails()) {
+    const availableSlots = await getAvailableSlotsForDate(
+      dateIso,
+      durationMinutes,
+      1,
+      workerEmail,
+      false,
+      [],
+    );
+
+    if (availableSlots.includes(time)) {
+      return workerEmail;
+    }
+  }
+
+  return null;
 };
 
 const buildAdminMagicLinkEmailHtml = (magicLink: string): string => {
@@ -6666,7 +6757,7 @@ app.delete('/api/admin/clientes/:id', async (req, res) => {
 
     for (const reservation of linkedReservations) {
       await deleteReservationById(reservation.id);
-      await notifyFreedSlotAlerts({
+      await notifyFreedAvailability({
         dateIso: reservation.dateIso,
         startTime: reservation.startTime,
         endTime: reservation.endTime,
@@ -9060,13 +9151,10 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
           return res.status(400).json({ ok: false, error: 'La trabajadora seleccionada no es válida.' });
         }
 
-        const currentUser = usersByEmail.get(session.email);
-        const canAssignReservations =
-          superadminSession.isSuperadmin ||
-          Boolean(currentUser?.permissions?.includes('citas_asignar'));
-        if (!canAssignReservations) {
-          return res.status(403).json({ ok: false, error: 'No tienes permisos para asignar citas.' });
-        }
+        return res.status(400).json({
+          ok: false,
+          error: 'No se puede cambiar la trabajadora de una reserva existente.',
+        });
       }
     }
 
@@ -9259,8 +9347,7 @@ app.post('/api/admin/reservas', async (req, res) => {
     });
   }
 
-  const canAssignReservationToWorker =
-    isSuperadmin || Boolean(currentUser?.permissions?.includes('citas_asignar'));
+  const canAssignReservationToWorker = false;
 
   const dateIso = `${req.body?.dateIso ?? ''}`.trim();
   const time = `${req.body?.time ?? ''}`.trim();
@@ -9667,55 +9754,6 @@ app.post('/api/admin/reservas/:id/senal', async (req, res) => {
   return res.status(200).json({ ok: true });
 });
 
-app.patch('/api/admin/reservas/:id/assign', async (req, res) => {
-  const session = getAuthSession(req.headers.cookie);
-
-  if (!session.isAdmin) {
-    return res.status(401).json({ ok: false, error: 'No autorizado.' });
-  }
-
-  const currentUser = session.email ? usersByEmail.get(session.email) : null;
-  const canAssignReservations =
-    session.role === 'superadmin' || Boolean(currentUser?.permissions?.includes('citas_asignar'));
-
-  if (!canAssignReservations) {
-    return res.status(403).json({ ok: false, error: 'No tienes permisos para asignar citas.' });
-  }
-
-  const reservationId = `${req.params['id'] ?? ''}`.trim();
-  const assigneeEmail = normalizeWorkerEmail(req.body?.assigneeEmail);
-
-  if (!reservationId || !assigneeEmail) {
-    return res.status(400).json({ ok: false, error: 'Debes indicar la cita y la trabajadora.' });
-  }
-
-  const assigneeUser = usersByEmail.get(assigneeEmail);
-
-  if (!isAssignableWorkerUser(assigneeUser)) {
-    return res.status(400).json({ ok: false, error: 'La trabajadora seleccionada no es válida.' });
-  }
-
-  try {
-    const updated = await assignReservationToWorker(reservationId, assigneeEmail);
-
-    if (!updated.ok) {
-      if (updated.reason === 'not-found') {
-        return res.status(404).json({ ok: false, error: 'Reserva no encontrada.' });
-      }
-
-      return res.status(409).json({
-        ok: false,
-        error: 'La trabajadora seleccionada ya tiene otra cita en esa franja.',
-      });
-    }
-
-    return res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error('Error asignando reserva a trabajadora:', error);
-    return res.status(500).json({ ok: false, error: 'No se pudo asignar la cita.' });
-  }
-});
-
 app.patch('/api/admin/reservas/:id/status', async (req, res) => {
   const session = getAuthSession(req.headers.cookie);
 
@@ -9779,9 +9817,7 @@ app.patch('/api/admin/reservas/:id/status', async (req, res) => {
         Boolean(requestedAssigneeEmail) &&
         requestedAssigneeEmail !== normalizeWorkerEmail(session.email);
 
-      const canAssignToOthers =
-        session.role === 'superadmin' ||
-        Boolean(currentUser?.permissions?.includes('citas_asignar'));
+      const canAssignToOthers = false;
 
       if (assigningAnotherWorker && !canAssignToOthers) {
         return res.status(403).json({
@@ -9836,7 +9872,7 @@ app.patch('/api/admin/reservas/:id/status', async (req, res) => {
         startTime: reservation.startTime,
       });
 
-      await notifyFreedSlotAlerts({
+      await notifyFreedAvailability({
         dateIso: reservation.dateIso,
         startTime: reservation.startTime,
         endTime: reservation.endTime,
@@ -9889,7 +9925,7 @@ app.delete('/api/admin/reservas/:id', async (req, res) => {
       },
     );
 
-    await notifyFreedSlotAlerts({
+    await notifyFreedAvailability({
       dateIso: reservation.dateIso,
       startTime: reservation.startTime,
       endTime: reservation.endTime,
@@ -10169,6 +10205,19 @@ app.post('/api/reservas/email', async (req, res) => {
           discount: reservationDiscount,
         })
       : (typeof observaciones === 'string' ? observaciones : undefined);
+    const publicWorkerEmail = await findPublicBookingWorkerForSlot(
+        `${dateIso}`,
+        `${time}`,
+        Number(durationMinutes),
+    );
+
+    if (!publicWorkerEmail) {
+        return res.status(409).json({
+          ok: false,
+          error: 'Esa hora ya no está disponible. Elige otra.',
+        });
+    }
+
     const created = await createReservationWithSlots(
       {
         dateIso,
@@ -10182,6 +10231,7 @@ app.post('/api/reservas/email', async (req, res) => {
         discount: reservationDiscount,
         requiresReservationSignal: shouldRequireReservationSignal,
         bookingSource: 'online',
+        createdByEmail: publicWorkerEmail,
         bookedByEmail: null,
       },
       {

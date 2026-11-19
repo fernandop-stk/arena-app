@@ -143,6 +143,7 @@ interface AdminReservationItem {
   createdAtIso: string;
   bookingSource?: 'online' | 'salon' | null;
   bookedByEmail?: string | null;
+  discount?: DiscountMetadata | null;
   linkedClientId?: string;
   reservationServiceItems?: ReservationServiceLineItem[];
   reservationStockItems?: ReservationStockLineItem[];
@@ -1096,6 +1097,13 @@ export class AdminPanelComponent implements OnDestroy {
 
     const lines = this.getReservationPaymentLineItems(reservation);
     const signalAmount = Math.max(0, Number(reservation.signalAmountEuro ?? 0));
+    const appliedDiscount = reservation.discount
+      ? Math.max(
+          0,
+          Number(reservation.discount.originalAmountEuro ?? 0) -
+            Number(reservation.discount.finalAmountEuro ?? 0),
+        )
+      : 0;
     const previousFinalPayment = Math.max(
       0,
       Number(reservation.paymentSummary?.finalPaymentAmountEuro ?? 0),
@@ -1105,7 +1113,10 @@ export class AdminPanelComponent implements OnDestroy {
     if (hasPreviousFinalPayment) {
       // Charge only the delta: new total minus what was already paid and the signal
       const allLinesTotal = lines.reduce((acc, line) => acc + line.amountEuro, 0);
-      const beforeDiscount = Math.max(0, allLinesTotal - previousFinalPayment - signalAmount);
+      const beforeDiscount = Math.max(
+        0,
+        allLinesTotal - previousFinalPayment - signalAmount - appliedDiscount,
+      );
       const input = Math.max(0, Number(this.manualDiscountAmount().replace(',', '.')) || 0);
       const discount = this.manualDiscountType() === 'percentage'
         ? beforeDiscount * Math.min(100, input) / 100
@@ -1117,7 +1128,7 @@ export class AdminPanelComponent implements OnDestroy {
     const totalPrice = lines
       .filter((line) => selectedIds.includes(line.id))
       .reduce((acc, line) => acc + line.amountEuro, 0);
-    const beforeDiscount = Math.max(0, totalPrice - signalAmount);
+    const beforeDiscount = Math.max(0, totalPrice - signalAmount - appliedDiscount);
     const discountInput = Math.max(0, Number(this.manualDiscountAmount().replace(',', '.')) || 0);
     const discount = this.manualDiscountType() === 'percentage'
       ? beforeDiscount * Math.min(100, discountInput) / 100
@@ -1803,12 +1814,7 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected openAgendaUnassignedReservationsModal(): void {
-    if (!this.requirePermission('citas_asignar', 'Asignar citas sin adjudicar')) {
-      return;
-    }
-
-    this.agendaUnassignedAssignError.set('');
-    this.showAgendaUnassignedReservationsModal.set(true);
+    return;
   }
 
   protected closeAgendaUnassignedReservationsModal(): void {
@@ -13645,7 +13651,7 @@ export class AdminPanelComponent implements OnDestroy {
       });
     }
 
-    const workerNamePriority = ['sofi', 'paco'];
+    const workerNamePriority = ['sofi', 'alicia', 'paco'];
 
     return Array.from(options.values()).sort((a, b) => {
       const rankA = this.getAgendaWorkerSortRank(a, workerNamePriority);
@@ -13720,11 +13726,7 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected canAssignReservationToWorker(): boolean {
-    if (this.isSuperadmin()) {
-      return true;
-    }
-
-    return this.hasPermission('citas_asignar');
+    return false;
   }
 
   protected onAgendaManualReserveAssignToMeChange(event: Event): void {
