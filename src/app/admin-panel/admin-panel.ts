@@ -13726,7 +13726,7 @@ export class AdminPanelComponent implements OnDestroy {
   }
 
   protected canAssignReservationToWorker(): boolean {
-    return false;
+    return this.isSuperadmin() || this.hasPermission('agenda_gestionar');
   }
 
   protected onAgendaManualReserveAssignToMeChange(event: Event): void {

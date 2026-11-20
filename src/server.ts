@@ -9354,7 +9354,8 @@ app.post('/api/admin/reservas', async (req, res) => {
     });
   }
 
-  const canAssignReservationToWorker = false;
+  const canAssignReservationToWorker =
+    isSuperadmin || Boolean(currentUser?.permissions?.includes('agenda_gestionar'));
 
   const dateIso = `${req.body?.dateIso ?? ''}`.trim();
   const time = `${req.body?.time ?? ''}`.trim();
