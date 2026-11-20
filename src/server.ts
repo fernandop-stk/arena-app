@@ -9151,10 +9151,17 @@ app.patch('/api/admin/reservas/:id', async (req, res) => {
           return res.status(400).json({ ok: false, error: 'La trabajadora seleccionada no es válida.' });
         }
 
-        return res.status(400).json({
-          ok: false,
-          error: 'No se puede cambiar la trabajadora de una reserva existente.',
-        });
+        const currentUser = usersByEmail.get(session.email);
+        const canManageAgenda =
+          superadminSession.isSuperadmin ||
+          Boolean(currentUser?.permissions?.includes('agenda_gestionar'));
+
+        if (!canManageAgenda) {
+          return res.status(403).json({
+            ok: false,
+            error: 'No tienes permisos para cambiar la trabajadora de la reserva.',
+          });
+        }
       }
     }
 
